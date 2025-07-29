@@ -1,0 +1,89 @@
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { ArtistService } from '../services/artistService';
+
+export class ArtistController {
+  private artistService: ArtistService;
+
+  constructor() {
+    this.artistService = new ArtistService();
+  }
+
+  // 獲取所有已審核的藝人
+  getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const artists = await this.artistService.getApprovedArtists();
+      res.json(artists);
+    } catch (error) {
+      console.error('Error fetching artists:', error);
+      res.status(500).json({ error: 'Failed to fetch artists' });
+    }
+  };
+
+  // 獲取待審核的藝人（僅管理員）
+  getPendingArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const artists = await this.artistService.getPendingArtists();
+      res.json(artists);
+    } catch (error) {
+      console.error('Error fetching pending artists:', error);
+      res.status(500).json({ error: 'Failed to fetch pending artists' });
+    }
+  };
+
+  // 新增藝人
+  createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { stageName, realName, birthday, profileImage } = req.body;
+      const userId = req.user!.uid;
+
+      if (!stageName) {
+        res.status(400).json({ error: 'Stage name is required' });
+        return;
+      }
+
+      const artist = await this.artistService.createArtist({
+        stageName,
+        realName,
+        birthday,
+        profileImage
+      }, userId);
+
+      res.status(201).json(artist);
+    } catch (error) {
+      console.error('Error creating artist:', error);
+      res.status(500).json({ error: 'Failed to create artist' });
+    }
+  };
+
+  // 審核藝人（僅管理員）
+  reviewArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['approved', 'rejected'].includes(status)) {
+        res.status(400).json({ error: 'Invalid status' });
+        return;
+      }
+
+      const artist = await this.artistService.updateArtistStatus(id, status);
+      res.json(artist);
+    } catch (error) {
+      console.error('Error reviewing artist:', error);
+      res.status(500).json({ error: 'Failed to review artist' });
+    }
+  };
+
+  // 刪除藝人（僅管理員）
+  deleteArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      await this.artistService.deleteArtist(id);
+      res.json({ message: 'Artist deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting artist:', error);
+      res.status(500).json({ error: 'Failed to delete artist' });
+    }
+  };
+}
