@@ -13,10 +13,12 @@ const app = express();
 app.use(helmet());
 
 // CORS 設定
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 
 // 日誌中介軟體
 app.use(morgan('combined'));
@@ -33,7 +35,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
   });
 });
 

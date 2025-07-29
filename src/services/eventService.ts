@@ -13,20 +13,22 @@ export class EventService {
 
   async getActiveEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
-    
+
     // 暫時簡化查詢，等複合索引完成後再改回完整查詢
-    const snapshot = await this.collection!
-      .where('status', '==', 'approved')
+    const snapshot = await this.collection!.where('status', '==', 'approved')
       .where('isDeleted', '==', false)
       .get();
-    
+
     // 在程式中過濾時間和排序
     const now = Date.now();
-    const events = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as CoffeeEvent));
-    
+    const events = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
+
     return events
       .filter(event => event.datetime.end.toMillis() >= now)
       .sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
@@ -34,35 +36,37 @@ export class EventService {
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
-    const snapshot = await this.collection!
-      .where('status', '==', 'pending')
+    const snapshot = await this.collection!.where('status', '==', 'pending')
       .where('isDeleted', '==', false)
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as CoffeeEvent));
+    return snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
   }
 
   async getEventById(eventId: string): Promise<CoffeeEvent | null> {
     this.checkFirebaseConfig();
     const doc = await this.collection!.doc(eventId).get();
-    
+
     if (!doc.exists || doc.data()?.isDeleted) {
       return null;
     }
 
     return {
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     } as CoffeeEvent;
   }
 
   async createEvent(eventData: CreateEventData, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
-    
+
     // 驗證藝人是否存在且已審核
     const artistDoc = await db.collection('artists').doc(eventData.artistId).get();
     if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
@@ -77,7 +81,7 @@ export class EventService {
       location: eventData.location,
       datetime: {
         start: Timestamp.fromDate(eventData.datetime.start),
-        end: Timestamp.fromDate(eventData.datetime.end)
+        end: Timestamp.fromDate(eventData.datetime.end),
       },
       socialMedia: eventData.socialMedia || {},
       images: [],
@@ -89,14 +93,14 @@ export class EventService {
       isDeleted: false,
       createdBy: userId,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     const docRef = await this.collection!.add(newEvent);
-    
+
     return {
       id: docRef.id,
-      ...newEvent
+      ...newEvent,
     };
   }
 
@@ -111,7 +115,7 @@ export class EventService {
 
     const updateData = {
       status,
-      updatedAt: Timestamp.now()
+      updatedAt: Timestamp.now(),
     };
 
     await docRef.update(updateData);
@@ -119,7 +123,7 @@ export class EventService {
     const updatedDoc = await docRef.get();
     return {
       id: updatedDoc.id,
-      ...updatedDoc.data()
+      ...updatedDoc.data(),
     } as CoffeeEvent;
   }
 
@@ -133,7 +137,7 @@ export class EventService {
     }
 
     const eventData = doc.data();
-    
+
     // 檢查權限：管理員可以刪除任何活動，一般用戶只能刪除自己的活動
     if (userRole !== 'admin' && eventData?.createdBy !== userId) {
       throw new Error('Permission denied');
@@ -142,7 +146,7 @@ export class EventService {
     // 軟刪除
     await docRef.update({
       isDeleted: true,
-      updatedAt: Timestamp.now()
+      updatedAt: Timestamp.now(),
     });
   }
 
@@ -153,42 +157,44 @@ export class EventService {
   }): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
     const now = Timestamp.now();
-    let query = this.collection!
-      .where('status', '==', 'approved')
+    const query = this.collection!.where('status', '==', 'approved')
       .where('isDeleted', '==', false)
       .where('datetime.end', '>=', now);
 
     // 基本的搜尋功能（Firestore 的搜尋功能有限）
     const snapshot = await query.get();
-    let events = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as CoffeeEvent));
+    let events = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
 
     // 客戶端過濾
     if (criteria.query) {
       const searchTerm = criteria.query.toLowerCase();
-      events = events.filter(event => 
-        event.title.toLowerCase().includes(searchTerm) ||
-        event.description.toLowerCase().includes(searchTerm)
+      events = events.filter(
+        event =>
+          event.title.toLowerCase().includes(searchTerm) ||
+          event.description.toLowerCase().includes(searchTerm)
       );
     }
 
     if (criteria.location) {
       const locationTerm = criteria.location.toLowerCase();
-      events = events.filter(event =>
-        event.location.address.toLowerCase().includes(locationTerm)
-      );
+      events = events.filter(event => event.location.address.toLowerCase().includes(locationTerm));
     }
 
     // 如果需要按藝人名稱搜尋，需要另外查詢藝人資料
     if (criteria.artistName) {
-      const artistSnapshot = await db.collection('artists')
+      const artistSnapshot = await db
+        .collection('artists')
         .where('name', '>=', criteria.artistName)
         .where('name', '<=', criteria.artistName + '\uf8ff')
         .where('status', '==', 'approved')
         .get();
-      
+
       const artistIds = artistSnapshot.docs.map(doc => doc.id);
       events = events.filter(event => artistIds.includes(event.artistId));
     }
@@ -200,18 +206,17 @@ export class EventService {
   async cleanupExpiredEvents(): Promise<void> {
     this.checkFirebaseConfig();
     const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    
-    const expiredEvents = await this.collection!
-      .where('datetime.end', '<', oneWeekAgo)
+
+    const expiredEvents = await this.collection!.where('datetime.end', '<', oneWeekAgo)
       .where('isDeleted', '==', false)
       .get();
 
     const batch = db.batch();
-    
+
     expiredEvents.docs.forEach(doc => {
       batch.update(doc.ref, {
         isDeleted: true,
-        updatedAt: Timestamp.now()
+        updatedAt: Timestamp.now(),
       });
     });
 

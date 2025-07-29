@@ -14,38 +14,40 @@ export class ArtistService {
   async getApprovedArtists(): Promise<Artist[]> {
     this.checkFirebaseConfig();
     // 暫時使用簡單查詢，等索引完全生效後再改回複合查詢
-    const snapshot = await this.collection!
-      .where('status', '==', 'approved')
-      .get();
-    
+    const snapshot = await this.collection!.where('status', '==', 'approved').get();
+
     // 在程式中排序
-    const artists = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Artist));
-    
+    const artists = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
+
     return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
   }
 
   async getPendingArtists(): Promise<Artist[]> {
     this.checkFirebaseConfig();
-    const snapshot = await this.collection!
-      .where('status', '==', 'pending')
+    const snapshot = await this.collection!.where('status', '==', 'pending')
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Artist));
+    return snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
   }
 
   async createArtist(artistData: CreateArtistData, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
-    
+
     // 檢查是否已存在相同藝名的藝人
-    const existingArtist = await this.collection!
-      .where('stageName', '==', artistData.stageName)
+    const existingArtist = await this.collection!.where('stageName', '==', artistData.stageName)
       .where('status', 'in', ['pending', 'approved'])
       .get();
 
@@ -62,14 +64,14 @@ export class ArtistService {
       status: 'pending' as const,
       createdBy: userId,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     const docRef = await this.collection!.add(newArtist);
-    
+
     return {
       id: docRef.id,
-      ...newArtist
+      ...newArtist,
     };
   }
 
@@ -84,7 +86,7 @@ export class ArtistService {
 
     const updateData = {
       status,
-      updatedAt: Timestamp.now()
+      updatedAt: Timestamp.now(),
     };
 
     await docRef.update(updateData);
@@ -92,15 +94,16 @@ export class ArtistService {
     const updatedDoc = await docRef.get();
     return {
       id: updatedDoc.id,
-      ...updatedDoc.data()
+      ...updatedDoc.data(),
     } as Artist;
   }
 
   async deleteArtist(artistId: string): Promise<void> {
     this.checkFirebaseConfig();
-    
+
     // 檢查是否有活動使用此藝人
-    const eventsSnapshot = await db.collection('coffeeEvents')
+    const eventsSnapshot = await db
+      .collection('coffeeEvents')
       .where('artistId', '==', artistId)
       .where('isDeleted', '==', false)
       .get();
@@ -115,14 +118,14 @@ export class ArtistService {
   async getArtistById(artistId: string): Promise<Artist | null> {
     this.checkFirebaseConfig();
     const doc = await this.collection!.doc(artistId).get();
-    
+
     if (!doc.exists) {
       return null;
     }
 
     return {
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     } as Artist;
   }
 }

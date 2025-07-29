@@ -23,26 +23,26 @@ describe('EventService', () => {
           isDeleted: false,
           datetime: {
             start: mockTimestamp.fromDate(new Date()),
-            end: mockTimestamp.fromDate(futureDate)
-          }
+            end: mockTimestamp.fromDate(futureDate),
+          },
         },
         {
-          id: 'event-2', 
+          id: 'event-2',
           title: '已結束活動',
           status: 'approved',
           isDeleted: false,
           datetime: {
             start: mockTimestamp.fromDate(pastDate),
-            end: mockTimestamp.fromDate(pastDate)
-          }
-        }
+            end: mockTimestamp.fromDate(pastDate),
+          },
+        },
       ];
 
       mockCollection.get.mockResolvedValueOnce({
         docs: mockEvents.map(event => ({
           id: event.id,
-          data: () => event
-        }))
+          data: () => event,
+        })),
       });
 
       const result = await eventService.getActiveEvents();
@@ -65,26 +65,26 @@ describe('EventService', () => {
           isDeleted: false,
           datetime: {
             start: mockTimestamp.fromDate(futureDate2),
-            end: mockTimestamp.fromDate(futureDate2)
-          }
+            end: mockTimestamp.fromDate(futureDate2),
+          },
         },
         {
           id: 'event-1',
-          title: '第一個活動', 
+          title: '第一個活動',
           status: 'approved',
           isDeleted: false,
           datetime: {
             start: mockTimestamp.fromDate(futureDate1),
-            end: mockTimestamp.fromDate(futureDate1)
-          }
-        }
+            end: mockTimestamp.fromDate(futureDate1),
+          },
+        },
       ];
 
       mockCollection.get.mockResolvedValueOnce({
         docs: mockEvents.map(event => ({
           id: event.id,
-          data: () => event
-        }))
+          data: () => event,
+        })),
       });
 
       const result = await eventService.getActiveEvents();
@@ -102,28 +102,28 @@ describe('EventService', () => {
         description: '測試描述',
         location: {
           address: '台北市信義區',
-          coordinates: { lat: 25.0, lng: 121.0 }
+          coordinates: { lat: 25.0, lng: 121.0 },
         },
         datetime: {
           start: new Date(),
-          end: new Date(Date.now() + 24 * 60 * 60 * 1000)
+          end: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
         socialMedia: {
-          instagram: 'https://instagram.com/test'
-        }
+          instagram: 'https://instagram.com/test',
+        },
       };
 
       // Mock 藝人存在且已審核
       const mockArtistDoc = {
         exists: true,
-        data: () => ({ status: 'approved' })
+        data: () => ({ status: 'approved' }),
       };
 
       // Mock db.collection('artists').doc().get()
       const mockArtistCollection = {
         doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(mockArtistDoc)
-        }))
+          get: jest.fn().mockResolvedValue(mockArtistDoc),
+        })),
       };
 
       // 需要 mock db.collection('artists')
@@ -134,13 +134,13 @@ describe('EventService', () => {
             return mockArtistCollection;
           }
           return originalCollection;
-        })
+        }),
       };
 
       // 暫時替換 db mock
       jest.doMock('../../../src/config/firebase', () => ({
         db: dbMock,
-        hasFirebaseConfig: true
+        hasFirebaseConfig: true,
       }));
 
       mockCollection.add.mockResolvedValueOnce({ id: 'new-event-id' });
@@ -164,8 +164,8 @@ describe('EventService', () => {
         data: () => ({
           title: '測試活動',
           createdBy: userId,
-          isDeleted: false
-        })
+          isDeleted: false,
+        }),
       });
 
       mockCollection.doc.mockReturnValue(mockDocRef);
@@ -174,7 +174,7 @@ describe('EventService', () => {
 
       expect(mockDocRef.update).toHaveBeenCalledWith({
         isDeleted: true,
-        updatedAt: expect.any(Object)
+        updatedAt: expect.any(Object),
       });
     });
 
@@ -189,15 +189,15 @@ describe('EventService', () => {
         data: () => ({
           title: '測試活動',
           createdBy: otherUserId,
-          isDeleted: false
-        })
+          isDeleted: false,
+        }),
       });
 
       mockCollection.doc.mockReturnValue(mockDocRef);
 
-      await expect(
-        eventService.deleteEvent(eventId, userId, 'user')
-      ).rejects.toThrow('Permission denied');
+      await expect(eventService.deleteEvent(eventId, userId, 'user')).rejects.toThrow(
+        'Permission denied'
+      );
     });
 
     it('應該允許管理員刪除任何活動', async () => {
@@ -211,8 +211,8 @@ describe('EventService', () => {
         data: () => ({
           title: '測試活動',
           createdBy: otherUserId,
-          isDeleted: false
-        })
+          isDeleted: false,
+        }),
       });
 
       mockCollection.doc.mockReturnValue(mockDocRef);
@@ -221,7 +221,7 @@ describe('EventService', () => {
 
       expect(mockDocRef.update).toHaveBeenCalledWith({
         isDeleted: true,
-        updatedAt: expect.any(Object)
+        updatedAt: expect.any(Object),
       });
     });
   });

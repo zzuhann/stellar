@@ -2,10 +2,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 export interface Artist {
   id: string;
-  stageName: string;          // 藝名（主要顯示）
-  realName?: string;          // 本名（可選）
-  birthday?: string;          // 生日 (YYYY-MM-DD 格式)
-  profileImage?: string;      // 照片 URL
+  stageName: string; // 藝名（主要顯示）
+  realName?: string; // 本名（可選）
+  birthday?: string; // 生日 (YYYY-MM-DD 格式)
+  profileImage?: string; // 照片 URL
   status: 'pending' | 'approved' | 'rejected';
   createdBy: string;
   createdAt: Timestamp;
@@ -55,10 +55,10 @@ export interface User {
 }
 
 export interface CreateArtistData {
-  stageName: string;          // 藝名（必填）
-  realName?: string;          // 本名（可選）
-  birthday?: string;          // 生日（可選，YYYY-MM-DD）
-  profileImage?: string;      // 照片 URL（可選）
+  stageName: string; // 藝名（必填）
+  realName?: string; // 本名（可選）
+  birthday?: string; // 生日（可選，YYYY-MM-DD）
+  profileImage?: string; // 照片 URL（可選）
 }
 
 export interface CreateEventData {

@@ -1,6 +1,10 @@
 import '../../../tests/mocks/firebase';
-import { Request, Response, NextFunction } from 'express';
-import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../../../src/middleware/auth';
+import { Response, NextFunction } from 'express';
+import {
+  authenticateToken,
+  requireAdmin,
+  AuthenticatedRequest,
+} from '../../../src/middleware/auth';
 import { mockAuth, mockCollection, createMockDocRef } from '../../mocks/firebase';
 
 describe('Auth Middleware', () => {
@@ -10,33 +14,33 @@ describe('Auth Middleware', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     mockReq = {
-      headers: {}
+      headers: {},
     };
-    
+
     mockRes = {
       status: jest.fn().mockReturnThis(),
-      json: jest.fn()
+      json: jest.fn(),
     };
-    
+
     mockNext = jest.fn();
   });
 
   describe('authenticateToken', () => {
     it('應該成功驗證有效的 token', async () => {
       mockReq.headers = {
-        authorization: 'Bearer valid-token'
+        authorization: 'Bearer valid-token',
       };
 
       mockAuth.verifyIdToken.mockResolvedValueOnce({
         uid: 'user-123',
-        email: 'test@example.com'
+        email: 'test@example.com',
       });
 
       const mockUserDoc = createMockDocRef();
       mockUserDoc.get.mockResolvedValue({
-        data: () => ({ role: 'user' })
+        data: () => ({ role: 'user' }),
       });
       mockCollection.doc.mockReturnValue(mockUserDoc);
 
@@ -46,7 +50,7 @@ describe('Auth Middleware', () => {
       expect(mockReq.user).toEqual({
         uid: 'user-123',
         email: 'test@example.com',
-        role: 'user'
+        role: 'user',
       });
       expect(mockNext).toHaveBeenCalled();
     });
@@ -63,7 +67,7 @@ describe('Auth Middleware', () => {
 
     it('應該拒絕無效的 token', async () => {
       mockReq.headers = {
-        authorization: 'Bearer invalid-token'
+        authorization: 'Bearer invalid-token',
       };
 
       mockAuth.verifyIdToken.mockRejectedValueOnce(new Error('Invalid token'));
@@ -77,17 +81,17 @@ describe('Auth Middleware', () => {
 
     it('應該為沒有角色資料的用戶設定預設角色', async () => {
       mockReq.headers = {
-        authorization: 'Bearer valid-token'
+        authorization: 'Bearer valid-token',
       };
 
       mockAuth.verifyIdToken.mockResolvedValueOnce({
         uid: 'user-123',
-        email: 'test@example.com'
+        email: 'test@example.com',
       });
 
       const mockUserDoc = createMockDocRef();
       mockUserDoc.get.mockResolvedValue({
-        data: () => null // 沒有用戶資料
+        data: () => null, // 沒有用戶資料
       });
       mockCollection.doc.mockReturnValue(mockUserDoc);
 
@@ -96,7 +100,7 @@ describe('Auth Middleware', () => {
       expect(mockReq.user).toEqual({
         uid: 'user-123',
         email: 'test@example.com',
-        role: 'user' // 預設角色
+        role: 'user', // 預設角色
       });
       expect(mockNext).toHaveBeenCalled();
     });
@@ -107,7 +111,7 @@ describe('Auth Middleware', () => {
       mockReq.user = {
         uid: 'admin-123',
         email: 'admin@example.com',
-        role: 'admin'
+        role: 'admin',
       };
 
       requireAdmin(mockReq as AuthenticatedRequest, mockRes as Response, mockNext);
@@ -120,7 +124,7 @@ describe('Auth Middleware', () => {
       mockReq.user = {
         uid: 'user-123',
         email: 'user@example.com',
-        role: 'user'
+        role: 'user',
       };
 
       requireAdmin(mockReq as AuthenticatedRequest, mockRes as Response, mockNext);

@@ -42,12 +42,15 @@ export class ArtistController {
         return;
       }
 
-      const artist = await this.artistService.createArtist({
-        stageName,
-        realName,
-        birthday,
-        profileImage
-      }, userId);
+      const artist = await this.artistService.createArtist(
+        {
+          stageName,
+          realName,
+          birthday,
+          profileImage,
+        },
+        userId
+      );
 
       res.status(201).json(artist);
     } catch (error) {

@@ -1,6 +1,6 @@
 import '../../../tests/mocks/firebase';
 import { ArtistService } from '../../../src/services/artistService';
-import { mockCollection, mockTimestamp, createMockDocRef } from '../../mocks/firebase';
+import { mockCollection, createMockDocRef } from '../../mocks/firebase';
 
 describe('ArtistService', () => {
   let artistService: ArtistService;
@@ -17,15 +17,15 @@ describe('ArtistService', () => {
           id: 'artist-1',
           stageName: 'IU',
           realName: '李知恩',
-          status: 'approved'
-        }
+          status: 'approved',
+        },
       ];
 
       mockCollection.get.mockResolvedValueOnce({
         docs: mockArtists.map(artist => ({
           id: artist.id,
-          data: () => artist
-        }))
+          data: () => artist,
+        })),
       });
 
       const result = await artistService.getApprovedArtists();
@@ -38,14 +38,14 @@ describe('ArtistService', () => {
     it('應該按藝名排序', async () => {
       const mockArtists = [
         { id: '1', stageName: 'Zara', status: 'approved' },
-        { id: '2', stageName: 'Amy', status: 'approved' }
+        { id: '2', stageName: 'Amy', status: 'approved' },
       ];
 
       mockCollection.get.mockResolvedValueOnce({
         docs: mockArtists.map(artist => ({
           id: artist.id,
-          data: () => artist
-        }))
+          data: () => artist,
+        })),
       });
 
       const result = await artistService.getApprovedArtists();
@@ -60,7 +60,7 @@ describe('ArtistService', () => {
       const newArtistData = {
         stageName: 'NewStar',
         realName: '新星',
-        birthday: '1990-01-01'
+        birthday: '1990-01-01',
       };
 
       // Mock 檢查重複名稱的查詢回傳空結果
@@ -78,15 +78,15 @@ describe('ArtistService', () => {
 
     it('應該拒絕重複的藝名', async () => {
       const newArtistData = {
-        stageName: 'ExistingArtist'
+        stageName: 'ExistingArtist',
       };
 
       // Mock 檢查重複名稱的查詢回傳有結果
       mockCollection.get.mockResolvedValueOnce({ empty: false });
 
-      await expect(
-        artistService.createArtist(newArtistData, 'user-123')
-      ).rejects.toThrow('Artist with this stage name already exists');
+      await expect(artistService.createArtist(newArtistData, 'user-123')).rejects.toThrow(
+        'Artist with this stage name already exists'
+      );
     });
   });
 
@@ -98,7 +98,7 @@ describe('ArtistService', () => {
       const mockDocRef = createMockDocRef();
       mockDocRef.get.mockResolvedValue({
         exists: true,
-        data: () => ({ stageName: 'Test Artist', status: 'pending' })
+        data: () => ({ stageName: 'Test Artist', status: 'pending' }),
       });
 
       mockCollection.doc.mockReturnValue(mockDocRef);
@@ -107,18 +107,18 @@ describe('ArtistService', () => {
       mockDocRef.get
         .mockResolvedValueOnce({
           exists: true,
-          data: () => ({ stageName: 'Test Artist', status: 'pending' })
+          data: () => ({ stageName: 'Test Artist', status: 'pending' }),
         })
         .mockResolvedValueOnce({
           id: artistId,
-          data: () => ({ stageName: 'Test Artist', status: newStatus })
+          data: () => ({ stageName: 'Test Artist', status: newStatus }),
         });
 
       const result = await artistService.updateArtistStatus(artistId, newStatus);
 
       expect(mockDocRef.update).toHaveBeenCalledWith({
         status: newStatus,
-        updatedAt: expect.any(Object)
+        updatedAt: expect.any(Object),
       });
       expect(result.status).toBe(newStatus);
     });
@@ -129,9 +129,9 @@ describe('ArtistService', () => {
 
       mockCollection.doc.mockReturnValue(mockDocRef);
 
-      await expect(
-        artistService.updateArtistStatus('non-existent', 'approved')
-      ).rejects.toThrow('Artist not found');
+      await expect(artistService.updateArtistStatus('non-existent', 'approved')).rejects.toThrow(
+        'Artist not found'
+      );
     });
   });
 });

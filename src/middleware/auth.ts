@@ -24,15 +24,15 @@ export const authenticateToken = async (
     }
 
     const decodedToken = await auth.verifyIdToken(token);
-    
+
     // 從 Firestore 獲取用戶角色
     const userDoc = await db.collection('users').doc(decodedToken.uid).get();
     const userData = userDoc.data();
-    
+
     req.user = {
       uid: decodedToken.uid,
       email: decodedToken.email || '',
-      role: userData?.role || 'user'
+      role: userData?.role || 'user',
     };
 
     next();

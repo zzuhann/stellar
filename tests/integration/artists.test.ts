@@ -15,20 +15,18 @@ describe('Artists API', () => {
           id: 'artist-1',
           stageName: 'IU',
           realName: '李知恩',
-          status: 'approved'
-        }
+          status: 'approved',
+        },
       ];
 
       mockCollection.get.mockResolvedValueOnce({
         docs: mockArtists.map(artist => ({
           id: artist.id,
-          data: () => artist
-        }))
+          data: () => artist,
+        })),
       });
 
-      const response = await request(app)
-        .get('/api/artists')
-        .expect(200);
+      const response = await request(app).get('/api/artists').expect(200);
 
       expect(response.body).toHaveLength(1);
       expect(response.body[0].stageName).toBe('IU');
@@ -36,12 +34,10 @@ describe('Artists API', () => {
 
     it('應該處理空的藝人列表', async () => {
       mockCollection.get.mockResolvedValueOnce({
-        docs: []
+        docs: [],
       });
 
-      const response = await request(app)
-        .get('/api/artists')
-        .expect(200);
+      const response = await request(app).get('/api/artists').expect(200);
 
       expect(response.body).toHaveLength(0);
     });
@@ -49,9 +45,7 @@ describe('Artists API', () => {
     it('應該處理資料庫錯誤', async () => {
       mockCollection.get.mockRejectedValueOnce(new Error('Database connection failed'));
 
-      const response = await request(app)
-        .get('/api/artists')
-        .expect(500);
+      const response = await request(app).get('/api/artists').expect(500);
 
       expect(response.body.error).toBe('Failed to fetch artists');
     });
@@ -62,14 +56,14 @@ describe('Artists API', () => {
       const newArtist = {
         stageName: 'NewStar',
         realName: '新星',
-        birthday: '1990-01-01'
+        birthday: '1990-01-01',
       };
 
       // Mock 認證成功
       const mockAuth = require('../mocks/firebase').mockAuth;
       mockAuth.verifyIdToken.mockResolvedValueOnce({
         uid: 'user-123',
-        email: 'test@example.com'
+        email: 'test@example.com',
       });
 
       // Mock Firestore 操作
@@ -79,7 +73,7 @@ describe('Artists API', () => {
       // Mock 用戶資料查詢
       const mockUserDoc = createMockDocRef();
       mockUserDoc.get.mockResolvedValue({
-        data: () => ({ role: 'user' })
+        data: () => ({ role: 'user' }),
       });
       mockCollection.doc.mockReturnValue(mockUserDoc);
 
@@ -95,13 +89,10 @@ describe('Artists API', () => {
 
     it('應該拒絕未認證的請求', async () => {
       const newArtist = {
-        stageName: 'NewStar'
+        stageName: 'NewStar',
       };
 
-      const response = await request(app)
-        .post('/api/artists')
-        .send(newArtist)
-        .expect(401);
+      const response = await request(app).post('/api/artists').send(newArtist).expect(401);
 
       expect(response.body.error).toBe('Access token required');
     });
@@ -111,12 +102,12 @@ describe('Artists API', () => {
       const mockAuth = require('../mocks/firebase').mockAuth;
       mockAuth.verifyIdToken.mockResolvedValueOnce({
         uid: 'user-123',
-        email: 'test@example.com'
+        email: 'test@example.com',
       });
 
       const mockUserDoc = createMockDocRef();
       mockUserDoc.get.mockResolvedValue({
-        data: () => ({ role: 'user' })
+        data: () => ({ role: 'user' }),
       });
       mockCollection.doc.mockReturnValue(mockUserDoc);
 

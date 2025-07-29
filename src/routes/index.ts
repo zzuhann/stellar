@@ -7,14 +7,14 @@ const router = Router();
 
 // 健康檢查端點（不需要 Firebase）
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     firebase: {
       configured: hasFirebaseConfig,
-      message: hasFirebaseConfig ? 'Firebase ready' : 'Firebase not configured'
-    }
+      message: hasFirebaseConfig ? 'Firebase ready' : 'Firebase not configured',
+    },
   });
 });
 
@@ -24,31 +24,31 @@ router.get('/test', async (req, res) => {
     res.status(503).json({ error: 'Firebase not configured' });
     return;
   }
-  
+
   try {
     const { db } = await import('../config/firebase');
-    
+
     // 測試 1：讀取所有 artists（不用複合查詢）
     const allArtists = await db.collection('artists').limit(5).get();
     const artistsData = allArtists.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
+
     // 測試 2：單純 status 查詢
     const approvedArtists = await db.collection('artists').where('status', '==', 'approved').get();
     const approvedData = approvedArtists.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    res.json({ 
+
+    res.json({
       success: true,
       allArtists: artistsData,
       approvedArtists: approvedData,
       counts: {
         total: allArtists.size,
-        approved: approvedArtists.size
-      }
+        approved: approvedArtists.size,
+      },
     });
   } catch (error: any) {
-    res.status(500).json({ 
-      error: 'Firebase test failed', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Firebase test failed',
+      details: error.message,
     });
   }
 });
@@ -60,10 +60,14 @@ if (hasFirebaseConfig) {
 } else {
   // Firebase 未配置時的提示端點
   router.use('/artists', (req, res) => {
-    res.status(503).json({ error: 'Firebase not configured. Please set up environment variables first.' });
+    res
+      .status(503)
+      .json({ error: 'Firebase not configured. Please set up environment variables first.' });
   });
   router.use('/events', (req, res) => {
-    res.status(503).json({ error: 'Firebase not configured. Please set up environment variables first.' });
+    res
+      .status(503)
+      .json({ error: 'Firebase not configured. Please set up environment variables first.' });
   });
 }
 

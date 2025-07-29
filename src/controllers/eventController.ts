@@ -36,7 +36,7 @@ export class EventController {
     try {
       const { id } = req.params;
       const event = await this.eventService.getEventById(id);
-      
+
       if (!event) {
         res.status(404).json({ error: 'Event not found' });
         return;
@@ -113,7 +113,7 @@ export class EventController {
       const events = await this.eventService.searchEvents({
         query: query as string,
         artistName: artistName as string,
-        location: location as string
+        location: location as string,
       });
       res.json(events);
     } catch (error) {
