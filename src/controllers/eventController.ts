@@ -9,13 +9,22 @@ export class EventController {
     this.eventService = new EventService();
   }
 
-  // 獲取所有已審核且未過期的活動
+  // 獲取活動列表（支援狀態篩選）
   getActiveEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const events = await this.eventService.getActiveEvents();
+      const { status } = req.query;
+      const statusFilter = status as 'approved' | 'pending' | 'rejected' | undefined;
+
+      // 檢查權限：只有管理員可以查看 pending/rejected 狀態
+      if (statusFilter && statusFilter !== 'approved' && (!req.user || req.user.role !== 'admin')) {
+        res.status(403).json({ error: 'Admin access required' });
+        return;
+      }
+
+      const events = await this.eventService.getEventsByStatus(statusFilter);
       res.json(events);
     } catch (error) {
-      console.error('Error fetching active events:', error);
+      console.error('Error fetching events:', error);
       res.status(500).json({ error: 'Failed to fetch events' });
     }
   };
@@ -88,6 +97,30 @@ export class EventController {
     } catch (error) {
       console.error('Error reviewing event:', error);
       res.status(500).json({ error: 'Failed to review event' });
+    }
+  };
+
+  // 審核通過活動（僅管理員）
+  approveEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const event = await this.eventService.updateEventStatus(id, 'approved');
+      res.json(event);
+    } catch (error) {
+      console.error('Error approving event:', error);
+      res.status(500).json({ error: 'Failed to approve event' });
+    }
+  };
+
+  // 拒絕活動（僅管理員）
+  rejectEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const event = await this.eventService.updateEventStatus(id, 'rejected');
+      res.json(event);
+    } catch (error) {
+      console.error('Error rejecting event:', error);
+      res.status(500).json({ error: 'Failed to reject event' });
     }
   };
 

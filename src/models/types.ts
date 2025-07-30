@@ -73,8 +73,8 @@ export interface CreateEventData {
     };
   };
   datetime: {
-    start: Date;
-    end: Date;
+    start: Date | string; // 支援 Date 物件或 ISO 字串
+    end: Date | string; // 支援 Date 物件或 ISO 字串
   };
   socialMedia: {
     instagram?: string;

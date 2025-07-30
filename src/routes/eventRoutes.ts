@@ -17,5 +17,7 @@ router.delete('/:id', authenticateToken, eventController.deleteEvent);
 // 管理員專用路由
 router.get('/admin/pending', authenticateToken, requireAdmin, eventController.getPendingEvents);
 router.patch('/:id/review', authenticateToken, requireAdmin, eventController.reviewEvent);
+router.put('/:id/approve', authenticateToken, requireAdmin, eventController.approveEvent);
+router.put('/:id/reject', authenticateToken, requireAdmin, eventController.rejectEvent);
 
 export default router;

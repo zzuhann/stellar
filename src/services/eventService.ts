@@ -50,6 +50,40 @@ export class EventService {
     );
   }
 
+  async getEventsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<CoffeeEvent[]> {
+    this.checkFirebaseConfig();
+
+    // 簡化查詢策略：先用單一條件查詢，再在記憶體中篩選
+    let snapshot;
+
+    if (status) {
+      // 用狀態查詢（有單一欄位索引）
+      snapshot = await this.collection!.where('status', '==', status).get();
+    } else {
+      // 取得所有文件
+      snapshot = await this.collection!.get();
+    }
+
+    let events = snapshot.docs
+      .map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      )
+      .filter(event => !event.isDeleted); // 在記憶體中過濾已刪除的
+
+    // 如果是 approved 狀態，在記憶體中過濾未過期的活動
+    if (status === 'approved') {
+      const now = Date.now();
+      events = events.filter(event => event.datetime.end.toMillis() >= now);
+    }
+
+    // 按建立時間排序（最新在前）
+    return events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }
+
   async getEventById(eventId: string): Promise<CoffeeEvent | null> {
     this.checkFirebaseConfig();
     const doc = await this.collection!.doc(eventId).get();
@@ -80,8 +114,8 @@ export class EventService {
       description: eventData.description,
       location: eventData.location,
       datetime: {
-        start: Timestamp.fromDate(eventData.datetime.start),
-        end: Timestamp.fromDate(eventData.datetime.end),
+        start: Timestamp.fromDate(new Date(eventData.datetime.start)),
+        end: Timestamp.fromDate(new Date(eventData.datetime.end)),
       },
       socialMedia: eventData.socialMedia || {},
       images: [],

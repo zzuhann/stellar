@@ -43,6 +43,34 @@ export class ArtistService {
     );
   }
 
+  async getArtistsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<Artist[]> {
+    this.checkFirebaseConfig();
+
+    let query = this.collection!;
+
+    // 如果有指定狀態，就篩選
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    const snapshot = await query.get();
+
+    const artists = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
+
+    // 根據狀態決定排序方式
+    if (status === 'pending') {
+      return artists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 最新的在前
+    } else {
+      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName)); // 藝名排序
+    }
+  }
+
   async createArtist(artistData: CreateArtistData, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
 

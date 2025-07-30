@@ -9,10 +9,19 @@ export class ArtistController {
     this.artistService = new ArtistService();
   }
 
-  // 獲取所有已審核的藝人
+  // 獲取藝人列表（支援狀態篩選）
   getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const artists = await this.artistService.getApprovedArtists();
+      const { status } = req.query;
+      const statusFilter = status as 'approved' | 'pending' | 'rejected' | undefined;
+
+      // 檢查權限：只有管理員可以查看 pending/rejected 狀態
+      if (statusFilter && statusFilter !== 'approved' && (!req.user || req.user.role !== 'admin')) {
+        res.status(403).json({ error: 'Admin access required' });
+        return;
+      }
+
+      const artists = await this.artistService.getArtistsByStatus(statusFilter);
       res.json(artists);
     } catch (error) {
       console.error('Error fetching artists:', error);
@@ -75,6 +84,30 @@ export class ArtistController {
     } catch (error) {
       console.error('Error reviewing artist:', error);
       res.status(500).json({ error: 'Failed to review artist' });
+    }
+  };
+
+  // 審核通過藝人（僅管理員）
+  approveArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const artist = await this.artistService.updateArtistStatus(id, 'approved');
+      res.json(artist);
+    } catch (error) {
+      console.error('Error approving artist:', error);
+      res.status(500).json({ error: 'Failed to approve artist' });
+    }
+  };
+
+  // 拒絕藝人（僅管理員）
+  rejectArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const artist = await this.artistService.updateArtistStatus(id, 'rejected');
+      res.json(artist);
+    } catch (error) {
+      console.error('Error rejecting artist:', error);
+      res.status(500).json({ error: 'Failed to reject artist' });
     }
   };
 
