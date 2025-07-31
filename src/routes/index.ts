@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import artistRoutes from './artistRoutes';
 import eventRoutes from './eventRoutes';
+import placesRoutes from './placesRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 
 const router = Router();
 
 // 健康檢查端點（不需要 Firebase）
-router.get('/health', (req, res) => {
+router.get('/health', (_req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
@@ -53,18 +54,21 @@ router.get('/test', async (req, res) => {
   }
 });
 
+// Google Places API 路由（不需要 Firebase）
+router.use('/places', placesRoutes);
+
 // Firebase 配置完成，啟用完整路由
 if (hasFirebaseConfig) {
   router.use('/artists', artistRoutes);
   router.use('/events', eventRoutes);
 } else {
   // Firebase 未配置時的提示端點
-  router.use('/artists', (req, res) => {
+  router.use('/artists', (_req, res) => {
     res
       .status(503)
       .json({ error: 'Firebase not configured. Please set up environment variables first.' });
   });
-  router.use('/events', (req, res) => {
+  router.use('/events', (_req, res) => {
     res
       .status(503)
       .json({ error: 'Firebase not configured. Please set up environment variables first.' });
