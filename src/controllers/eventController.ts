@@ -18,9 +18,18 @@ export class EventController {
         artistId: req.query.artistId as string,
         status: req.query.status as 'all' | 'active' | 'upcoming' | 'ended',
         region: req.query.region as string,
+        createdBy: req.query.createdBy as string,
         page: req.query.page ? parseInt(req.query.page as string) : undefined,
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
       };
+
+      // 檢查權限：用戶只能查看自己的投稿或公開的資料
+      if (filters.createdBy && req.user) {
+        if (filters.createdBy !== req.user.uid && req.user.role !== 'admin') {
+          res.status(403).json({ error: 'Permission denied' });
+          return;
+        }
+      }
 
       // 如果沒有提供 status，預設為 'active'（只顯示進行中的活動）
       if (!filters.status) {
@@ -215,6 +224,18 @@ export class EventController {
     } catch (error) {
       console.error('Error fetching map data:', error);
       res.status(500).json({ error: 'Failed to fetch map data' });
+    }
+  };
+
+  // 獲取當前用戶的投稿資料
+  getUserSubmissions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.uid;
+      const result = await this.eventService.getUserSubmissions(userId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching user submissions:', error);
+      res.status(500).json({ error: 'Failed to fetch user submissions' });
     }
   };
 }

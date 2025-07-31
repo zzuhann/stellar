@@ -9,11 +9,12 @@ export class ArtistController {
     this.artistService = new ArtistService();
   }
 
-  // 獲取藝人列表（支援狀態篩選）
+  // 獲取藝人列表（支援狀態篩選和創建者篩選）
   getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { status } = req.query;
+      const { status, createdBy } = req.query;
       const statusFilter = status as 'approved' | 'pending' | 'rejected' | undefined;
+      const createdByFilter = createdBy as string | undefined;
 
       // 檢查權限：只有管理員可以查看 pending/rejected 狀態
       if (statusFilter && statusFilter !== 'approved' && (!req.user || req.user.role !== 'admin')) {
@@ -21,7 +22,15 @@ export class ArtistController {
         return;
       }
 
-      const artists = await this.artistService.getArtistsByStatus(statusFilter);
+      // 檢查權限：用戶只能查看自己的投稿或公開的資料
+      if (createdByFilter && req.user) {
+        if (createdByFilter !== req.user.uid && req.user.role !== 'admin') {
+          res.status(403).json({ error: 'Permission denied' });
+          return;
+        }
+      }
+
+      const artists = await this.artistService.getArtistsByStatus(statusFilter, createdByFilter);
       res.json(artists);
     } catch (error) {
       console.error('Error fetching artists:', error);

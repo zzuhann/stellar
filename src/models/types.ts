@@ -126,6 +126,7 @@ export interface EventFilterParams {
   artistId?: string; // 特定藝人ID
   status?: 'all' | 'active' | 'upcoming' | 'ended'; // 時間狀態
   region?: string; // 地區名稱（台北市、新北市等）
+  createdBy?: string; // 創建者 UID（篩選用戶自己的投稿）
 
   // 分頁參數
   page?: number; // 頁數，預設1
@@ -171,4 +172,18 @@ export interface MapDataResponse {
     thumbnail?: string; // 為未來自定義 marker 準備
   }[];
   total: number;
+}
+
+// 用戶投稿資料回應格式
+export interface UserSubmissionsResponse {
+  artists: Artist[];
+  events: CoffeeEvent[];
+  summary: {
+    totalArtists: number;
+    totalEvents: number;
+    pendingArtists: number;
+    pendingEvents: number;
+    approvedArtists: number;
+    approvedEvents: number;
+  };
 }

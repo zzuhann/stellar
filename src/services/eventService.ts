@@ -7,6 +7,7 @@ import {
   EventsResponse,
   MapDataParams,
   MapDataResponse,
+  UserSubmissionsResponse,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
@@ -107,6 +108,11 @@ export class EventService {
     // 藝人篩選
     if (filters.artistId) {
       query = query.where('artistId', '==', filters.artistId);
+    }
+
+    // 創建者篩選
+    if (filters.createdBy) {
+      query = query.where('createdBy', '==', filters.createdBy);
     }
 
     const snapshot = await query.get();
@@ -499,6 +505,62 @@ export class EventService {
     }
 
     return events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+  }
+
+  // 獲取用戶的所有投稿（藝人和活動）
+  async getUserSubmissions(userId: string): Promise<UserSubmissionsResponse> {
+    this.checkFirebaseConfig();
+
+    if (!db) {
+      throw new Error('Firebase not configured');
+    }
+
+    // 獲取用戶的藝人投稿（簡化查詢避免索引問題）
+    const artistsSnapshot = await db.collection('artists').where('createdBy', '==', userId).get();
+
+    const artists = artistsSnapshot.docs
+      .map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as import('../models/types').Artist
+      )
+      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
+
+    // 獲取用戶的活動投稿（簡化查詢避免索引問題）
+    const eventsSnapshot = await this.collection!.where('createdBy', '==', userId)
+      .where('isDeleted', '==', false)
+      .get();
+
+    const events = eventsSnapshot.docs
+      .map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      )
+      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
+
+    // 計算統計資訊
+    const pendingArtists = artists.filter(a => a.status === 'pending').length;
+    const approvedArtists = artists.filter(a => a.status === 'approved').length;
+    const pendingEvents = events.filter(e => e.status === 'pending').length;
+    const approvedEvents = events.filter(e => e.status === 'approved').length;
+
+    return {
+      artists,
+      events,
+      summary: {
+        totalArtists: artists.length,
+        totalEvents: events.length,
+        pendingArtists,
+        pendingEvents,
+        approvedArtists,
+        approvedEvents,
+      },
+    };
   }
 
   // 自動清理過期活動的方法（用於 Cloud Function）

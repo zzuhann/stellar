@@ -43,7 +43,10 @@ export class ArtistService {
     );
   }
 
-  async getArtistsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<Artist[]> {
+  async getArtistsByStatus(
+    status?: 'approved' | 'pending' | 'rejected',
+    createdBy?: string
+  ): Promise<Artist[]> {
     this.checkFirebaseConfig();
 
     let query = this.collection!;
@@ -51,6 +54,11 @@ export class ArtistService {
     // 如果有指定狀態，就篩選
     if (status) {
       query = query.where('status', '==', status);
+    }
+
+    // 如果有指定創建者，就篩選
+    if (createdBy) {
+      query = query.where('createdBy', '==', createdBy);
     }
 
     const snapshot = await query.get();

@@ -9,9 +9,18 @@ const eventController = new EventController();
 router.get('/', (req, res) => void eventController.getActiveEvents(req, res));
 router.get('/map-data', (req, res) => void eventController.getMapData(req, res));
 router.get('/search', (req, res) => void eventController.searchEvents(req, res));
+
+// 需要登入的路由 (必須在 /:id 之前)
+router.get(
+  '/me',
+  authenticateToken,
+  (req, res) => void eventController.getUserSubmissions(req, res)
+);
+
+// 公開路由 (動態參數路由放最後)
 router.get('/:id', (req, res) => void eventController.getEventById(req, res));
 
-// 需要登入的路由
+// 其他需要登入的路由
 router.post('/', authenticateToken, (req, res) => void eventController.createEvent(req, res));
 router.put('/:id', authenticateToken, (req, res) => void eventController.updateEvent(req, res));
 router.delete('/:id', authenticateToken, (req, res) => void eventController.deleteEvent(req, res));
