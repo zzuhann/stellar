@@ -1,9 +1,16 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
-import { CoffeeEvent, CreateEventData } from '../models/types';
+import {
+  CoffeeEvent,
+  CreateEventData,
+  EventFilterParams,
+  EventsResponse,
+  MapDataParams,
+  MapDataResponse,
+} from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
 export class EventService {
-  private collection = hasFirebaseConfig ? db.collection('coffeeEvents') : null;
+  private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -84,6 +91,197 @@ export class EventService {
     return events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
   }
 
+  // 新增：進階篩選和分頁功能
+  async getEventsWithFilters(filters: EventFilterParams): Promise<EventsResponse> {
+    this.checkFirebaseConfig();
+
+    // 設定預設值
+    const page = filters.page || 1;
+    const limit = Math.min(filters.limit || 50, 100); // 最大限制100筆
+    const skip = (page - 1) * limit;
+
+    // 基礎查詢：只查詢未刪除的活動
+    let query = this.collection!.where('isDeleted', '==', false);
+
+    // 藝人篩選
+    if (filters.artistId) {
+      query = query.where('artistId', '==', filters.artistId);
+    }
+
+    const snapshot = await query.get();
+
+    let events = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
+
+    // 時間狀態篩選
+    if (filters.status && filters.status !== 'all') {
+      const now = Date.now();
+      events = events.filter(event => {
+        const startTime = event.datetime.start.toMillis();
+        const endTime = event.datetime.end.toMillis();
+
+        switch (filters.status) {
+          case 'active':
+            return startTime <= now && endTime >= now;
+          case 'upcoming':
+            return startTime > now;
+          case 'ended':
+            return endTime < now;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // 搜尋篩選
+    if (filters.search) {
+      const searchTerm = filters.search.toLowerCase();
+      events = events.filter(
+        event =>
+          event.title.toLowerCase().includes(searchTerm) ||
+          (event.artistName && event.artistName.toLowerCase().includes(searchTerm)) ||
+          (event.description && event.description.toLowerCase().includes(searchTerm)) ||
+          event.location.address.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // 地區篩選
+    if (filters.region) {
+      const regionTerm = filters.region.toLowerCase();
+      events = events.filter(event => event.location.address.toLowerCase().includes(regionTerm));
+    }
+
+    // 計算總數
+    const total = events.length;
+    const totalPages = Math.ceil(total / limit);
+
+    // 分頁處理
+    const paginatedEvents = events
+      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // 按時間排序
+      .slice(skip, skip + limit);
+
+    return {
+      events: paginatedEvents,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+      filters: {
+        search: filters.search,
+        artistId: filters.artistId,
+        status: filters.status,
+        region: filters.region,
+      },
+    };
+  }
+
+  // 新增：地圖資料 API
+  async getMapData(params: MapDataParams): Promise<MapDataResponse> {
+    this.checkFirebaseConfig();
+
+    const status = params.status || 'active';
+
+    // 建立查詢
+    let query = this.collection!.where('isDeleted', '==', false);
+
+    // 藝人篩選
+    if (params.artistId) {
+      query = query.where('artistId', '==', params.artistId);
+    }
+
+    const snapshot = await query.get();
+
+    let events = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
+
+    // 只顯示已審核的活動
+    events = events.filter(event => event.status === 'approved');
+
+    const now = Date.now();
+
+    // 時間狀態篩選
+    if (status !== 'all') {
+      events = events.filter(event => {
+        const startTime = event.datetime.start.toMillis();
+        const endTime = event.datetime.end.toMillis();
+
+        switch (status) {
+          case 'active':
+            return startTime <= now && endTime >= now;
+          case 'upcoming':
+            return startTime > now;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // 搜尋篩選
+    if (params.search) {
+      const searchTerm = params.search.toLowerCase();
+      events = events.filter(
+        event =>
+          event.title.toLowerCase().includes(searchTerm) ||
+          (event.artistName && event.artistName.toLowerCase().includes(searchTerm)) ||
+          (event.description && event.description.toLowerCase().includes(searchTerm)) ||
+          event.location.address.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // 地區篩選
+    if (params.region) {
+      const regionTerm = params.region.toLowerCase();
+      events = events.filter(event => event.location.address.toLowerCase().includes(regionTerm));
+    }
+
+    // 地圖邊界篩選（如果提供）
+    if (params.bounds) {
+      const [lat1, lng1, lat2, lng2] = params.bounds.split(',').map(Number);
+      const minLat = Math.min(lat1, lat2);
+      const maxLat = Math.max(lat1, lat2);
+      const minLng = Math.min(lng1, lng2);
+      const maxLng = Math.max(lng1, lng2);
+
+      events = events.filter(event => {
+        const lat = event.location.coordinates.lat;
+        const lng = event.location.coordinates.lng;
+        return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+      });
+    }
+
+    // 轉換為輕量格式
+    const mapEvents = events.map(event => {
+      const startTime = event.datetime.start.toMillis();
+      const eventStatus: 'active' | 'upcoming' = startTime > now ? 'upcoming' : 'active';
+
+      return {
+        id: event.id,
+        title: event.title,
+        artistName: event.artistName || '',
+        coordinates: event.location.coordinates,
+        status: eventStatus,
+        thumbnail: event.thumbnail,
+      };
+    });
+
+    return {
+      events: mapEvents,
+      total: mapEvents.length,
+    };
+  }
+
   async getEventById(eventId: string): Promise<CoffeeEvent | null> {
     this.checkFirebaseConfig();
     const doc = await this.collection!.doc(eventId).get();
@@ -102,14 +300,19 @@ export class EventService {
     this.checkFirebaseConfig();
 
     // 驗證藝人是否存在且已審核
+    if (!db) {
+      throw new Error('Firebase not configured');
+    }
     const artistDoc = await db.collection('artists').doc(eventData.artistId).get();
     if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
       throw new Error('Invalid or unapproved artist');
     }
 
+    const artistData = artistDoc.data();
     const now = Timestamp.now();
     const newEvent = {
       artistId: eventData.artistId,
+      artistName: eventData.artistName || artistData?.stageName || '', // 優先使用提供的，否則從藝人資料取得
       title: eventData.title,
       description: eventData.description,
       location: eventData.location,
@@ -222,6 +425,9 @@ export class EventService {
 
     // 如果需要按藝人名稱搜尋，需要另外查詢藝人資料
     if (criteria.artistName) {
+      if (!db) {
+        throw new Error('Firebase not configured');
+      }
       const artistSnapshot = await db
         .collection('artists')
         .where('name', '>=', criteria.artistName)
@@ -245,6 +451,9 @@ export class EventService {
       .where('isDeleted', '==', false)
       .get();
 
+    if (!db) {
+      throw new Error('Firebase not configured');
+    }
     const batch = db.batch();
 
     expiredEvents.docs.forEach(doc => {

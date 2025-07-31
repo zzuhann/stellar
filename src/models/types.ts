@@ -15,6 +15,7 @@ export interface Artist {
 export interface CoffeeEvent {
   id: string;
   artistId: string;
+  artistName: string; // 冗餘儲存，避免每次都要 join
   title: string;
   description: string;
   location: {
@@ -34,6 +35,8 @@ export interface CoffeeEvent {
     threads?: string;
   };
   images: string[];
+  thumbnail?: string; // 縮圖 URL (200x200)
+  markerImage?: string; // Marker 圖片 URL (48x48)
   supportProvided?: boolean;
   requiresReservation?: boolean;
   onSiteReservation?: boolean;
@@ -63,6 +66,7 @@ export interface CreateArtistData {
 
 export interface CreateEventData {
   artistId: string;
+  artistName?: string; // 藝人名稱（會自動從 Artist 取得，但允許手動提供）
   title: string;
   description: string;
   location: {
@@ -85,4 +89,58 @@ export interface CreateEventData {
   requiresReservation?: boolean;
   onSiteReservation?: boolean;
   amenities?: string[];
+}
+
+// 新增篩選參數介面
+export interface EventFilterParams {
+  // 篩選參數
+  search?: string; // 搜尋標題、藝人名稱、地址、描述
+  artistId?: string; // 特定藝人ID
+  status?: 'all' | 'active' | 'upcoming' | 'ended'; // 時間狀態
+  region?: string; // 地區名稱（台北市、新北市等）
+
+  // 分頁參數
+  page?: number; // 頁數，預設1
+  limit?: number; // 每頁筆數，預設50
+}
+
+// 活動列表回應格式
+export interface EventsResponse {
+  events: CoffeeEvent[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  filters: {
+    search?: string;
+    artistId?: string;
+    status?: string;
+    region?: string;
+  };
+}
+
+// 地圖資料參數
+export interface MapDataParams {
+  status?: 'active' | 'upcoming' | 'all'; // 預設 'active'
+  bounds?: string; // "lat1,lng1,lat2,lng2" 地圖邊界（可選）
+  zoom?: number; // 縮放等級（未來聚合用）
+  // 新增篩選參數
+  search?: string; // 搜尋標題、藝人名稱、地址、描述
+  artistId?: string; // 特定藝人ID
+  region?: string; // 地區名稱（台北市、新北市等）
+}
+
+// 地圖資料回應格式
+export interface MapDataResponse {
+  events: {
+    id: string;
+    title: string;
+    artistName: string;
+    coordinates: { lat: number; lng: number };
+    status: 'active' | 'upcoming';
+    thumbnail?: string; // 為未來自定義 marker 準備
+  }[];
+  total: number;
 }

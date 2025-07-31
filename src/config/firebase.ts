@@ -10,8 +10,8 @@ const hasFirebaseConfig = !!(
   process.env.FIREBASE_CLIENT_EMAIL
 );
 
-let db: admin.firestore.Firestore;
-let auth: admin.auth.Auth;
+let db: admin.firestore.Firestore | null;
+let auth: admin.auth.Auth | null;
 // 暫時移除 storage，保留未來擴充可能
 // let storage: admin.storage.Bucket;
 
@@ -42,9 +42,9 @@ if (hasFirebaseConfig) {
   console.warn('⚠️  Firebase configuration not found. Some features will be disabled.');
 
   // 創建空的 mock 物件避免錯誤
-  db = null as any;
-  auth = null as any;
-  // storage = null as any;
+  db = null;
+  auth = null;
+  // storage = null;
 }
 
 export { db, auth, hasFirebaseConfig };

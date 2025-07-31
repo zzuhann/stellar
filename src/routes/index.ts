@@ -46,10 +46,10 @@ router.get('/test', async (req, res) => {
         approved: approvedArtists.size,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({
       error: 'Firebase test failed',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

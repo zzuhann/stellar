@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { EventService } from '../services/eventService';
+import { EventFilterParams, MapDataParams } from '../models/types';
 
 export class EventController {
   private eventService: EventService;
@@ -9,20 +10,25 @@ export class EventController {
     this.eventService = new EventService();
   }
 
-  // 獲取活動列表（支援狀態篩選）
+  // 獲取活動列表（支援進階篩選和分頁）
   getActiveEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { status } = req.query;
-      const statusFilter = status as 'approved' | 'pending' | 'rejected' | undefined;
+      const filters: EventFilterParams = {
+        search: req.query.search as string,
+        artistId: req.query.artistId as string,
+        status: req.query.status as 'all' | 'active' | 'upcoming' | 'ended',
+        region: req.query.region as string,
+        page: req.query.page ? parseInt(req.query.page as string) : undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+      };
 
-      // 檢查權限：只有管理員可以查看 pending/rejected 狀態
-      if (statusFilter && statusFilter !== 'approved' && (!req.user || req.user.role !== 'admin')) {
-        res.status(403).json({ error: 'Admin access required' });
-        return;
+      // 如果沒有提供 status，預設為 'active'（只顯示進行中的活動）
+      if (!filters.status) {
+        filters.status = 'active';
       }
 
-      const events = await this.eventService.getEventsByStatus(statusFilter);
-      res.json(events);
+      const result = await this.eventService.getEventsWithFilters(filters);
+      res.json(result);
     } catch (error) {
       console.error('Error fetching events:', error);
       res.status(500).json({ error: 'Failed to fetch events' });
@@ -152,6 +158,27 @@ export class EventController {
     } catch (error) {
       console.error('Error searching events:', error);
       res.status(500).json({ error: 'Failed to search events' });
+    }
+  };
+
+  // 新增：地圖資料 API
+  getMapData = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const params: MapDataParams = {
+        status: req.query.status as 'active' | 'upcoming' | 'all',
+        bounds: req.query.bounds as string,
+        zoom: req.query.zoom ? parseInt(req.query.zoom as string) : undefined,
+        // 新增篩選參數
+        search: req.query.search as string,
+        artistId: req.query.artistId as string,
+        region: req.query.region as string,
+      };
+
+      const result = await this.eventService.getMapData(params);
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching map data:', error);
+      res.status(500).json({ error: 'Failed to fetch map data' });
     }
   };
 }

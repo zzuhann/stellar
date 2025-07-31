@@ -3,7 +3,7 @@ import { Artist, CreateArtistData } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
 export class ArtistService {
-  private collection = hasFirebaseConfig ? db.collection('artists') : null;
+  private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -130,6 +130,9 @@ export class ArtistService {
     this.checkFirebaseConfig();
 
     // 檢查是否有活動使用此藝人
+    if (!db) {
+      throw new Error('Firebase not configured');
+    }
     const eventsSnapshot = await db
       .collection('coffeeEvents')
       .where('artistId', '==', artistId)

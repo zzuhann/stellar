@@ -31,7 +31,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', routes);
 
 // 全域錯誤處理
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: 'Internal server error',
