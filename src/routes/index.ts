@@ -2,7 +2,9 @@ import { Router } from 'express';
 import artistRoutes from './artistRoutes';
 import eventRoutes from './eventRoutes';
 import placesRoutes from './placesRoutes';
+import imageRoutes from './imageRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
+import { hasR2Config } from '../config/r2-client';
 
 const router = Router();
 
@@ -15,6 +17,10 @@ router.get('/health', (_req, res) => {
     firebase: {
       configured: hasFirebaseConfig,
       message: hasFirebaseConfig ? 'Firebase ready' : 'Firebase not configured',
+    },
+    r2: {
+      configured: hasR2Config,
+      message: hasR2Config ? 'R2 ready' : 'R2 not configured',
     },
   });
 });
@@ -56,6 +62,9 @@ router.get('/test', async (req, res) => {
 
 // Google Places API 路由（不需要 Firebase）
 router.use('/places', placesRoutes);
+
+// R2 圖片上傳路由（不需要 Firebase）
+router.use('/images', imageRoutes);
 
 // Firebase 配置完成，啟用完整路由
 if (hasFirebaseConfig) {
