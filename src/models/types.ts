@@ -91,6 +91,34 @@ export interface CreateEventData {
   amenities?: string[];
 }
 
+// 編輯活動資料（不包含 artistId 和 artistName）
+export interface UpdateEventData {
+  title?: string;
+  description?: string;
+  location?: {
+    address: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  datetime?: {
+    start: Date | string;
+    end: Date | string;
+  };
+  socialMedia?: {
+    instagram?: string;
+    twitter?: string;
+    threads?: string;
+  };
+  supportProvided?: boolean;
+  requiresReservation?: boolean;
+  onSiteReservation?: boolean;
+  amenities?: string[];
+  thumbnail?: string;
+  markerImage?: string;
+}
+
 // 新增篩選參數介面
 export interface EventFilterParams {
   // 篩選參數

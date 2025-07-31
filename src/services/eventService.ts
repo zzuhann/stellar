@@ -2,6 +2,7 @@ import { db, hasFirebaseConfig } from '../config/firebase';
 import {
   CoffeeEvent,
   CreateEventData,
+  UpdateEventData,
   EventFilterParams,
   EventsResponse,
   MapDataParams,
@@ -339,6 +340,64 @@ export class EventService {
       id: docRef.id,
       ...newEvent,
     };
+  }
+
+  async updateEvent(
+    eventId: string,
+    updateData: UpdateEventData,
+    userId: string,
+    userRole: string
+  ): Promise<CoffeeEvent> {
+    this.checkFirebaseConfig();
+    const docRef = this.collection!.doc(eventId);
+    const doc = await docRef.get();
+
+    if (!doc.exists || doc.data()?.isDeleted) {
+      throw new Error('Event not found');
+    }
+
+    const eventData = doc.data();
+
+    // 檢查權限：管理員可以編輯任何活動，一般用戶只能編輯自己的活動
+    if (userRole !== 'admin' && eventData?.createdBy !== userId) {
+      throw new Error('Permission denied');
+    }
+
+    // 準備更新資料
+    const updates: Record<string, unknown> = {
+      updatedAt: Timestamp.now(),
+    };
+
+    // 只更新提供的欄位
+    if (updateData.title !== undefined) updates.title = updateData.title;
+    if (updateData.description !== undefined) updates.description = updateData.description;
+    if (updateData.location !== undefined) updates.location = updateData.location;
+    if (updateData.socialMedia !== undefined) updates.socialMedia = updateData.socialMedia;
+    if (updateData.supportProvided !== undefined)
+      updates.supportProvided = updateData.supportProvided;
+    if (updateData.requiresReservation !== undefined)
+      updates.requiresReservation = updateData.requiresReservation;
+    if (updateData.onSiteReservation !== undefined)
+      updates.onSiteReservation = updateData.onSiteReservation;
+    if (updateData.amenities !== undefined) updates.amenities = updateData.amenities;
+    if (updateData.thumbnail !== undefined) updates.thumbnail = updateData.thumbnail;
+    if (updateData.markerImage !== undefined) updates.markerImage = updateData.markerImage;
+
+    // 處理時間資料
+    if (updateData.datetime) {
+      updates.datetime = {
+        start: Timestamp.fromDate(new Date(updateData.datetime.start)),
+        end: Timestamp.fromDate(new Date(updateData.datetime.end)),
+      };
+    }
+
+    await docRef.update(updates);
+
+    const updatedDoc = await docRef.get();
+    return {
+      id: updatedDoc.id,
+      ...updatedDoc.data(),
+    } as CoffeeEvent;
   }
 
   async updateEventStatus(eventId: string, status: 'approved' | 'rejected'): Promise<CoffeeEvent> {

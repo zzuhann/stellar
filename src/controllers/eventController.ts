@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { EventService } from '../services/eventService';
-import { EventFilterParams, MapDataParams } from '../models/types';
+import { EventFilterParams, MapDataParams, UpdateEventData } from '../models/types';
 
 export class EventController {
   private eventService: EventService;
@@ -84,6 +84,42 @@ export class EventController {
     } catch (error) {
       console.error('Error creating event:', error);
       res.status(500).json({ error: 'Failed to create event' });
+    }
+  };
+
+  // 編輯活動
+  updateEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const updateData: UpdateEventData = req.body;
+      const userId = req.user!.uid;
+      const userRole = req.user!.role;
+
+      // 驗證時間資料格式（如果提供）
+      if (updateData.datetime) {
+        if (!updateData.datetime.start || !updateData.datetime.end) {
+          res
+            .status(400)
+            .json({ error: 'Both start and end datetime are required when updating datetime' });
+          return;
+        }
+      }
+
+      const event = await this.eventService.updateEvent(id, updateData, userId, userRole);
+      res.json(event);
+    } catch (error) {
+      console.error('Error updating event:', error);
+      if (error instanceof Error) {
+        if (error.message === 'Event not found') {
+          res.status(404).json({ error: 'Event not found' });
+        } else if (error.message === 'Permission denied') {
+          res.status(403).json({ error: 'Permission denied' });
+        } else {
+          res.status(500).json({ error: 'Failed to update event' });
+        }
+      } else {
+        res.status(500).json({ error: 'Failed to update event' });
+      }
     }
   };
 

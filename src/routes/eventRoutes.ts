@@ -13,6 +13,7 @@ router.get('/:id', (req, res) => void eventController.getEventById(req, res));
 
 // 需要登入的路由
 router.post('/', authenticateToken, (req, res) => void eventController.createEvent(req, res));
+router.put('/:id', authenticateToken, (req, res) => void eventController.updateEvent(req, res));
 router.delete('/:id', authenticateToken, (req, res) => void eventController.deleteEvent(req, res));
 
 // 管理員專用路由
