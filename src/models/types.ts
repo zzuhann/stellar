@@ -4,6 +4,7 @@ export interface Artist {
   id: string;
   stageName: string; // 藝名（主要顯示）
   realName?: string; // 本名（可選）
+  groupName?: string; // 團體名稱（可選，例如："BLACKPINK", "BTS", "TWICE"）
   birthday?: string; // 生日 (YYYY-MM-DD 格式)
   profileImage?: string; // 照片 URL
   status: 'pending' | 'approved' | 'rejected';
@@ -60,8 +61,27 @@ export interface User {
 export interface CreateArtistData {
   stageName: string; // 藝名（必填）
   realName?: string; // 本名（可選）
+  groupName?: string; // 團體名稱（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
+}
+
+// 藝人篩選參數
+export interface ArtistFilterParams {
+  status?: 'approved' | 'pending' | 'rejected'; // 狀態篩選
+  createdBy?: string; // 創建者篩選
+  birthdayWeek?: {
+    startDate: string; // YYYY-MM-DD 格式，該週的開始日期
+    endDate: string; // YYYY-MM-DD 格式，該週的結束日期
+  }; // 生日週篩選
+  search?: string; // 搜尋藝名、本名、團體名稱
+  sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt'; // 排序方式
+  sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
+}
+
+// 藝人回應格式（包含額外計算欄位）
+export interface ArtistWithStats extends Artist {
+  coffeeEventCount: number; // 進行中的生咖活動數量
 }
 
 export interface CreateEventData {

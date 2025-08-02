@@ -1,5 +1,5 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
-import { Artist, CreateArtistData } from '../models/types';
+import { Artist, CreateArtistData, ArtistFilterParams, ArtistWithStats } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
 export class ArtistService {
@@ -95,6 +95,7 @@ export class ArtistService {
     const newArtist = {
       stageName: artistData.stageName,
       realName: artistData.realName || undefined,
+      groupName: artistData.groupName || undefined,
       birthday: artistData.birthday || undefined,
       profileImage: artistData.profileImage || undefined,
       status: 'pending' as const,
@@ -166,5 +167,155 @@ export class ArtistService {
       id: doc.id,
       ...doc.data(),
     } as Artist;
+  }
+
+  // 新增：支援進階篩選的藝人查詢
+  async getArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
+    this.checkFirebaseConfig();
+
+    let query = this.collection!;
+
+    // 狀態篩選
+    if (filters.status) {
+      query = query.where('status', '==', filters.status);
+    }
+
+    // 創建者篩選
+    if (filters.createdBy) {
+      query = query.where('createdBy', '==', filters.createdBy);
+    }
+
+    const snapshot = await query.get();
+    let artists = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
+
+    // 生日週篩選（在記憶體中處理）
+    if (filters.birthdayWeek) {
+      artists = this.filterByBirthdayWeek(artists, filters.birthdayWeek);
+    }
+
+    // 搜尋篩選（在記憶體中處理）
+    if (filters.search) {
+      const searchTerm = filters.search.toLowerCase();
+      artists = artists.filter(
+        artist =>
+          artist.stageName.toLowerCase().includes(searchTerm) ||
+          (artist.realName && artist.realName.toLowerCase().includes(searchTerm)) ||
+          (artist.groupName && artist.groupName.toLowerCase().includes(searchTerm))
+      );
+    }
+
+    // 排序（基本方法暫時保持藝名排序）
+    return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+  }
+
+  // 新增：帶統計資料的藝人查詢
+  async getArtistsWithStats(filters: ArtistFilterParams): Promise<ArtistWithStats[]> {
+    this.checkFirebaseConfig();
+
+    // 先取得藝人列表
+    const artists = await this.getArtistsWithFilters(filters);
+
+    // 為每個藝人計算生咖數量
+    const artistsWithStats: ArtistWithStats[] = [];
+
+    for (const artist of artists) {
+      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id);
+      artistsWithStats.push({
+        ...artist,
+        coffeeEventCount,
+      });
+    }
+
+    // 套用排序
+    return this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
+  }
+
+  // 私有方法：篩選生日週
+  private filterByBirthdayWeek(
+    artists: Artist[],
+    birthdayWeek: { startDate: string; endDate: string }
+  ): Artist[] {
+    return artists.filter(artist => {
+      if (!artist.birthday) return false;
+
+      // 將生日轉換為今年的日期進行比較
+      const currentYear = new Date().getFullYear();
+      const [, month, day] = artist.birthday.split('-');
+      const birthdayThisYear = `${currentYear}-${month}-${day}`;
+
+      return birthdayThisYear >= birthdayWeek.startDate && birthdayThisYear <= birthdayWeek.endDate;
+    });
+  }
+
+  // 私有方法：計算藝人的進行中活動數量
+  private async getActiveEventCountForArtist(artistId: string): Promise<number> {
+    if (!db) {
+      return 0;
+    }
+
+    const now = Timestamp.now();
+
+    try {
+      const eventsSnapshot = await db
+        .collection('coffeeEvents')
+        .where('artistId', '==', artistId)
+        .where('isDeleted', '==', false)
+        .where('status', '==', 'approved')
+        .get();
+
+      // 在記憶體中篩選進行中的活動
+      const activeEvents = eventsSnapshot.docs.filter(doc => {
+        const data = doc.data();
+        const startTime = data.datetime?.start;
+        const endTime = data.datetime?.end;
+
+        if (!startTime || !endTime) return false;
+
+        return startTime.toMillis() <= now.toMillis() && endTime.toMillis() >= now.toMillis();
+      });
+
+      return activeEvents.length;
+    } catch (error) {
+      console.error('Error counting active events for artist:', error);
+      return 0;
+    }
+  }
+
+  // 私有方法：帶統計資料的藝人排序
+  private sortArtistsWithStats(
+    artists: ArtistWithStats[],
+    sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): ArtistWithStats[] {
+    if (!sortBy) {
+      // 預設按藝名排序
+      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+    }
+
+    return artists.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'stageName':
+          comparison = a.stageName.localeCompare(b.stageName);
+          break;
+        case 'coffeeEventCount':
+          comparison = a.coffeeEventCount - b.coffeeEventCount;
+          break;
+        case 'createdAt':
+          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          break;
+        default:
+          comparison = a.stageName.localeCompare(b.stageName);
+      }
+
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
   }
 }

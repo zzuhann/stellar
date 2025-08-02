@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ArtistService } from '../services/artistService';
+import { ArtistFilterParams } from '../models/types';
 
 export class ArtistController {
   private artistService: ArtistService;
@@ -9,29 +10,63 @@ export class ArtistController {
     this.artistService = new ArtistService();
   }
 
-  // 獲取藝人列表（支援狀態篩選和創建者篩選）
+  // 獲取藝人列表（支援進階篩選）
   getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { status, createdBy } = req.query;
-      const statusFilter = status as 'approved' | 'pending' | 'rejected' | undefined;
-      const createdByFilter = createdBy as string | undefined;
+      const {
+        status,
+        createdBy,
+        birthdayStartDate,
+        birthdayEndDate,
+        search,
+        includeStats,
+        sortBy,
+        sortOrder,
+      } = req.query;
+
+      // 建構篩選參數
+      const filters: ArtistFilterParams = {
+        status: status as 'approved' | 'pending' | 'rejected' | undefined,
+        createdBy: createdBy as string | undefined,
+        search: search as string | undefined,
+        sortBy: sortBy as 'stageName' | 'coffeeEventCount' | 'createdAt' | undefined,
+        sortOrder: sortOrder as 'asc' | 'desc' | undefined,
+      };
+
+      // 處理生日週篩選
+      if (birthdayStartDate && birthdayEndDate) {
+        filters.birthdayWeek = {
+          startDate: birthdayStartDate as string,
+          endDate: birthdayEndDate as string,
+        };
+      }
 
       // 檢查權限：只有管理員可以查看 pending/rejected 狀態
-      if (statusFilter && statusFilter !== 'approved' && (!req.user || req.user.role !== 'admin')) {
+      if (
+        filters.status &&
+        filters.status !== 'approved' &&
+        (!req.user || req.user.role !== 'admin')
+      ) {
         res.status(403).json({ error: 'Admin access required' });
         return;
       }
 
       // 檢查權限：用戶只能查看自己的投稿或公開的資料
-      if (createdByFilter && req.user) {
-        if (createdByFilter !== req.user.uid && req.user.role !== 'admin') {
+      if (filters.createdBy && req.user) {
+        if (filters.createdBy !== req.user.uid && req.user.role !== 'admin') {
           res.status(403).json({ error: 'Permission denied' });
           return;
         }
       }
 
-      const artists = await this.artistService.getArtistsByStatus(statusFilter, createdByFilter);
-      res.json(artists);
+      // 根據是否需要統計資料選擇不同的服務方法
+      if (includeStats === 'true') {
+        const artists = await this.artistService.getArtistsWithStats(filters);
+        res.json(artists);
+      } else {
+        const artists = await this.artistService.getArtistsWithFilters(filters);
+        res.json(artists);
+      }
     } catch (error) {
       console.error('Error fetching artists:', error);
       res.status(500).json({ error: 'Failed to fetch artists' });
@@ -52,7 +87,7 @@ export class ArtistController {
   // 新增藝人
   createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { stageName, realName, birthday, profileImage } = req.body;
+      const { stageName, realName, groupName, birthday, profileImage } = req.body;
       const userId = req.user!.uid;
 
       if (!stageName) {
@@ -64,6 +99,7 @@ export class ArtistController {
         {
           stageName,
           realName,
+          groupName,
           birthday,
           profileImage,
         },
