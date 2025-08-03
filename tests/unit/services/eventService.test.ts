@@ -97,10 +97,11 @@ describe('EventService', () => {
   describe('createEvent', () => {
     it('應該成功建立新活動', async () => {
       const eventData = {
-        artistId: 'artist-123',
+        artistIds: ['artist-123'],
         title: '測試活動',
         description: '測試描述',
         location: {
+          name: '測試咖啡廳',
           address: '台北市信義區',
           coordinates: { lat: 25.0, lng: 121.0 },
         },
@@ -116,7 +117,11 @@ describe('EventService', () => {
       // Mock 藝人存在且已審核
       const mockArtistDoc = {
         exists: true,
-        data: () => ({ status: 'approved' }),
+        data: () => ({
+          status: 'approved',
+          stageName: '測試藝人',
+          profileImage: 'https://example.com/image.jpg',
+        }),
       };
 
       // Mock db.collection('artists').doc().get()

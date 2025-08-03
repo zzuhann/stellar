@@ -16,7 +16,7 @@ export class EventController {
       const filters: EventFilterParams = {
         search: req.query.search as string,
         artistId: req.query.artistId as string,
-        status: req.query.status as 'all' | 'active' | 'upcoming' | 'ended',
+        status: req.query.status as 'all' | 'pending' | 'approved' | 'rejected',
         region: req.query.region as string,
         createdBy: req.query.createdBy as string,
         page: req.query.page ? parseInt(req.query.page as string) : undefined,
@@ -31,9 +31,9 @@ export class EventController {
         }
       }
 
-      // 如果沒有提供 status，預設為 'active'（只顯示進行中的活動）
+      // 如果沒有提供 status，預設為 'approved'（只顯示已審核通過的活動）
       if (!filters.status) {
-        filters.status = 'active';
+        filters.status = 'approved';
       }
 
       const result = await this.eventService.getEventsWithFilters(filters);
@@ -80,12 +80,18 @@ export class EventController {
       const userId = req.user!.uid;
 
       // 驗證必填欄位
-      const requiredFields = ['artistId', 'title', 'description', 'location', 'datetime'];
+      const requiredFields = ['artistIds', 'title', 'description', 'location', 'datetime'];
       for (const field of requiredFields) {
         if (!eventData[field]) {
           res.status(400).json({ error: `${field} is required` });
           return;
         }
+      }
+
+      // 驗證 artistIds 是陣列且不為空
+      if (!Array.isArray(eventData.artistIds) || eventData.artistIds.length === 0) {
+        res.status(400).json({ error: 'artistIds must be a non-empty array' });
+        return;
       }
 
       const event = await this.eventService.createEvent(eventData, userId);

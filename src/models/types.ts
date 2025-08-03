@@ -4,7 +4,6 @@ export interface Artist {
   id: string;
   stageName: string; // 藝名（主要顯示）
   realName?: string; // 本名（可選）
-  groupName?: string; // 團體名稱（可選，例如："BLACKPINK", "BTS", "TWICE"）
   birthday?: string; // 生日 (YYYY-MM-DD 格式)
   profileImage?: string; // 照片 URL
   status: 'pending' | 'approved' | 'rejected';
@@ -15,11 +14,15 @@ export interface Artist {
 
 export interface CoffeeEvent {
   id: string;
-  artistId: string;
-  artistName: string; // 冗餘儲存，避免每次都要 join
+  artists: Array<{
+    id: string;
+    name: string;
+    profileImage?: string; // 🆕 新增藝人頭像
+  }>; // 改為陣列，支援聯合應援
   title: string;
   description: string;
   location: {
+    name: string; // 新增：地點名稱
     address: string;
     coordinates: {
       lat: number;
@@ -32,18 +35,12 @@ export interface CoffeeEvent {
   };
   socialMedia: {
     instagram?: string;
-    twitter?: string;
+    x?: string; // 替代 twitter
     threads?: string;
   };
-  images: string[];
-  thumbnail?: string; // 縮圖 URL (200x200)
-  markerImage?: string; // Marker 圖片 URL (48x48)
-  supportProvided?: boolean;
-  requiresReservation?: boolean;
-  onSiteReservation?: boolean;
-  amenities?: string[];
+  mainImage?: string; // 新增：主要圖片 URL
+  detailImage?: string; // 新增：詳細圖片 URL
   status: 'pending' | 'approved' | 'rejected';
-  isDeleted: boolean;
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -61,7 +58,6 @@ export interface User {
 export interface CreateArtistData {
   stageName: string; // 藝名（必填）
   realName?: string; // 本名（可選）
-  groupName?: string; // 團體名稱（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
 }
@@ -74,7 +70,7 @@ export interface ArtistFilterParams {
     startDate: string; // YYYY-MM-DD 格式，該週的開始日期
     endDate: string; // YYYY-MM-DD 格式，該週的結束日期
   }; // 生日週篩選
-  search?: string; // 搜尋藝名、本名、團體名稱
+  search?: string; // 搜尋藝名、本名
   sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt'; // 排序方式
   sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }
@@ -85,11 +81,11 @@ export interface ArtistWithStats extends Artist {
 }
 
 export interface CreateEventData {
-  artistId: string;
-  artistName?: string; // 藝人名稱（會自動從 Artist 取得，但允許手動提供）
+  artistIds: string[]; // 改為陣列，支援聯合應援
   title: string;
   description: string;
   location: {
+    name: string; // 地點名稱
     address: string;
     coordinates: {
       lat: number;
@@ -102,20 +98,19 @@ export interface CreateEventData {
   };
   socialMedia: {
     instagram?: string;
-    twitter?: string;
+    x?: string; // X (前 Twitter)
     threads?: string;
   };
-  supportProvided?: boolean;
-  requiresReservation?: boolean;
-  onSiteReservation?: boolean;
-  amenities?: string[];
+  mainImage?: string; // 主要圖片 URL
+  detailImage?: string; // 詳細圖片 URL
 }
 
-// 編輯活動資料（不包含 artistId 和 artistName）
+// 編輯活動資料（不包含 artistIds）
 export interface UpdateEventData {
   title?: string;
   description?: string;
   location?: {
+    name: string; // 地點名稱
     address: string;
     coordinates: {
       lat: number;
@@ -128,15 +123,11 @@ export interface UpdateEventData {
   };
   socialMedia?: {
     instagram?: string;
-    twitter?: string;
+    x?: string; // X (前 Twitter)
     threads?: string;
   };
-  supportProvided?: boolean;
-  requiresReservation?: boolean;
-  onSiteReservation?: boolean;
-  amenities?: string[];
-  thumbnail?: string;
-  markerImage?: string;
+  mainImage?: string; // 主要圖片 URL
+  detailImage?: string; // 詳細圖片 URL
 }
 
 // 新增篩選參數介面
@@ -144,7 +135,7 @@ export interface EventFilterParams {
   // 篩選參數
   search?: string; // 搜尋標題、藝人名稱、地址、描述
   artistId?: string; // 特定藝人ID
-  status?: 'all' | 'active' | 'upcoming' | 'ended'; // 時間狀態
+  status?: 'all' | 'pending' | 'approved' | 'rejected'; // 審核狀態
   region?: string; // 地區名稱（台北市、新北市等）
   createdBy?: string; // 創建者 UID（篩選用戶自己的投稿）
 
@@ -186,10 +177,16 @@ export interface MapDataResponse {
   events: {
     id: string;
     title: string;
-    artistName: string;
-    coordinates: { lat: number; lng: number };
-    status: 'active' | 'upcoming';
-    thumbnail?: string; // 為未來自定義 marker 準備
+    mainImage?: string;
+    location: {
+      name: string;
+      address: string;
+      coordinates: { lat: number; lng: number };
+    };
+    datetime: {
+      start: string; // ISO timestamp
+      end: string; // ISO timestamp
+    };
   }[];
   total: number;
 }

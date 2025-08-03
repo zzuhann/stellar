@@ -24,9 +24,7 @@ export class EventService {
     this.checkFirebaseConfig();
 
     // 暫時簡化查詢，等複合索引完成後再改回完整查詢
-    const snapshot = await this.collection!.where('status', '==', 'approved')
-      .where('isDeleted', '==', false)
-      .get();
+    const snapshot = await this.collection!.where('status', '==', 'approved').get();
 
     // 在程式中過濾時間和排序
     const now = Date.now();
@@ -46,7 +44,6 @@ export class EventService {
   async getPendingEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
     const snapshot = await this.collection!.where('status', '==', 'pending')
-      .where('isDeleted', '==', false)
       .orderBy('createdAt', 'desc')
       .get();
 
@@ -73,15 +70,14 @@ export class EventService {
       snapshot = await this.collection!.get();
     }
 
-    let events = snapshot.docs
-      .map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
-      )
-      .filter(event => !event.isDeleted); // 在記憶體中過濾已刪除的
+    let events = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
+    // 新版 API 已移除 isDeleted 欄位
 
     // 如果是 approved 狀態，在記憶體中過濾未過期的活動
     if (status === 'approved') {
@@ -102,17 +98,15 @@ export class EventService {
     const limit = Math.min(filters.limit || 50, 100); // 最大限制100筆
     const skip = (page - 1) * limit;
 
-    // 基礎查詢：只查詢未刪除的活動
-    let query = this.collection!.where('isDeleted', '==', false);
+    // 基礎查詢
+    let query = this.collection!;
 
-    // 藝人篩選
-    if (filters.artistId) {
-      query = query.where('artistId', '==', filters.artistId);
-    }
+    // 藝人篩選：先取得所有資料再在記憶體中篩選（因為要搜尋 artists 陣列）
+    // 移除此篩選條件，改為記憶體篩選
 
     // 創建者篩選
     if (filters.createdBy) {
-      query = query.where('createdBy', '==', filters.createdBy);
+      query = query.where('createdBy', '==', filters.createdBy) as any;
     }
 
     const snapshot = await query.get();
@@ -125,24 +119,9 @@ export class EventService {
         }) as CoffeeEvent
     );
 
-    // 時間狀態篩選
+    // 審核狀態篩選
     if (filters.status && filters.status !== 'all') {
-      const now = Date.now();
-      events = events.filter(event => {
-        const startTime = event.datetime.start.toMillis();
-        const endTime = event.datetime.end.toMillis();
-
-        switch (filters.status) {
-          case 'active':
-            return startTime <= now && endTime >= now;
-          case 'upcoming':
-            return startTime > now;
-          case 'ended':
-            return endTime < now;
-          default:
-            return true;
-        }
-      });
+      events = events.filter(event => event.status === filters.status);
     }
 
     // 搜尋篩選
@@ -151,7 +130,7 @@ export class EventService {
       events = events.filter(
         event =>
           event.title.toLowerCase().includes(searchTerm) ||
-          (event.artistName && event.artistName.toLowerCase().includes(searchTerm)) ||
+          event.artists.some(artist => artist.name.toLowerCase().includes(searchTerm)) ||
           (event.description && event.description.toLowerCase().includes(searchTerm)) ||
           event.location.address.toLowerCase().includes(searchTerm)
       );
@@ -163,22 +142,27 @@ export class EventService {
       events = events.filter(event => event.location.address.toLowerCase().includes(regionTerm));
     }
 
-    // 計算總數
-    const total = events.length;
-    const totalPages = Math.ceil(total / limit);
+    // 藝人篩選（在記憶體中進行）
+    if (filters.artistId) {
+      events = events.filter(event => event.artists.some(artist => artist.id === filters.artistId));
+    }
+
+    // 重新計算總數（因為加了藝人篩選）
+    const filteredTotal = events.length;
+    const filteredTotalPages = Math.ceil(filteredTotal / limit);
 
     // 分頁處理
-    const paginatedEvents = events
+    const finalPaginatedEvents = events
       .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // 按時間排序
       .slice(skip, skip + limit);
 
     return {
-      events: paginatedEvents,
+      events: finalPaginatedEvents,
       pagination: {
         page,
         limit,
-        total,
-        totalPages,
+        total: filteredTotal,
+        totalPages: filteredTotalPages,
       },
       filters: {
         search: filters.search,
@@ -195,13 +179,8 @@ export class EventService {
 
     const status = params.status || 'active';
 
-    // 建立查詢
-    let query = this.collection!.where('isDeleted', '==', false);
-
-    // 藝人篩選
-    if (params.artistId) {
-      query = query.where('artistId', '==', params.artistId);
-    }
+    // 建立查詢（取得所有已審核的活動，再在記憶體中篩選）
+    const query = this.collection!.where('status', '==', 'approved');
 
     const snapshot = await query.get();
 
@@ -213,12 +192,17 @@ export class EventService {
         }) as CoffeeEvent
     );
 
-    // 只顯示已審核的活動
-    events = events.filter(event => event.status === 'approved');
+    // 已在查詢中篩選 approved 狀態
 
     const now = Date.now();
 
-    // 時間狀態篩選
+    // 只顯示未結束的活動（進行中或即將開始）
+    events = events.filter(event => {
+      const endTime = event.datetime.end.toMillis();
+      return endTime >= now; // 結束時間還沒到
+    });
+
+    // 如果有指定 status 參數，額外篩選
     if (status !== 'all') {
       events = events.filter(event => {
         const startTime = event.datetime.start.toMillis();
@@ -235,13 +219,18 @@ export class EventService {
       });
     }
 
+    // 藝人篩選（在記憶體中進行）
+    if (params.artistId) {
+      events = events.filter(event => event.artists.some(artist => artist.id === params.artistId));
+    }
+
     // 搜尋篩選
     if (params.search) {
       const searchTerm = params.search.toLowerCase();
       events = events.filter(
         event =>
           event.title.toLowerCase().includes(searchTerm) ||
-          (event.artistName && event.artistName.toLowerCase().includes(searchTerm)) ||
+          event.artists.some(artist => artist.name.toLowerCase().includes(searchTerm)) ||
           (event.description && event.description.toLowerCase().includes(searchTerm)) ||
           event.location.address.toLowerCase().includes(searchTerm)
       );
@@ -268,18 +257,17 @@ export class EventService {
       });
     }
 
-    // 轉換為輕量格式
+    // 轉換為地圖格式
     const mapEvents = events.map(event => {
-      const startTime = event.datetime.start.toMillis();
-      const eventStatus: 'active' | 'upcoming' = startTime > now ? 'upcoming' : 'active';
-
       return {
         id: event.id,
         title: event.title,
-        artistName: event.artistName || '',
-        coordinates: event.location.coordinates,
-        status: eventStatus,
-        thumbnail: event.thumbnail,
+        mainImage: event.mainImage,
+        location: event.location, // 完整的 location 物件
+        datetime: {
+          start: event.datetime.start.toDate().toISOString(),
+          end: event.datetime.end.toDate().toISOString(),
+        },
       };
     });
 
@@ -293,7 +281,7 @@ export class EventService {
     this.checkFirebaseConfig();
     const doc = await this.collection!.doc(eventId).get();
 
-    if (!doc.exists || doc.data()?.isDeleted) {
+    if (!doc.exists) {
       return null;
     }
 
@@ -306,20 +294,30 @@ export class EventService {
   async createEvent(eventData: CreateEventData, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
 
-    // 驗證藝人是否存在且已審核
     if (!db) {
       throw new Error('Firebase not configured');
     }
-    const artistDoc = await db.collection('artists').doc(eventData.artistId).get();
-    if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
-      throw new Error('Invalid or unapproved artist');
+
+    // 驗證所有藝人是否存在且已審核
+    const artists: Array<{ id: string; name: string; profileImage?: string }> = [];
+
+    for (const artistId of eventData.artistIds) {
+      const artistDoc = await db.collection('artists').doc(artistId).get();
+      if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
+        throw new Error(`Invalid or unapproved artist: ${artistId}`);
+      }
+
+      const artistData = artistDoc.data();
+      artists.push({
+        id: artistId,
+        name: artistData?.stageName || '',
+        profileImage: artistData?.profileImage || undefined,
+      });
     }
 
-    const artistData = artistDoc.data();
     const now = Timestamp.now();
     const newEvent = {
-      artistId: eventData.artistId,
-      artistName: eventData.artistName || artistData?.stageName || '', // 優先使用提供的，否則從藝人資料取得
+      artists: artists,
       title: eventData.title,
       description: eventData.description,
       location: eventData.location,
@@ -328,13 +326,9 @@ export class EventService {
         end: Timestamp.fromDate(new Date(eventData.datetime.end)),
       },
       socialMedia: eventData.socialMedia || {},
-      images: [],
-      supportProvided: eventData.supportProvided || false,
-      requiresReservation: eventData.requiresReservation || false,
-      onSiteReservation: eventData.onSiteReservation || false,
-      amenities: eventData.amenities || [],
+      mainImage: eventData.mainImage,
+      detailImage: eventData.detailImage,
       status: 'pending' as const,
-      isDeleted: false,
       createdBy: userId,
       createdAt: now,
       updatedAt: now,
@@ -358,7 +352,7 @@ export class EventService {
     const docRef = this.collection!.doc(eventId);
     const doc = await docRef.get();
 
-    if (!doc.exists || doc.data()?.isDeleted) {
+    if (!doc.exists) {
       throw new Error('Event not found');
     }
 
@@ -379,15 +373,8 @@ export class EventService {
     if (updateData.description !== undefined) updates.description = updateData.description;
     if (updateData.location !== undefined) updates.location = updateData.location;
     if (updateData.socialMedia !== undefined) updates.socialMedia = updateData.socialMedia;
-    if (updateData.supportProvided !== undefined)
-      updates.supportProvided = updateData.supportProvided;
-    if (updateData.requiresReservation !== undefined)
-      updates.requiresReservation = updateData.requiresReservation;
-    if (updateData.onSiteReservation !== undefined)
-      updates.onSiteReservation = updateData.onSiteReservation;
-    if (updateData.amenities !== undefined) updates.amenities = updateData.amenities;
-    if (updateData.thumbnail !== undefined) updates.thumbnail = updateData.thumbnail;
-    if (updateData.markerImage !== undefined) updates.markerImage = updateData.markerImage;
+    if (updateData.mainImage !== undefined) updates.mainImage = updateData.mainImage;
+    if (updateData.detailImage !== undefined) updates.detailImage = updateData.detailImage;
 
     // 處理時間資料
     if (updateData.datetime) {
@@ -411,7 +398,7 @@ export class EventService {
     const docRef = this.collection!.doc(eventId);
     const doc = await docRef.get();
 
-    if (!doc.exists || doc.data()?.isDeleted) {
+    if (!doc.exists) {
       throw new Error('Event not found');
     }
 
@@ -434,7 +421,7 @@ export class EventService {
     const docRef = this.collection!.doc(eventId);
     const doc = await docRef.get();
 
-    if (!doc.exists || doc.data()?.isDeleted) {
+    if (!doc.exists) {
       throw new Error('Event not found');
     }
 
@@ -445,11 +432,8 @@ export class EventService {
       throw new Error('Permission denied');
     }
 
-    // 軟刪除
-    await docRef.update({
-      isDeleted: true,
-      updatedAt: Timestamp.now(),
-    });
+    // 直接刪除文件（不再使用軟刪除）
+    await docRef.delete();
   }
 
   async searchEvents(criteria: {
@@ -459,9 +443,7 @@ export class EventService {
   }): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
     const now = Timestamp.now();
-    const query = this.collection!.where('status', '==', 'approved')
-      .where('isDeleted', '==', false)
-      .where('datetime.end', '>=', now);
+    const query = this.collection!.where('status', '==', 'approved');
 
     // 基本的搜尋功能（Firestore 的搜尋功能有限）
     const snapshot = await query.get();
@@ -472,6 +454,9 @@ export class EventService {
           ...doc.data(),
         }) as CoffeeEvent
     );
+
+    // 過濾未過期的活動
+    events = events.filter(event => event.datetime.end.toMillis() >= now.toMillis());
 
     // 客戶端過濾
     if (criteria.query) {
@@ -488,20 +473,12 @@ export class EventService {
       events = events.filter(event => event.location.address.toLowerCase().includes(locationTerm));
     }
 
-    // 如果需要按藝人名稱搜尋，需要另外查詢藝人資料
+    // 藝人名稱搜尋（在新的 artists 陣列中搜尋）
     if (criteria.artistName) {
-      if (!db) {
-        throw new Error('Firebase not configured');
-      }
-      const artistSnapshot = await db
-        .collection('artists')
-        .where('name', '>=', criteria.artistName)
-        .where('name', '<=', criteria.artistName + '\uf8ff')
-        .where('status', '==', 'approved')
-        .get();
-
-      const artistIds = artistSnapshot.docs.map(doc => doc.id);
-      events = events.filter(event => artistIds.includes(event.artistId));
+      const artistNameTerm = criteria.artistName.toLowerCase();
+      events = events.filter(event =>
+        event.artists.some(artist => artist.name.toLowerCase().includes(artistNameTerm))
+      );
     }
 
     return events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
@@ -529,9 +506,7 @@ export class EventService {
       .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
 
     // 獲取用戶的活動投稿（簡化查詢避免索引問題）
-    const eventsSnapshot = await this.collection!.where('createdBy', '==', userId)
-      .where('isDeleted', '==', false)
-      .get();
+    const eventsSnapshot = await this.collection!.where('createdBy', '==', userId).get();
 
     const events = eventsSnapshot.docs
       .map(
@@ -568,9 +543,7 @@ export class EventService {
     this.checkFirebaseConfig();
     const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 
-    const expiredEvents = await this.collection!.where('datetime.end', '<', oneWeekAgo)
-      .where('isDeleted', '==', false)
-      .get();
+    const expiredEvents = await this.collection!.where('datetime.end', '<', oneWeekAgo).get();
 
     if (!db) {
       throw new Error('Firebase not configured');
@@ -578,10 +551,8 @@ export class EventService {
     const batch = db.batch();
 
     expiredEvents.docs.forEach(doc => {
-      batch.update(doc.ref, {
-        isDeleted: true,
-        updatedAt: Timestamp.now(),
-      });
+      // 直接刪除過期活動（不再使用軟刪除）
+      batch.delete(doc.ref);
     });
 
     await batch.commit();

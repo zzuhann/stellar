@@ -23,10 +23,10 @@ export const authenticateToken = async (
       return;
     }
 
-    const decodedToken = await auth.verifyIdToken(token);
+    const decodedToken = await auth!.verifyIdToken(token);
 
     // 從 Firestore 獲取用戶角色
-    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    const userDoc = await db!.collection('users').doc(decodedToken.uid).get();
     const userData = userDoc.data();
 
     req.user = {
@@ -34,6 +34,8 @@ export const authenticateToken = async (
       email: decodedToken.email || '',
       role: userData?.role || 'user',
     };
+
+    console.log('User authenticated:', { uid: req.user.uid, role: req.user.role }); // 調試用
 
     next();
   } catch (error) {

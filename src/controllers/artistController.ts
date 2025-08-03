@@ -41,15 +41,8 @@ export class ArtistController {
         };
       }
 
-      // 檢查權限：只有管理員可以查看 pending/rejected 狀態
-      if (
-        filters.status &&
-        filters.status !== 'approved' &&
-        (!req.user || req.user.role !== 'admin')
-      ) {
-        res.status(403).json({ error: 'Admin access required' });
-        return;
-      }
+      // 移除狀態查看權限限制，任何人都可以查看各種狀態
+      // 權限控制改在審核動作時進行檢查
 
       // 檢查權限：用戶只能查看自己的投稿或公開的資料
       if (filters.createdBy && req.user) {
@@ -87,7 +80,7 @@ export class ArtistController {
   // 新增藝人
   createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { stageName, realName, groupName, birthday, profileImage } = req.body;
+      const { stageName, realName, birthday, profileImage } = req.body;
       const userId = req.user!.uid;
 
       if (!stageName) {
@@ -99,7 +92,6 @@ export class ArtistController {
         {
           stageName,
           realName,
-          groupName,
           birthday,
           profileImage,
         },

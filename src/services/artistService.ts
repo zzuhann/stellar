@@ -53,12 +53,12 @@ export class ArtistService {
 
     // 如果有指定狀態，就篩選
     if (status) {
-      query = query.where('status', '==', status);
+      query = query.where('status', '==', status) as any;
     }
 
     // 如果有指定創建者，就篩選
     if (createdBy) {
-      query = query.where('createdBy', '==', createdBy);
+      query = query.where('createdBy', '==', createdBy) as any;
     }
 
     const snapshot = await query.get();
@@ -95,7 +95,6 @@ export class ArtistService {
     const newArtist = {
       stageName: artistData.stageName,
       realName: artistData.realName || undefined,
-      groupName: artistData.groupName || undefined,
       birthday: artistData.birthday || undefined,
       profileImage: artistData.profileImage || undefined,
       status: 'pending' as const,
@@ -138,17 +137,23 @@ export class ArtistService {
   async deleteArtist(artistId: string): Promise<void> {
     this.checkFirebaseConfig();
 
-    // 檢查是否有活動使用此藝人
+    // 檢查是否有活動使用此藝人（搜尋 artists 陣列中的 id）
     if (!db) {
       throw new Error('Firebase not configured');
     }
-    const eventsSnapshot = await db
-      .collection('coffeeEvents')
-      .where('artistId', '==', artistId)
-      .where('isDeleted', '==', false)
-      .get();
+    const eventsSnapshot = await db.collection('coffeeEvents').get();
 
-    if (!eventsSnapshot.empty) {
+    // 在記憶體中搜尋使用此藝人的活動
+    const hasEvents = eventsSnapshot.docs.some(doc => {
+      const data = doc.data();
+      return (
+        data.artists &&
+        Array.isArray(data.artists) &&
+        data.artists.some((artist: any) => artist.id === artistId)
+      );
+    });
+
+    if (hasEvents) {
       throw new Error('Cannot delete artist with existing events');
     }
 
@@ -177,12 +182,12 @@ export class ArtistService {
 
     // 狀態篩選
     if (filters.status) {
-      query = query.where('status', '==', filters.status);
+      query = query.where('status', '==', filters.status) as any;
     }
 
     // 創建者篩選
     if (filters.createdBy) {
-      query = query.where('createdBy', '==', filters.createdBy);
+      query = query.where('createdBy', '==', filters.createdBy) as any;
     }
 
     const snapshot = await query.get();
@@ -205,8 +210,7 @@ export class ArtistService {
       artists = artists.filter(
         artist =>
           artist.stageName.toLowerCase().includes(searchTerm) ||
-          (artist.realName && artist.realName.toLowerCase().includes(searchTerm)) ||
-          (artist.groupName && artist.groupName.toLowerCase().includes(searchTerm))
+          (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -264,20 +268,24 @@ export class ArtistService {
     try {
       const eventsSnapshot = await db
         .collection('coffeeEvents')
-        .where('artistId', '==', artistId)
-        .where('isDeleted', '==', false)
         .where('status', '==', 'approved')
         .get();
 
-      // 在記憶體中篩選進行中的活動
+      // 在記憶體中篩選包含此藝人且正在進行中的活動
       const activeEvents = eventsSnapshot.docs.filter(doc => {
         const data = doc.data();
         const startTime = data.datetime?.start;
         const endTime = data.datetime?.end;
+        const artists = data.artists;
 
-        if (!startTime || !endTime) return false;
+        if (!startTime || !endTime || !artists || !Array.isArray(artists)) return false;
 
-        return startTime.toMillis() <= now.toMillis() && endTime.toMillis() >= now.toMillis();
+        // 檢查是否包含此藝人且時間在範圍內
+        const hasArtist = artists.some((artist: any) => artist.id === artistId);
+        const isActive =
+          startTime.toMillis() <= now.toMillis() && endTime.toMillis() >= now.toMillis();
+
+        return hasArtist && isActive;
       });
 
       return activeEvents.length;
