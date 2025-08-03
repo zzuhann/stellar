@@ -9,7 +9,7 @@ import {
   MapDataResponse,
   UserSubmissionsResponse,
 } from '../models/types';
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
@@ -18,6 +18,19 @@ export class EventService {
     if (!hasFirebaseConfig || !this.collection) {
       throw new Error('Firebase not configured');
     }
+  }
+
+  private parseDateTime(
+    dateValue: Date | string | { _seconds: number; _nanoseconds: number }
+  ): Timestamp {
+    // 如果是 Firebase Timestamp 格式（包含 _seconds）
+    if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+      return Timestamp.fromMillis(
+        dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000)
+      );
+    }
+    // 如果是 Date 物件或字串
+    return Timestamp.fromDate(new Date(dateValue));
   }
 
   async getActiveEvents(): Promise<CoffeeEvent[]> {
@@ -99,14 +112,14 @@ export class EventService {
     const skip = (page - 1) * limit;
 
     // 基礎查詢
-    let query = this.collection!;
+    let query: Query<DocumentData> | CollectionReference<DocumentData> = this.collection!;
 
     // 藝人篩選：先取得所有資料再在記憶體中篩選（因為要搜尋 artists 陣列）
     // 移除此篩選條件，改為記憶體篩選
 
     // 創建者篩選
     if (filters.createdBy) {
-      query = query.where('createdBy', '==', filters.createdBy) as any;
+      query = query.where('createdBy', '==', filters.createdBy);
     }
 
     const snapshot = await query.get();
@@ -322,8 +335,8 @@ export class EventService {
       description: eventData.description,
       location: eventData.location,
       datetime: {
-        start: Timestamp.fromDate(new Date(eventData.datetime.start)),
-        end: Timestamp.fromDate(new Date(eventData.datetime.end)),
+        start: this.parseDateTime(eventData.datetime.start),
+        end: this.parseDateTime(eventData.datetime.end),
       },
       socialMedia: eventData.socialMedia || {},
       mainImage: eventData.mainImage,
@@ -379,8 +392,8 @@ export class EventService {
     // 處理時間資料
     if (updateData.datetime) {
       updates.datetime = {
-        start: Timestamp.fromDate(new Date(updateData.datetime.start)),
-        end: Timestamp.fromDate(new Date(updateData.datetime.end)),
+        start: this.parseDateTime(updateData.datetime.start),
+        end: this.parseDateTime(updateData.datetime.end),
       };
     }
 
