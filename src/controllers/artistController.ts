@@ -148,6 +148,24 @@ export class ArtistController {
     }
   };
 
+  // 獲取單一藝人詳情
+  getArtistById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const artist = await this.artistService.getArtistById(id);
+
+      if (!artist) {
+        res.status(404).json({ error: 'Artist not found' });
+        return;
+      }
+
+      res.json(artist);
+    } catch (error) {
+      console.error('Error fetching artist:', error);
+      res.status(500).json({ error: 'Failed to fetch artist' });
+    }
+  };
+
   // 刪除藝人（僅管理員）
   deleteArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {

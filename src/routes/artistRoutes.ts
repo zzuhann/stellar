@@ -7,6 +7,7 @@ const artistController = new ArtistController();
 
 // 公開路由
 router.get('/', artistController.getAllArtists);
+router.get('/:id', artistController.getArtistById);
 
 // 需要登入的路由
 router.post('/', authenticateToken, artistController.createArtist);

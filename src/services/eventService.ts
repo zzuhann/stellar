@@ -33,6 +33,22 @@ export class EventService {
     return Timestamp.fromDate(new Date(dateValue));
   }
 
+  // 根據 zoom 級別計算緯度範圍（度數）
+  private getLatitudeDeltaFromZoom(zoom: number): number {
+    // 基於 Web Mercator 投影的近似計算
+    // zoom 0: ~180 度, zoom 10: ~0.35 度, zoom 15: ~0.01 度
+    return 360 / Math.pow(2, zoom + 1);
+  }
+
+  // 根據 zoom 級別和緯度計算經度範圍（度數）
+  private getLongitudeDeltaFromZoom(zoom: number, latitude: number): number {
+    const latitudeDelta = this.getLatitudeDeltaFromZoom(zoom);
+    // 在不同緯度，經度的度數代表的實際距離不同
+    // 使用 cos(latitude) 進行修正
+    const latRad = (latitude * Math.PI) / 180;
+    return latitudeDelta / Math.cos(latRad);
+  }
+
   async getActiveEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
 
@@ -255,18 +271,48 @@ export class EventService {
       events = events.filter(event => event.location.address.toLowerCase().includes(regionTerm));
     }
 
-    // 地圖邊界篩選（如果提供）
+    // 地圖視窗篩選
+    let viewBounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null =
+      null;
+
+    // 優先使用 bounds 參數
     if (params.bounds) {
       const [lat1, lng1, lat2, lng2] = params.bounds.split(',').map(Number);
-      const minLat = Math.min(lat1, lat2);
-      const maxLat = Math.max(lat1, lat2);
-      const minLng = Math.min(lng1, lng2);
-      const maxLng = Math.max(lng1, lng2);
+      viewBounds = {
+        minLat: Math.min(lat1, lat2),
+        maxLat: Math.max(lat1, lat2),
+        minLng: Math.min(lng1, lng2),
+        maxLng: Math.max(lng1, lng2),
+      };
+    }
+    // 如果沒有 bounds 但有 center + zoom，計算視窗邊界
+    else if (params.center && params.zoom !== undefined) {
+      const [centerLat, centerLng] = params.center.split(',').map(Number);
 
+      // 根據 zoom 級別計算視窗大小（度數）
+      // zoom 越高，視窗越小
+      const latDelta = this.getLatitudeDeltaFromZoom(params.zoom);
+      const lngDelta = this.getLongitudeDeltaFromZoom(params.zoom, centerLat);
+
+      viewBounds = {
+        minLat: centerLat - latDelta / 2,
+        maxLat: centerLat + latDelta / 2,
+        minLng: centerLng - lngDelta / 2,
+        maxLng: centerLng + lngDelta / 2,
+      };
+    }
+
+    // 套用視窗篩選
+    if (viewBounds) {
       events = events.filter(event => {
         const lat = event.location.coordinates.lat;
         const lng = event.location.coordinates.lng;
-        return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+        return (
+          lat >= viewBounds.minLat &&
+          lat <= viewBounds.maxLat &&
+          lng >= viewBounds.minLng &&
+          lng <= viewBounds.maxLng
+        );
       });
     }
 

@@ -165,7 +165,8 @@ export interface EventsResponse {
 export interface MapDataParams {
   status?: 'active' | 'upcoming' | 'all'; // 預設 'active'
   bounds?: string; // "lat1,lng1,lat2,lng2" 地圖邊界（可選）
-  zoom?: number; // 縮放等級（未來聚合用）
+  center?: string; // "lat,lng" 地圖中心點（配合 zoom 使用）
+  zoom?: number; // 縮放等級（配合 center 計算視窗範圍）
   // 新增篩選參數
   search?: string; // 搜尋標題、藝人名稱、地址、描述
   artistId?: string; // 特定藝人ID
