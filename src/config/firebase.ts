@@ -12,41 +12,51 @@ const hasFirebaseConfig = !!(
 
 let db: admin.firestore.Firestore | null;
 let auth: admin.auth.Auth | null;
-// 暫時移除 storage，保留未來擴充可能
-// let storage: admin.storage.Bucket;
 
 if (hasFirebaseConfig) {
-  const serviceAccount = {
-    type: 'service_account',
-    project_id: process.env.FIREBASE_PROJECT_ID,
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: process.env.FIREBASE_AUTH_URI,
-    token_uri: process.env.FIREBASE_TOKEN_URI,
-  };
+  try {
+    // 處理 private key 格式
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (privateKey) {
+      // 移除開頭和結尾的引號
+      privateKey = privateKey.replace(/^["']|["']$/g, '');
+      // 處理換行符號
+      privateKey = privateKey.replace(/\\n/g, '\n');
+      // 確保 private key 格式正確
+      if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        throw new Error('Invalid private key format');
+      }
+    }
 
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-      // 暫時移除 storageBucket 設定
-      // storageBucket: `${process.env.FIREBASE_PROJECT_ID}.appspot.com`
-    });
+    const serviceAccount = {
+      type: 'service_account',
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+      private_key: privateKey,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      client_id: process.env.FIREBASE_CLIENT_ID,
+      auth_uri: process.env.FIREBASE_AUTH_URI || 'https://accounts.google.com/o/oauth2/auth',
+      token_uri: process.env.FIREBASE_TOKEN_URI || 'https://oauth2.googleapis.com/token',
+    };
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+      });
+    }
+
+    db = admin.firestore();
+    auth = admin.auth();
+  } catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
+    db = null;
+    auth = null;
   }
-
-  db = admin.firestore();
-  auth = admin.auth();
-  // storage = admin.storage().bucket();
 } else {
   console.warn('⚠️  Firebase configuration not found. Some features will be disabled.');
-
-  // 創建空的 mock 物件避免錯誤
   db = null;
   auth = null;
-  // storage = null;
 }
 
 export { db, auth, hasFirebaseConfig };
-// 未來需要時再加回 storage
 export default admin;
