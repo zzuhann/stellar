@@ -7,6 +7,7 @@
     "start": "node dist/server.js",
     "dev": "~/.bun/bin/bun --watch src/server.ts",
     "build": "tsc",
+    "build:serverless": "tsc && cp -r dist/* ./",
     "bun:start": "~/.bun/bin/bun src/server.ts",
     "test": "jest",
     "test:watch": "jest --watch",
