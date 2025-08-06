@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "dev": "~/.bun/bin/bun --watch src/server.ts",
     "build": "tsc",
     "build:serverless": "tsc && cp -r dist/* ./",
