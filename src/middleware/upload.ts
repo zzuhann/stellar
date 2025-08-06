@@ -1,8 +1,7 @@
-import multer, { FileFilterCallback } from 'multer';
-import { Request } from 'express';
+import multer from 'multer';
 
 // 檔案篩選器
-const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+const fileFilter = (req: any, file: any, cb: any) => {
   const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
   if (allowedMimeTypes.includes(file.mimetype)) {
@@ -22,4 +21,5 @@ const upload = multer({
   fileFilter,
 });
 
-export const uploadSingle = upload.single('image');
+// 使用類型斷言來避免 multer 和 express 的類型衝突
+export const uploadSingle = upload.single('image') as any;

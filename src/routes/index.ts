@@ -35,6 +35,11 @@ router.get('/test', async (req, res) => {
   try {
     const { db } = await import('../config/firebase');
 
+    if (!db) {
+      res.status(503).json({ error: 'Firebase database not available' });
+      return;
+    }
+
     // 測試 1：讀取所有 artists（不用複合查詢）
     const allArtists = await db.collection('artists').limit(5).get();
     const artistsData = allArtists.docs.map(doc => ({ id: doc.id, ...doc.data() }));
