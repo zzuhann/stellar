@@ -386,7 +386,7 @@ export class EventService {
       },
       socialMedia: eventData.socialMedia || {},
       mainImage: eventData.mainImage,
-      detailImage: eventData.detailImage,
+      detailImage: eventData.detailImage || [],
       status: 'pending' as const,
       createdBy: userId,
       createdAt: now,

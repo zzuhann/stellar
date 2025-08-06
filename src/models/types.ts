@@ -39,7 +39,7 @@ export interface CoffeeEvent {
     threads?: string;
   };
   mainImage?: string; // 新增：主要圖片 URL
-  detailImage?: string; // 新增：詳細圖片 URL
+  detailImage?: string[]; // 新增：詳細圖片 URL 陣列
   status: 'pending' | 'approved' | 'rejected';
   createdBy: string;
   createdAt: Timestamp;
@@ -102,7 +102,7 @@ export interface CreateEventData {
     threads?: string;
   };
   mainImage?: string; // 主要圖片 URL
-  detailImage?: string; // 詳細圖片 URL
+  detailImage?: string[]; // 詳細圖片 URL 陣列
 }
 
 // 編輯活動資料（不包含 artistIds）
@@ -127,7 +127,7 @@ export interface UpdateEventData {
     threads?: string;
   };
   mainImage?: string; // 主要圖片 URL
-  detailImage?: string; // 詳細圖片 URL
+  detailImage?: string[]; // 詳細圖片 URL 陣列
 }
 
 // 新增篩選參數介面
