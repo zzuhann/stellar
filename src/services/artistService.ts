@@ -111,7 +111,11 @@ export class ArtistService {
     };
   }
 
-  async updateArtistStatus(artistId: string, status: 'approved' | 'rejected'): Promise<Artist> {
+  async updateArtistStatus(
+    artistId: string,
+    status: 'approved' | 'rejected',
+    reason?: string
+  ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
     const doc = await docRef.get();
@@ -120,10 +124,19 @@ export class ArtistService {
       throw new Error('Artist not found');
     }
 
-    const updateData = {
+    const updateData: Record<string, any> = {
       status,
       updatedAt: Timestamp.now(),
     };
+
+    // 如果是 rejected 且有提供 reason，則加入 rejectedReason
+    if (status === 'rejected' && reason) {
+      updateData.rejectedReason = reason;
+    }
+    // 如果是 approved，清除之前的 rejectedReason
+    else if (status === 'approved') {
+      updateData.rejectedReason = null;
+    }
 
     await docRef.update(updateData);
 

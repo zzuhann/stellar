@@ -7,6 +7,7 @@ export interface Artist {
   birthday?: string; // 生日 (YYYY-MM-DD 格式)
   profileImage?: string; // 照片 URL
   status: 'pending' | 'approved' | 'rejected';
+  rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -41,6 +42,7 @@ export interface CoffeeEvent {
   mainImage?: string; // 新增：主要圖片 URL
   detailImage?: string[]; // 新增：詳細圖片 URL 陣列
   status: 'pending' | 'approved' | 'rejected';
+  rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

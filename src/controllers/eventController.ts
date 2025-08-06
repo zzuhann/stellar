@@ -142,14 +142,14 @@ export class EventController {
   reviewEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, reason } = req.body; // 加入 reason 參數
 
       if (!['approved', 'rejected'].includes(status)) {
         res.status(400).json({ error: 'Invalid status' });
         return;
       }
 
-      const event = await this.eventService.updateEventStatus(id, status);
+      const event = await this.eventService.updateEventStatus(id, status, reason);
       res.json(event);
     } catch (error) {
       console.error('Error reviewing event:', error);
@@ -173,7 +173,8 @@ export class EventController {
   rejectEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const event = await this.eventService.updateEventStatus(id, 'rejected');
+      const { reason } = req.body; // 從 request body 取得拒絕原因
+      const event = await this.eventService.updateEventStatus(id, 'rejected', reason);
       res.json(event);
     } catch (error) {
       console.error('Error rejecting event:', error);

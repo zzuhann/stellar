@@ -109,14 +109,14 @@ export class ArtistController {
   reviewArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, reason } = req.body; // 加入 reason 參數
 
       if (!['approved', 'rejected'].includes(status)) {
         res.status(400).json({ error: 'Invalid status' });
         return;
       }
 
-      const artist = await this.artistService.updateArtistStatus(id, status);
+      const artist = await this.artistService.updateArtistStatus(id, status, reason);
       res.json(artist);
     } catch (error) {
       console.error('Error reviewing artist:', error);
@@ -140,7 +140,8 @@ export class ArtistController {
   rejectArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const artist = await this.artistService.updateArtistStatus(id, 'rejected');
+      const { reason } = req.body; // 從 request body 取得拒絕原因
+      const artist = await this.artistService.updateArtistStatus(id, 'rejected', reason);
       res.json(artist);
     } catch (error) {
       console.error('Error rejecting artist:', error);
