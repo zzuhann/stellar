@@ -13,10 +13,41 @@ const app = express();
 app.use(helmet());
 
 // CORS 設定
+const allowedOrigins = [
+  // 本地開發
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  // 生產環境 - 從環境變數讀取
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ...(process.env.ADDITIONAL_CORS_ORIGINS ? process.env.ADDITIONAL_CORS_ORIGINS.split(',') : []),
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // 允許沒有 origin 的請求（例如同源請求）
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // 檢查是否在允許的清單中
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // 開發環境允許所有來源
+      if (process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+
+      // 生產環境拒絕未授權的來源
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
