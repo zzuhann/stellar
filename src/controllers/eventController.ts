@@ -80,7 +80,7 @@ export class EventController {
       const userId = req.user!.uid;
 
       // 驗證必填欄位
-      const requiredFields = ['artistIds', 'title', 'description', 'location', 'datetime'];
+      const requiredFields = ['artistIds', 'title', 'location', 'datetime'];
       for (const field of requiredFields) {
         if (!eventData[field]) {
           res.status(400).json({ error: `${field} is required` });
