@@ -9,10 +9,12 @@ import {
   MapDataResponse,
   UserSubmissionsResponse,
 } from '../models/types';
+import { NotificationHelper } from './notificationService';
 import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
+  private notificationHelper = new NotificationHelper();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -465,6 +467,8 @@ export class EventService {
       throw new Error('Event not found');
     }
 
+    const existingData = doc.data() as CoffeeEvent;
+
     const updateData: Record<string, any> = {
       status,
       updatedAt: Timestamp.now(),
@@ -478,6 +482,59 @@ export class EventService {
     else if (status === 'approved') {
       updateData.rejectedReason = null;
     }
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+    const updatedEvent = {
+      id: updatedDoc.id,
+      ...updatedDoc.data(),
+    } as CoffeeEvent;
+
+    // 發送通知給用戶
+    try {
+      await this.notificationHelper.notifyEventReview(
+        existingData.createdBy,
+        existingData.title,
+        eventId,
+        status,
+        reason
+      );
+    } catch (notificationError) {
+      console.error('Failed to send notification:', notificationError);
+      // 不拋出錯誤，因為主要操作已成功
+    }
+
+    return updatedEvent;
+  }
+
+  // 重新送審功能
+  async resubmitEvent(eventId: string, userId: string): Promise<CoffeeEvent> {
+    this.checkFirebaseConfig();
+    const docRef = this.collection!.doc(eventId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      throw new Error('Event not found');
+    }
+
+    const existingData = doc.data() as CoffeeEvent;
+
+    // 檢查權限：只有創建者可以重新送審
+    if (existingData.createdBy !== userId) {
+      throw new Error('Permission denied: You can only resubmit your own submissions');
+    }
+
+    // 只有 rejected 狀態可以重新送審
+    if (existingData.status !== 'rejected') {
+      throw new Error('Can only resubmit rejected events');
+    }
+
+    const updateData = {
+      status: 'pending' as const,
+      rejectedReason: null, // 清除拒絕原因
+      updatedAt: Timestamp.now(),
+    };
 
     await docRef.update(updateData);
 

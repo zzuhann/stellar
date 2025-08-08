@@ -197,6 +197,21 @@ export class EventController {
     }
   };
 
+  // 重新送審活動
+  resubmitEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const userId = req.user!.uid;
+
+      const event = await this.eventService.resubmitEvent(id, userId);
+      res.json(event);
+    } catch (error) {
+      console.error('Error resubmitting event:', error);
+      const message = error instanceof Error ? error.message : 'Failed to resubmit event';
+      res.status(400).json({ error: message });
+    }
+  };
+
   // 搜尋活動
   searchEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {

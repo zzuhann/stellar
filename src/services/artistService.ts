@@ -1,9 +1,17 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
-import { Artist, CreateArtistData, ArtistFilterParams, ArtistWithStats } from '../models/types';
+import {
+  Artist,
+  CreateArtistData,
+  UpdateArtistData,
+  ArtistFilterParams,
+  ArtistWithStats,
+} from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
+import { NotificationHelper } from './notificationService';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
+  private notificationHelper = new NotificationHelper();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -113,7 +121,7 @@ export class ArtistService {
 
   async updateArtistStatus(
     artistId: string,
-    status: 'approved' | 'rejected',
+    status: 'approved' | 'rejected' | 'exists',
     reason?: string
   ): Promise<Artist> {
     this.checkFirebaseConfig();
@@ -124,6 +132,8 @@ export class ArtistService {
       throw new Error('Artist not found');
     }
 
+    const existingData = doc.data() as Artist;
+
     const updateData: Record<string, any> = {
       status,
       updatedAt: Timestamp.now(),
@@ -133,10 +143,108 @@ export class ArtistService {
     if (status === 'rejected' && reason) {
       updateData.rejectedReason = reason;
     }
-    // 如果是 approved，清除之前的 rejectedReason
-    else if (status === 'approved') {
+    // 如果是 approved 或 exists，清除之前的 rejectedReason
+    else if (status === 'approved' || status === 'exists') {
       updateData.rejectedReason = null;
     }
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+    const updatedArtist = {
+      id: updatedDoc.id,
+      ...updatedDoc.data(),
+    } as Artist;
+
+    // 發送通知給用戶
+    try {
+      await this.notificationHelper.notifyArtistReview(
+        existingData.createdBy,
+        existingData.stageName,
+        artistId,
+        status,
+        reason
+      );
+    } catch (notificationError) {
+      console.error('Failed to send notification:', notificationError);
+      // 不拋出錯誤，因為主要操作已成功
+    }
+
+    return updatedArtist;
+  }
+
+  // 編輯藝人資料
+  async updateArtist(
+    artistId: string,
+    artistData: UpdateArtistData,
+    userId: string
+  ): Promise<Artist> {
+    this.checkFirebaseConfig();
+    const docRef = this.collection!.doc(artistId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      throw new Error('Artist not found');
+    }
+
+    const existingData = doc.data() as Artist;
+
+    // 檢查權限：只有創建者可以編輯
+    if (existingData.createdBy !== userId) {
+      throw new Error('Permission denied: You can only edit your own submissions');
+    }
+
+    // 檢查狀態：只有 pending 和 rejected 狀態可以編輯
+    if (!['pending', 'rejected'].includes(existingData.status)) {
+      throw new Error('Can only edit artists with pending or rejected status');
+    }
+
+    const updateData: Record<string, any> = {
+      ...artistData,
+      updatedAt: Timestamp.now(),
+    };
+
+    await docRef.update(updateData);
+
+    const updatedDoc = await docRef.get();
+    return {
+      id: updatedDoc.id,
+      ...updatedDoc.data(),
+    } as Artist;
+  }
+
+  // 重新送審功能
+  async resubmitArtist(artistId: string, userId: string): Promise<Artist> {
+    this.checkFirebaseConfig();
+    const docRef = this.collection!.doc(artistId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      throw new Error('Artist not found');
+    }
+
+    const existingData = doc.data() as Artist;
+
+    // 檢查權限：只有創建者可以重新送審
+    if (existingData.createdBy !== userId) {
+      throw new Error('Permission denied: You can only resubmit your own submissions');
+    }
+
+    // 檢查狀態：不能重新送審已存在狀態的藝人
+    if (existingData.status === 'exists') {
+      throw new Error('Cannot resubmit artists with "exists" status');
+    }
+
+    // 只有 rejected 狀態可以重新送審
+    if (existingData.status !== 'rejected') {
+      throw new Error('Can only resubmit rejected artists');
+    }
+
+    const updateData = {
+      status: 'pending' as const,
+      rejectedReason: null, // 清除拒絕原因
+      updatedAt: Timestamp.now(),
+    };
 
     await docRef.update(updateData);
 

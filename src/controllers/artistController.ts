@@ -111,7 +111,7 @@ export class ArtistController {
       const { id } = req.params;
       const { status, reason } = req.body; // 加入 reason 參數
 
-      if (!['approved', 'rejected'].includes(status)) {
+      if (!['approved', 'rejected', 'exists'].includes(status)) {
         res.status(400).json({ error: 'Invalid status' });
         return;
       }
@@ -164,6 +164,47 @@ export class ArtistController {
     } catch (error) {
       console.error('Error fetching artist:', error);
       res.status(500).json({ error: 'Failed to fetch artist' });
+    }
+  };
+
+  // 編輯藝人
+  updateArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { stageName, realName, birthday, profileImage } = req.body;
+      const userId = req.user!.uid;
+
+      const artist = await this.artistService.updateArtist(
+        id,
+        {
+          stageName,
+          realName,
+          birthday,
+          profileImage,
+        },
+        userId
+      );
+
+      res.json(artist);
+    } catch (error) {
+      console.error('Error updating artist:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update artist';
+      res.status(400).json({ error: message });
+    }
+  };
+
+  // 重新送審藝人
+  resubmitArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const userId = req.user!.uid;
+
+      const artist = await this.artistService.resubmitArtist(id, userId);
+      res.json(artist);
+    } catch (error) {
+      console.error('Error resubmitting artist:', error);
+      const message = error instanceof Error ? error.message : 'Failed to resubmit artist';
+      res.status(400).json({ error: message });
     }
   };
 

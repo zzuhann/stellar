@@ -11,6 +11,8 @@ router.get('/:id', artistController.getArtistById);
 
 // 需要登入的路由
 router.post('/', authenticateToken, artistController.createArtist);
+router.put('/:id', authenticateToken, artistController.updateArtist);
+router.patch('/:id/resubmit', authenticateToken, artistController.resubmitArtist);
 
 // 管理員專用路由
 router.get('/pending', authenticateToken, requireAdmin, artistController.getPendingArtists);
