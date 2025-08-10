@@ -401,12 +401,11 @@ export class ArtistService {
 
         if (!startTime || !endTime || !artists || !Array.isArray(artists)) return false;
 
-        // 檢查是否包含此藝人且時間在範圍內
+        // 檢查是否包含此藝人且活動尚未結束
         const hasArtist = artists.some((artist: any) => artist.id === artistId);
-        const isActive =
-          startTime.toMillis() <= now.toMillis() && endTime.toMillis() >= now.toMillis();
+        const isNotEnded = endTime.toMillis() >= now.toMillis();
 
-        return hasArtist && isActive;
+        return hasArtist && isNotEnded;
       });
 
       return activeEvents.length;
