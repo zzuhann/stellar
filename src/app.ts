@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import routes from './routes';
 
@@ -9,8 +10,41 @@ dotenv.config();
 
 const app = express();
 
+// 強制 HTTPS (生產環境)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      res.redirect(301, `https://${req.header('host')}${req.url}`);
+    } else {
+      next();
+    }
+  });
+}
+
 // 安全中介軟體
 app.use(helmet());
+
+// Rate Limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分鐘
+  max: 100, // 每個 IP 最多 100 次請求
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 登入相關的嚴格限制
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分鐘
+  max: 5, // 每個 IP 最多 5 次登入嘗試
+  message: { error: 'Too many authentication attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // 成功的請求不計入限制
+});
+
+app.use(limiter);
+app.use('/api/auth', authLimiter);
 
 // CORS 設定
 const allowedOrigins = [
@@ -64,9 +98,14 @@ app.use('/api', routes);
 // 全域錯誤處理
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
+
+  // 生產環境不洩露敏感資訊
+  const isProduction = process.env.NODE_ENV === 'production';
+
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    message: isProduction ? 'Something went wrong' : err.message,
+    ...(isProduction ? {} : { stack: err.stack }), // 開發環境才顯示 stack trace
   });
 });
 
