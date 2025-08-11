@@ -79,7 +79,6 @@ export class ImageService {
         Body: file.buffer,
         ContentType: file.mimetype,
         ContentLength: file.size,
-        CacheControl: 'public, max-age=604800', // 7天快取 (7 * 24 * 60 * 60)
       };
 
       // 上傳到 R2
