@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EventController } from '../controllers/eventController';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { validateRequest, eventSchemas } from '../middleware/validation';
 
 const router = Router();
 const eventController = new EventController();
@@ -18,17 +19,40 @@ router.get(
 );
 
 // 公開路由 (動態參數路由放最後)
-router.get('/:id', (req, res) => void eventController.getEventById(req, res));
+router.get(
+  '/:id',
+  validateRequest({ params: eventSchemas.params }),
+  (req, res) => void eventController.getEventById(req, res)
+);
 
 // 其他需要登入的路由
-router.post('/', authenticateToken, (req, res) => void eventController.createEvent(req, res));
-router.put('/:id', authenticateToken, (req, res) => void eventController.updateEvent(req, res));
+router.post(
+  '/',
+  authenticateToken,
+  validateRequest({ body: eventSchemas.create }),
+  (req, res) => void eventController.createEvent(req, res)
+);
+router.put(
+  '/:id',
+  authenticateToken,
+  validateRequest({
+    params: eventSchemas.params,
+    body: eventSchemas.update,
+  }),
+  (req, res) => void eventController.updateEvent(req, res)
+);
 router.patch(
   '/:id/resubmit',
   authenticateToken,
+  validateRequest({ params: eventSchemas.params }),
   (req, res) => void eventController.resubmitEvent(req, res)
 );
-router.delete('/:id', authenticateToken, (req, res) => void eventController.deleteEvent(req, res));
+router.delete(
+  '/:id',
+  authenticateToken,
+  validateRequest({ params: eventSchemas.params }),
+  (req, res) => void eventController.deleteEvent(req, res)
+);
 
 // 管理員專用路由
 router.get(
@@ -41,18 +65,27 @@ router.patch(
   '/:id/review',
   authenticateToken,
   requireAdmin,
+  validateRequest({
+    params: eventSchemas.params,
+    body: eventSchemas.review,
+  }),
   (req, res) => void eventController.reviewEvent(req, res)
 );
 router.put(
   '/:id/approve',
   authenticateToken,
   requireAdmin,
+  validateRequest({ params: eventSchemas.params }),
   (req, res) => void eventController.approveEvent(req, res)
 );
 router.put(
   '/:id/reject',
   authenticateToken,
   requireAdmin,
+  validateRequest({
+    params: eventSchemas.params,
+    body: eventSchemas.review,
+  }),
   (req, res) => void eventController.rejectEvent(req, res)
 );
 

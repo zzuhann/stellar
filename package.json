@@ -42,7 +42,8 @@
     "helmet": "^8.1.0",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.0",
+    "zod": "^4.0.17"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
