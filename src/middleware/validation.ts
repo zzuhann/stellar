@@ -171,8 +171,14 @@ export const eventSchemas = {
       address: z.string().max(500, '地點地址不能超過 500 個字').trim().optional(),
     }),
     datetime: z.object({
-      start: z.string().datetime('開始時間格式不正確'),
-      end: z.string().datetime('結束時間格式不正確'),
+      start: z.object({
+        _seconds: z.number(),
+        _nanoseconds: z.number(),
+      }),
+      end: z.object({
+        _seconds: z.number(),
+        _nanoseconds: z.number(),
+      }),
     }),
     artistIds: z
       .array(z.string().min(1, '藝人ID不能為空'))
@@ -188,7 +194,11 @@ export const eventSchemas = {
         message: '至少需要填寫一個社群媒體帳號（Instagram、X 或 Threads）',
         path: ['socialMedia'],
       }),
-    images: z.array(z.string().url('圖片網址格式不正確')).max(5, '最多只能上傳5張圖片').optional(),
+    mainImage: z.string().url('主圖片網址格式不正確').optional(),
+    detailImage: z
+      .array(z.string().url('詳細圖片網址格式不正確'))
+      .max(5, '最多只能上傳5張詳細圖片')
+      .optional(),
   }),
 
   update: z.object({
@@ -207,8 +217,14 @@ export const eventSchemas = {
       .optional(),
     datetime: z
       .object({
-        start: z.string().datetime('開始時間格式不正確'),
-        end: z.string().datetime('結束時間格式不正確'),
+        start: z.object({
+          _seconds: z.number(),
+          _nanoseconds: z.number(),
+        }),
+        end: z.object({
+          _seconds: z.number(),
+          _nanoseconds: z.number(),
+        }),
       })
       .optional(),
     artistIds: z
@@ -227,7 +243,11 @@ export const eventSchemas = {
         path: ['socialMedia'],
       })
       .optional(),
-    images: z.array(z.string().url('圖片網址格式不正確')).max(5, '最多只能上傳5張圖片').optional(),
+    mainImage: z.string().url('主圖片網址格式不正確').optional(),
+    detailImage: z
+      .array(z.string().url('詳細圖片網址格式不正確'))
+      .max(5, '最多只能上傳5張詳細圖片')
+      .optional(),
   }),
 
   review: z.object({

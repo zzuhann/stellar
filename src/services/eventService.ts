@@ -387,7 +387,7 @@ export class EventService {
         end: this.parseDateTime(eventData.datetime.end),
       },
       socialMedia: eventData.socialMedia || {},
-      mainImage: eventData.mainImage,
+      ...(eventData.mainImage && { mainImage: eventData.mainImage }),
       detailImage: eventData.detailImage || [],
       status: 'pending' as const,
       createdBy: userId,
