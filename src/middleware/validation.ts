@@ -119,50 +119,6 @@ export const artistSchemas = {
       .optional(),
     profileImage: z.string().url('偶像圖片網址格式錯誤').optional(),
   }),
-
-  review: z.object({
-    status: z.enum(['approved', 'rejected', 'exists'], {
-      message: '狀態必須是 approved、rejected 或 exists 其中之一',
-    }),
-    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
-  }),
-
-  reject: z.object({
-    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
-  }),
-
-  params: z.object({
-    id: z.string().min(1, 'ID 為必填參數').max(50, 'ID 長度不正確'),
-  }),
-
-  query: z.object({
-    status: z
-      .enum(['approved', 'pending', 'rejected'], {
-        message: '狀態篩選值不正確',
-      })
-      .optional(),
-    createdBy: z.string().max(50, '創建者ID長度不正確').optional(),
-    birthdayStartDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, '開始日期格式錯誤')
-      .optional(),
-    birthdayEndDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, '結束日期格式錯誤')
-      .optional(),
-    search: z.string().max(100, '搜尋關鍵字過長').optional(),
-    includeStats: z.string().optional(),
-    sortBy: z
-      .enum(['stageName', 'coffeeEventCount', 'createdAt'], {
-        message: '排序欄位不正確',
-      })
-      .optional(),
-    sortOrder: z
-      .enum(['asc', 'desc'], {
-        message: '排序方向必須是 asc 或 desc',
-      })
-      .optional(),
-  }),
 };
 
 // Event 相關的 schema
@@ -252,20 +208,5 @@ export const eventSchemas = {
       .array(z.string().url('詳細圖片網址格式不正確'))
       .max(5, '最多只能上傳5張詳細圖片')
       .optional(),
-  }),
-
-  review: z.object({
-    status: z.enum(['approved', 'rejected'], {
-      message: '狀態必須是 approved 或 rejected 其中之一',
-    }),
-    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
-  }),
-
-  reject: z.object({
-    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
-  }),
-
-  params: z.object({
-    id: z.string().min(1, 'ID 為必填參數').max(50, 'ID 長度不正確'),
   }),
 };

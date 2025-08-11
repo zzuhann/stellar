@@ -7,12 +7,8 @@ const router = Router();
 const artistController = new ArtistController();
 
 // 公開路由
-router.get('/', validateRequest({ query: artistSchemas.query }), artistController.getAllArtists);
-router.get(
-  '/:id',
-  validateRequest({ params: artistSchemas.params }),
-  artistController.getArtistById
-);
+router.get('/', artistController.getAllArtists);
+router.get('/:id', artistController.getArtistById);
 
 // 需要登入的路由
 router.post(
@@ -24,54 +20,16 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  validateRequest({
-    params: artistSchemas.params,
-    body: artistSchemas.update,
-  }),
+  validateRequest({ body: artistSchemas.update }),
   artistController.updateArtist
 );
-router.patch(
-  '/:id/resubmit',
-  authenticateToken,
-  validateRequest({ params: artistSchemas.params }),
-  artistController.resubmitArtist
-);
+router.patch('/:id/resubmit', authenticateToken, artistController.resubmitArtist);
 
 // 管理員專用路由
 router.get('/pending', authenticateToken, requireAdmin, artistController.getPendingArtists);
-router.patch(
-  '/:id/review',
-  authenticateToken,
-  requireAdmin,
-  validateRequest({
-    params: artistSchemas.params,
-    body: artistSchemas.review,
-  }),
-  artistController.reviewArtist
-);
-router.put(
-  '/:id/approve',
-  authenticateToken,
-  requireAdmin,
-  validateRequest({ params: artistSchemas.params }),
-  artistController.approveArtist
-);
-router.put(
-  '/:id/reject',
-  authenticateToken,
-  requireAdmin,
-  validateRequest({
-    params: artistSchemas.params,
-    body: artistSchemas.reject,
-  }),
-  artistController.rejectArtist
-);
-router.delete(
-  '/:id',
-  authenticateToken,
-  requireAdmin,
-  validateRequest({ params: artistSchemas.params }),
-  artistController.deleteArtist
-);
+router.patch('/:id/review', authenticateToken, requireAdmin, artistController.reviewArtist);
+router.put('/:id/approve', authenticateToken, requireAdmin, artistController.approveArtist);
+router.put('/:id/reject', authenticateToken, requireAdmin, artistController.rejectArtist);
+router.delete('/:id', authenticateToken, requireAdmin, artistController.deleteArtist);
 
 export default router;
