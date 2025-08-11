@@ -84,7 +84,7 @@ router.put(
   requireAdmin,
   validateRequest({
     params: eventSchemas.params,
-    body: eventSchemas.review,
+    body: eventSchemas.reject,
   }),
   (req, res) => void eventController.rejectEvent(req, res)
 );

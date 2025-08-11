@@ -62,7 +62,7 @@ router.put(
   requireAdmin,
   validateRequest({
     params: artistSchemas.params,
-    body: artistSchemas.review,
+    body: artistSchemas.reject,
   }),
   artistController.rejectArtist
 );

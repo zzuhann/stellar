@@ -127,6 +127,10 @@ export const artistSchemas = {
     reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
   }),
 
+  reject: z.object({
+    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
+  }),
+
   params: z.object({
     id: z.string().min(1, 'ID 為必填參數').max(50, 'ID 長度不正確'),
   }),
@@ -254,6 +258,10 @@ export const eventSchemas = {
     status: z.enum(['approved', 'rejected'], {
       message: '狀態必須是 approved 或 rejected 其中之一',
     }),
+    reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
+  }),
+
+  reject: z.object({
     reason: z.string().max(500, '原因說明不能超過500個字元').trim().optional(),
   }),
 
