@@ -4,6 +4,7 @@ import eventRoutes from './eventRoutes';
 import placesRoutes from './placesRoutes';
 import imageRoutes from './imageRoutes';
 import userRoutes from './userRoutes';
+import cacheRoutes from './cacheRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -77,6 +78,7 @@ if (hasFirebaseConfig) {
   router.use('/artists', artistRoutes);
   router.use('/events', eventRoutes);
   router.use('/users', userRoutes);
+  router.use('/cache', cacheRoutes);
 } else {
   // Firebase 未配置時的提示端點
   router.use('/artists', (_req, res) => {

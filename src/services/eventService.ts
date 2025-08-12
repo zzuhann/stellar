@@ -11,6 +11,7 @@ import {
 } from '../models/types';
 import { NotificationHelper } from './notificationService';
 import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
+import { cache } from '../utils/cache';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
@@ -54,6 +55,12 @@ export class EventService {
   async getActiveEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
 
+    const cacheKey = 'events:active';
+    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     // 暫時簡化查詢，等複合索引完成後再改回完整查詢
     const snapshot = await this.collection!.where('status', '==', 'approved').get();
 
@@ -67,9 +74,14 @@ export class EventService {
         }) as CoffeeEvent
     );
 
-    return events
+    const activeEvents = events
       .filter(event => event.datetime.end.toMillis() >= now)
       .sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+
+    // 設定 5 分鐘快取
+    cache.set(cacheKey, activeEvents, 5);
+
+    return activeEvents;
   }
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {
@@ -89,6 +101,17 @@ export class EventService {
 
   async getEventsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `events:status:${status || 'all'}`;
+    let ttl = 5; // 預設 5 分鐘
+
+    if (status === 'rejected') ttl = 10; // rejected: 10分鐘
+    if (status === 'pending') ttl = 1; // pending: 1分鐘
+
+    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     // 簡化查詢策略：先用單一條件查詢，再在記憶體中篩選
     let snapshot;
@@ -117,12 +140,23 @@ export class EventService {
     }
 
     // 按建立時間排序（最新在前）
-    return events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    const result = events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+    // 設定快取
+    cache.set(cacheKey, result, ttl);
+
+    return result;
   }
 
   // 新增：進階篩選和分頁功能
   async getEventsWithFilters(filters: EventFilterParams): Promise<EventsResponse> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `events:filters:${JSON.stringify(filters)}`;
+    const cachedResult = cache.get<EventsResponse>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     // 設定預設值
     const page = filters.page || 1;
@@ -187,7 +221,7 @@ export class EventService {
       .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // 按時間排序
       .slice(skip, skip + limit);
 
-    return {
+    const result = {
       events: finalPaginatedEvents,
       pagination: {
         page,
@@ -202,6 +236,11 @@ export class EventService {
         region: filters.region,
       },
     };
+
+    // 設定 3 分鐘快取
+    cache.set(cacheKey, result, 3);
+
+    return result;
   }
 
   // 新增：地圖資料 API
@@ -209,6 +248,12 @@ export class EventService {
     this.checkFirebaseConfig();
 
     const status = params.status || 'active';
+    const cacheKey = `map-data:${status}:${JSON.stringify(params)}`;
+
+    const cachedResult = cache.get<MapDataResponse>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     // 建立查詢（取得所有已審核的活動，再在記憶體中篩選）
     const query = this.collection!.where('status', '==', 'approved');
@@ -332,24 +377,43 @@ export class EventService {
       };
     });
 
-    return {
+    const result = {
       events: mapEvents,
       total: mapEvents.length,
     };
+
+    // 設定 10 分鐘快取
+    cache.set(cacheKey, result, 10);
+
+    return result;
   }
 
   async getEventById(eventId: string): Promise<CoffeeEvent | null> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `event:${eventId}`;
+    const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const doc = await this.collection!.doc(eventId).get();
 
     if (!doc.exists) {
+      // 也要快取 null 結果，避免重複查詢不存在的資料
+      cache.set(cacheKey, null, 2);
       return null;
     }
 
-    return {
+    const event = {
       id: doc.id,
       ...doc.data(),
     } as CoffeeEvent;
+
+    // 設定 2 分鐘快取
+    cache.set(cacheKey, event, 2);
+
+    return event;
   }
 
   async createEvent(eventData: CreateEventData, userId: string): Promise<CoffeeEvent> {
@@ -469,7 +533,7 @@ export class EventService {
 
     const existingData = doc.data() as CoffeeEvent;
 
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> = {
       status,
       updatedAt: Timestamp.now(),
     };
@@ -538,11 +602,73 @@ export class EventService {
 
     await docRef.update(updateData);
 
+    // 更新相關 artists 的 activeEventIds
+    if (existingData.artists && Array.isArray(existingData.artists)) {
+      await this.updateArtistsActiveEventIds(
+        existingData.artists.map((a: { id: string }) => a.id),
+        eventId,
+        'rejected'
+      );
+    }
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+
+    // 清除相關 artists 的 eventCount 快取
+    if (existingData.artists && Array.isArray(existingData.artists)) {
+      existingData.artists.forEach((artist: { id: string }) => {
+        cache.delete(`artist:${artist.id}:eventCount`);
+      });
+    }
+
+    // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
+    cache.clearPattern('artists:stats:');
+
     const updatedDoc = await docRef.get();
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
     } as CoffeeEvent;
+  }
+
+  // 更新 artists 的 activeEventIds
+  private async updateArtistsActiveEventIds(
+    artistIds: string[],
+    eventId: string,
+    status: 'approved' | 'rejected'
+  ): Promise<void> {
+    if (!db) return;
+
+    try {
+      const batch = db.batch();
+
+      for (const artistId of artistIds) {
+        const artistRef = db.collection('artists').doc(artistId);
+        const artistDoc = await artistRef.get();
+
+        if (artistDoc.exists) {
+          const artistData = artistDoc.data();
+          let activeEventIds = artistData?.activeEventIds || [];
+
+          if (status === 'approved') {
+            // 加入 eventId（如果尚未存在）
+            if (!activeEventIds.includes(eventId)) {
+              activeEventIds.push(eventId);
+            }
+          } else if (status === 'rejected') {
+            // 移除 eventId
+            activeEventIds = activeEventIds.filter((id: string) => id !== eventId);
+          }
+
+          batch.update(artistRef, { activeEventIds });
+        }
+      }
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error updating artists activeEventIds:', error);
+    }
   }
 
   async deleteEvent(eventId: string, userId: string, userRole: string): Promise<void> {
@@ -561,8 +687,44 @@ export class EventService {
       throw new Error('Permission denied');
     }
 
+    // 從相關 artists 的 activeEventIds 中移除
+    if (eventData?.artists && Array.isArray(eventData.artists)) {
+      await this.removeEventFromArtists(
+        eventData.artists.map((a: { id: string }) => a.id),
+        eventId
+      );
+    }
+
     // 直接刪除文件（不再使用軟刪除）
     await docRef.delete();
+  }
+
+  // 從 artists 的 activeEventIds 中移除 eventId
+  private async removeEventFromArtists(artistIds: string[], eventId: string): Promise<void> {
+    if (!db) return;
+
+    try {
+      const batch = db.batch();
+
+      for (const artistId of artistIds) {
+        const artistRef = db.collection('artists').doc(artistId);
+        const artistDoc = await artistRef.get();
+
+        if (artistDoc.exists) {
+          const artistData = artistDoc.data();
+          let activeEventIds = artistData?.activeEventIds || [];
+
+          // 移除 eventId
+          activeEventIds = activeEventIds.filter((id: string) => id !== eventId);
+
+          batch.update(artistRef, { activeEventIds });
+        }
+      }
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error removing event from artists:', error);
+    }
   }
 
   async searchEvents(criteria: {
@@ -571,6 +733,13 @@ export class EventService {
     location?: string;
   }): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `events:search:${JSON.stringify(criteria)}`;
+    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const now = Timestamp.now();
     const query = this.collection!.where('status', '==', 'approved');
 
@@ -610,7 +779,12 @@ export class EventService {
       );
     }
 
-    return events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+
+    // 設定 3 分鐘快取
+    cache.set(cacheKey, result, 3);
+
+    return result;
   }
 
   // 獲取用戶的所有投稿（藝人和活動）

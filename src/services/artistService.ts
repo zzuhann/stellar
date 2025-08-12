@@ -8,6 +8,7 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { NotificationHelper } from './notificationService';
+import { cache } from '../utils/cache';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
@@ -21,6 +22,13 @@ export class ArtistService {
 
   async getApprovedArtists(): Promise<Artist[]> {
     this.checkFirebaseConfig();
+
+    const cacheKey = 'artists:approved';
+    const cachedResult = cache.get<Artist[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     // 暫時使用簡單查詢，等索引完全生效後再改回複合查詢
     const snapshot = await this.collection!.where('status', '==', 'approved').get();
 
@@ -33,7 +41,12 @@ export class ArtistService {
         }) as Artist
     );
 
-    return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+    const sortedArtists = artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+
+    // 設定 30 分鐘快取
+    cache.set(cacheKey, sortedArtists, 30);
+
+    return sortedArtists;
   }
 
   async getPendingArtists(): Promise<Artist[]> {
@@ -56,6 +69,20 @@ export class ArtistService {
     createdBy?: string
   ): Promise<Artist[]> {
     this.checkFirebaseConfig();
+
+    // 只有非 pending 狀態才快取
+    let cacheKey: string | null = null;
+    let ttl = 0;
+
+    if (status && status !== 'pending') {
+      cacheKey = `artists:status:${status}:${createdBy || 'all'}`;
+      ttl = status === 'approved' ? 30 : 15; // approved: 30分鐘, rejected: 15分鐘
+
+      const cachedResult = cache.get<Artist[]>(cacheKey);
+      if (cachedResult) {
+        return cachedResult;
+      }
+    }
 
     let query = this.collection!;
 
@@ -80,11 +107,19 @@ export class ArtistService {
     );
 
     // 根據狀態決定排序方式
+    let result: Artist[];
     if (status === 'pending') {
-      return artists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 最新的在前
+      result = artists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 最新的在前
     } else {
-      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName)); // 藝名排序
+      result = artists.sort((a, b) => a.stageName.localeCompare(b.stageName)); // 藝名排序
     }
+
+    // 設定快取（僅非 pending 狀態）
+    if (cacheKey && ttl > 0) {
+      cache.set(cacheKey, result, ttl);
+    }
+
+    return result;
   }
 
   async createArtist(artistData: CreateArtistData, userId: string): Promise<Artist> {
@@ -169,6 +204,16 @@ export class ArtistService {
       console.error('Failed to send notification:', notificationError);
       // 不拋出錯誤，因為主要操作已成功
     }
+
+    // 清除相關快取
+    cache.delete('artists:approved');
+    cache.delete(`artist:${artistId}`);
+    cache.delete(`artist:${artistId}:eventCount`);
+
+    // 清除篩選和統計相關快取
+    cache.clearPattern('artists:filters:');
+    cache.clearPattern('artists:stats:');
+    cache.clearPattern('artists:status:');
 
     return updatedArtist;
   }
@@ -283,21 +328,41 @@ export class ArtistService {
 
   async getArtistById(artistId: string): Promise<Artist | null> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `artist:${artistId}`;
+    const cachedResult = cache.get<Artist | null>(cacheKey);
+    if (cachedResult !== null) {
+      return cachedResult;
+    }
+
     const doc = await this.collection!.doc(artistId).get();
 
     if (!doc.exists) {
+      // 快取 null 結果
+      cache.set(cacheKey, null, 15);
       return null;
     }
 
-    return {
+    const artist = {
       id: doc.id,
       ...doc.data(),
     } as Artist;
+
+    // 設定 15 分鐘快取
+    cache.set(cacheKey, artist, 15);
+
+    return artist;
   }
 
   // 新增：支援進階篩選的藝人查詢
   async getArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `artists:filters:${JSON.stringify(filters)}`;
+    const cachedResult = cache.get<Artist[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     let query = this.collection!;
 
@@ -336,12 +401,23 @@ export class ArtistService {
     }
 
     // 排序（基本方法暫時保持藝名排序）
-    return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+    const sortedArtists = artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+
+    // 設定 30 分鐘快取
+    cache.set(cacheKey, sortedArtists, 30);
+
+    return sortedArtists;
   }
 
   // 新增：帶統計資料的藝人查詢
   async getArtistsWithStats(filters: ArtistFilterParams): Promise<ArtistWithStats[]> {
     this.checkFirebaseConfig();
+
+    const cacheKey = `artists:stats:${JSON.stringify(filters)}`;
+    const cachedResult = cache.get<ArtistWithStats[]>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     // 先取得藝人列表
     const artists = await this.getArtistsWithFilters(filters);
@@ -358,7 +434,12 @@ export class ArtistService {
     }
 
     // 套用排序
-    return this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
+    const result = this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
+
+    // 設定 3 分鐘快取
+    cache.set(cacheKey, result, 3);
+
+    return result;
   }
 
   // 私有方法：篩選生日週
@@ -384,31 +465,47 @@ export class ArtistService {
       return 0;
     }
 
+    const cacheKey = `artist:${artistId}:eventCount`;
+    const cachedResult = cache.get<number>(cacheKey);
+    if (cachedResult !== null) {
+      return cachedResult;
+    }
+
     const now = Timestamp.now();
 
     try {
+      // 先取得 artist 的 activeEventIds
+      const artistDoc = await db.collection('artists').doc(artistId).get();
+      const artistData = artistDoc.data();
+      const activeEventIds = artistData?.activeEventIds || [];
+
+      if (activeEventIds.length === 0) {
+        return 0;
+      }
+
+      // 只查詢相關的 events
       const eventsSnapshot = await db
         .collection('coffeeEvents')
+        .where('__name__', 'in', activeEventIds)
         .where('status', '==', 'approved')
         .get();
 
-      // 在記憶體中篩選包含此藝人且正在進行中的活動
+      // 在記憶體中檢查是否尚未結束
       const activeEvents = eventsSnapshot.docs.filter(doc => {
         const data = doc.data();
-        const startTime = data.datetime?.start;
         const endTime = data.datetime?.end;
-        const artists = data.artists;
 
-        if (!startTime || !endTime || !artists || !Array.isArray(artists)) return false;
+        if (!endTime) return false;
 
-        // 檢查是否包含此藝人且活動尚未結束
-        const hasArtist = artists.some((artist: any) => artist.id === artistId);
-        const isNotEnded = endTime.toMillis() >= now.toMillis();
-
-        return hasArtist && isNotEnded;
+        return endTime.toMillis() >= now.toMillis();
       });
 
-      return activeEvents.length;
+      const count = activeEvents.length;
+
+      // 設定 1 分鐘快取
+      cache.set(cacheKey, count, 1);
+
+      return count;
     } catch (error) {
       console.error('Error counting active events for artist:', error);
       return 0;
