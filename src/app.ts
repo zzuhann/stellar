@@ -21,8 +21,14 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 安全中介軟體
-app.use(helmet());
+// 安全中介軟體 - 暫時使用寬鬆設定來測試 CORS
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+  })
+);
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -61,22 +67,27 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.error(`CORS request from origin: ${origin}, allowed origins:`, allowedOrigins);
       // 允許沒有 origin 的請求（例如同源請求）
       if (!origin) {
+        console.error('No origin, allowing request');
         return callback(null, true);
       }
 
       // 檢查是否在允許的清單中
       if (allowedOrigins.includes(origin)) {
+        console.error('Origin allowed');
         return callback(null, true);
       }
 
       // 開發環境允許所有來源
       if (process.env.NODE_ENV === 'development') {
+        console.error('Development mode, allowing all origins');
         return callback(null, true);
       }
 
       // 生產環境拒絕未授權的來源
+      console.error('Origin not allowed, rejecting');
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
