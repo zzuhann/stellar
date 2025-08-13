@@ -18,7 +18,7 @@ router.get('/health', (_req, res) => {
     environment: process.env.NODE_ENV || 'development',
     firebase: {
       configured: hasFirebaseConfig,
-      message: hasFirebaseConfig ? 'Firebase ready' : 'Firebase not configured',
+      message: hasFirebaseConfig ? 'Firebase ready' : 'Firebase 問題，請檢查環境變數',
     },
     r2: {
       configured: hasR2Config,
@@ -30,7 +30,7 @@ router.get('/health', (_req, res) => {
 // 簡單測試端點
 router.get('/test', async (req, res) => {
   if (!hasFirebaseConfig) {
-    res.status(503).json({ error: 'Firebase not configured' });
+    res.status(503).json({ error: 'Firebase 問題，請檢查環境變數' });
     return;
   }
 
@@ -84,17 +84,17 @@ if (hasFirebaseConfig) {
   router.use('/artists', (_req, res) => {
     res
       .status(503)
-      .json({ error: 'Firebase not configured. Please set up environment variables first.' });
+      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   });
   router.use('/events', (_req, res) => {
     res
       .status(503)
-      .json({ error: 'Firebase not configured. Please set up environment variables first.' });
+      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   });
   router.use('/users', (_req, res) => {
     res
       .status(503)
-      .json({ error: 'Firebase not configured. Please set up environment variables first.' });
+      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   });
 }
 

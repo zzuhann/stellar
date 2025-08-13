@@ -18,7 +18,7 @@ export interface DeleteResult {
 export class ImageService {
   private checkR2Config() {
     if (!hasR2Config || !r2Client) {
-      throw new Error('R2 not configured');
+      throw new Error('R2 問題，請檢查環境變數');
     }
   }
 

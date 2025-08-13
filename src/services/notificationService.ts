@@ -7,7 +7,7 @@ export class NotificationService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -102,14 +102,14 @@ export class NotificationService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Notification not found');
+      throw new Error('通知不存在');
     }
 
     const data = doc.data() as UserNotification;
 
     // 檢查是否為該用戶的通知
     if (data.userId !== userId) {
-      throw new Error('Permission denied');
+      throw new Error('權限不足');
     }
 
     await docRef.update({
@@ -129,7 +129,7 @@ export class NotificationService {
     this.checkFirebaseConfig();
 
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
 
     const batch = db.batch();
@@ -160,14 +160,14 @@ export class NotificationService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Notification not found');
+      throw new Error('通知不存在');
     }
 
     const data = doc.data() as UserNotification;
 
     // 檢查是否為該用戶的通知
     if (data.userId !== userId) {
-      throw new Error('Permission denied');
+      throw new Error('權限不足');
     }
 
     await docRef.delete();
@@ -191,7 +191,7 @@ export class NotificationService {
     const snapshot = await this.collection!.where('createdAt', '<', cutoffDate).get();
 
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
 
     const batch = db.batch();

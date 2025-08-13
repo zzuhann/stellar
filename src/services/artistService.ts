@@ -16,7 +16,7 @@ export class ArtistService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -125,15 +125,6 @@ export class ArtistService {
   async createArtist(artistData: CreateArtistData, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
 
-    // 檢查是否已存在相同藝名的藝人
-    const existingArtist = await this.collection!.where('stageName', '==', artistData.stageName)
-      .where('status', 'in', ['pending', 'approved'])
-      .get();
-
-    if (!existingArtist.empty) {
-      throw new Error('Artist with this stage name already exists');
-    }
-
     const now = Timestamp.now();
     const newArtist = {
       stageName: artistData.stageName,
@@ -164,7 +155,7 @@ export class ArtistService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Artist not found');
+      throw new Error('偶像不存在');
     }
 
     const existingData = doc.data() as Artist;
@@ -229,19 +220,19 @@ export class ArtistService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Artist not found');
+      throw new Error('偶像不存在');
     }
 
     const existingData = doc.data() as Artist;
 
     // 檢查權限：只有創建者可以編輯
     if (existingData.createdBy !== userId) {
-      throw new Error('Permission denied: You can only edit your own submissions');
+      throw new Error('權限不足: 只能編輯自己的投稿');
     }
 
     // 檢查狀態：只有 pending 和 rejected 狀態可以編輯
     if (!['pending', 'rejected'].includes(existingData.status)) {
-      throw new Error('Can only edit artists with pending or rejected status');
+      throw new Error('只能編輯待審核或已拒絕的投稿');
     }
 
     const updateData: Record<string, any> = {
@@ -265,24 +256,24 @@ export class ArtistService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Artist not found');
+      throw new Error('偶像不存在');
     }
 
     const existingData = doc.data() as Artist;
 
     // 檢查權限：只有創建者可以重新送審
     if (existingData.createdBy !== userId) {
-      throw new Error('Permission denied: You can only resubmit your own submissions');
+      throw new Error('權限不足: 只能重新送審自己的投稿');
     }
 
     // 檢查狀態：不能重新送審已存在狀態的藝人
     if (existingData.status === 'exists') {
-      throw new Error('Cannot resubmit artists with "exists" status');
+      throw new Error('無法重新送審已通過審核的偶像');
     }
 
     // 只有 rejected 狀態可以重新送審
     if (existingData.status !== 'rejected') {
-      throw new Error('Can only resubmit rejected artists');
+      throw new Error('只能重新送審已拒絕的投稿');
     }
 
     const updateData = {
@@ -305,7 +296,7 @@ export class ArtistService {
 
     // 檢查是否有活動使用此藝人（搜尋 artists 陣列中的 id）
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
     const eventsSnapshot = await db.collection('coffeeEvents').get();
 
@@ -320,7 +311,7 @@ export class ArtistService {
     });
 
     if (hasEvents) {
-      throw new Error('Cannot delete artist with existing events');
+      throw new Error('不能刪除已經有生咖活動的偶像');
     }
 
     await this.collection!.doc(artistId).delete();

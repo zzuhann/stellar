@@ -19,7 +19,7 @@ export class EventService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -420,7 +420,7 @@ export class EventService {
     this.checkFirebaseConfig();
 
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
 
     // 驗證所有藝人是否存在且已審核
@@ -429,7 +429,7 @@ export class EventService {
     for (const artistId of eventData.artistIds) {
       const artistDoc = await db.collection('artists').doc(artistId).get();
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
-        throw new Error(`Invalid or unapproved artist: ${artistId}`);
+        throw new Error(`此偶像不存在或未通過審核`);
       }
 
       const artistData = artistDoc.data();
@@ -478,14 +478,14 @@ export class EventService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Event not found');
+      throw new Error('活動不存在');
     }
 
     const eventData = doc.data();
 
     // 檢查權限：管理員可以編輯任何活動，一般用戶只能編輯自己的活動
     if (userRole !== 'admin' && eventData?.createdBy !== userId) {
-      throw new Error('Permission denied');
+      throw new Error('權限不足');
     }
 
     // 準備更新資料
@@ -528,7 +528,7 @@ export class EventService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Event not found');
+      throw new Error('活動不存在');
     }
 
     const existingData = doc.data() as CoffeeEvent;
@@ -579,19 +579,19 @@ export class EventService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Event not found');
+      throw new Error('活動不存在');
     }
 
     const existingData = doc.data() as CoffeeEvent;
 
     // 檢查權限：只有創建者可以重新送審
     if (existingData.createdBy !== userId) {
-      throw new Error('Permission denied: You can only resubmit your own submissions');
+      throw new Error('權限不足: 只能重新送審自己的投稿');
     }
 
     // 只有 rejected 狀態可以重新送審
     if (existingData.status !== 'rejected') {
-      throw new Error('Can only resubmit rejected events');
+      throw new Error('只能重新送審已拒絕的活動');
     }
 
     const updateData = {
@@ -677,14 +677,14 @@ export class EventService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('Event not found');
+      throw new Error('活動不存在');
     }
 
     const eventData = doc.data();
 
     // 檢查權限：管理員可以刪除任何活動，一般用戶只能刪除自己的活動
     if (userRole !== 'admin' && eventData?.createdBy !== userId) {
-      throw new Error('Permission denied');
+      throw new Error('權限不足');
     }
 
     // 從相關 artists 的 activeEventIds 中移除
@@ -792,7 +792,7 @@ export class EventService {
     this.checkFirebaseConfig();
 
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
 
     // 獲取用戶的藝人投稿（簡化查詢避免索引問題）
@@ -849,7 +849,7 @@ export class EventService {
     const expiredEvents = await this.collection!.where('datetime.end', '<', oneWeekAgo).get();
 
     if (!db) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
     const batch = db.batch();
 

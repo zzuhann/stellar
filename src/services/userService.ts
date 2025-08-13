@@ -7,7 +7,7 @@ export class UserService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase not configured');
+      throw new Error('Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -31,7 +31,7 @@ export class UserService {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      throw new Error('User not found');
+      throw new Error('用戶不存在');
     }
 
     const updateData = {
