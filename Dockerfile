@@ -9,7 +9,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安裝所有依賴（包括 devDependencies）
-RUN npm ci --include=dev
+RUN npm ci --include=dev && \
+    echo "🔍 Verifying @types packages installation:" && \
+    ls -la node_modules/@types/ && \
+    npm list --depth=0 | grep @types
 
 # 複製源碼和配置
 COPY . .
