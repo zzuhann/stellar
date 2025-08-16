@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node dist/src/server.js",
+    "start": "node dist/server.js",
     "dev": "~/.bun/bin/bun --watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "build:prod": "tsc -p tsconfig.build.json",

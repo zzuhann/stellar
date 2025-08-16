@@ -43,6 +43,8 @@ RUN npm ci --only=production && npm cache clean --force
 
 # 從構建階段複製構建結果
 COPY --from=builder /app/dist ./dist
+# 確保目錄結構正確
+RUN mkdir -p /app/dist/src
 
 # 複製其他必要文件
 COPY --from=builder /app/.dockerignore ./
