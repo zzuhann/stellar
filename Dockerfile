@@ -43,6 +43,7 @@ RUN npm ci --only=production --ignore-scripts && npm cache clean --force
 
 # 從構建階段複製構建結果
 COPY --from=builder /app/dist ./dist
+RUN ls -la dist/ && echo "確認編譯後的檔案結構"
 
 # 複製其他必要文件
 COPY --from=builder /app/.dockerignore ./
@@ -58,12 +59,8 @@ EXPOSE 8080
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# 健康檢查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node dist/src/healthcheck.js || exit 1
-
 # 使用 dumb-init 作為 PID 1，正確處理信號
 ENTRYPOINT ["dumb-init", "--"]
 
 # 調試並啟動應用
-CMD ["sh", "-c", "echo '檢查檔案位置：' && ls -la /src/dist/src/ && npm start"]
+CMD ["sh", "-c", "echo '當前工作目錄：' && pwd && echo '目錄內容：' && ls -la && echo 'dist 目錄內容：' && ls -la dist/ && echo '開始執行應用：' && npm start"]
