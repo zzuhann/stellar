@@ -14,8 +14,8 @@ RUN npm install
 # 複製源碼
 COPY . .
 
-# 構建 TypeScript（使用生產配置）
-RUN npm run build:prod || (cat /app/tsconfig.build.tsbuildinfo && exit 1)
+# 構建 TypeScript
+RUN npx tsc
 
 # Stage 2: 生產階段
 FROM node:18-alpine AS production
