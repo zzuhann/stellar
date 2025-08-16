@@ -1,6 +1,6 @@
 # 多階段構建 Dockerfile for Stellar Backend
 # Stage 1: 構建階段
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # 設置工作目錄
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: 生產階段
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 # 安裝 dumb-init 用於正確處理信號
 RUN apk add --no-cache dumb-init
