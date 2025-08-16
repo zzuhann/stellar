@@ -17,13 +17,8 @@ RUN npm install && \
 # 複製源碼和配置
 COPY . .
 
-# 構建 TypeScript（添加調試信息）
-RUN echo "🔍 Node.js version:" && node --version && \
-    echo "🔍 npm version:" && npm --version && \
-    echo "🔍 TypeScript version:" && npx tsc --version && \
-    echo "🔍 Checking @types packages:" && npm list @types/cors @types/express @types/morgan @types/multer || true && \
-    echo "🔍 Running TypeScript build:" && \
-    npm run build
+# 複製本地構建結果（避免 Docker 中的 TypeScript 編譯問題）
+COPY dist ./dist
 
 # Stage 2: 生產階段
 FROM node:24-alpine AS production

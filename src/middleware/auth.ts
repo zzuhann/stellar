@@ -7,7 +7,6 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: 'user' | 'admin';
   };
-  file?: Express.Multer.File;
 }
 
 export const authenticateToken = async (
@@ -24,10 +23,10 @@ export const authenticateToken = async (
       return;
     }
 
-    const decodedToken = await auth!.verifyIdToken(token);
+    const decodedToken = await auth.verifyIdToken(token);
 
     // 從 Firestore 獲取用戶角色
-    const userDoc = await db!.collection('users').doc(decodedToken.uid).get();
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
     const userData = userDoc.data();
 
     req.user = {
