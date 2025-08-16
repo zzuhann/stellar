@@ -42,7 +42,7 @@ COPY package*.json ./
 RUN npm ci --only=production --ignore-scripts && npm cache clean --force
 
 # 從構建階段複製構建結果
-COPY --from=builder /app/dist /src/dist
+COPY --from=builder /app/dist ./dist
 
 # 複製其他必要文件
 COPY --from=builder /app/.dockerignore ./
