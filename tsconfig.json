@@ -13,7 +13,8 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "sourceMap": false,
-    "removeComments": true
+    "removeComments": true,
+    "checkJs": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "coverage", "tests", "**/*.test.ts", "**/*.spec.ts"]
