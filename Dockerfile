@@ -38,8 +38,8 @@ WORKDIR /app
 # 從構建階段複製 package files
 COPY package*.json ./
 
-# 只安裝生產依賴
-RUN npm ci --only=production && npm cache clean --force
+# 只安裝生產依賴（跳過 prepare 腳本）
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
 
 # 從構建階段複製構建結果
 COPY --from=builder /app/dist /src/dist
