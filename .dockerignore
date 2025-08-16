@@ -51,5 +51,5 @@ logs/
 # 上傳文件（應該用雲端儲存）
 uploads/
 
-# 鎖文件（在 Dockerfile 中單獨處理）
-package-lock.json
+# 鎖文件（保留以確保版本一致性）
+# package-lock.json

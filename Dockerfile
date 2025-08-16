@@ -1,6 +1,6 @@
 # 多階段構建 Dockerfile for Stellar Backend
 # Stage 1: 構建階段
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 # 設置工作目錄
 WORKDIR /app
@@ -9,16 +9,21 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安裝所有依賴（包括 devDependencies）
-RUN npm install
+RUN npm ci --include=dev
 
 # 複製源碼和配置
 COPY . .
 
-# 構建 TypeScript
-RUN npm run build
+# 構建 TypeScript（添加調試信息）
+RUN echo "🔍 Node.js version:" && node --version && \
+    echo "🔍 npm version:" && npm --version && \
+    echo "🔍 TypeScript version:" && npx tsc --version && \
+    echo "🔍 Checking @types packages:" && npm list @types/cors @types/express @types/morgan @types/multer || true && \
+    echo "🔍 Running TypeScript build:" && \
+    npm run build
 
 # Stage 2: 生產階段
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 
 # 安裝 dumb-init 用於正確處理信號
 RUN apk add --no-cache dumb-init
