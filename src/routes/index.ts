@@ -28,7 +28,7 @@ router.get('/health', (_req, res) => {
 });
 
 // 簡單測試端點
-router.get('/test', async (req, res) => {
+router.get('/test', async (_req, res) => {
   if (!hasFirebaseConfig) {
     res.status(503).json({ error: 'Firebase 問題，請檢查環境變數' });
     return;

@@ -96,7 +96,7 @@ export class ImageController {
   };
 
   // 檢查服務狀態
-  getServiceStatus = (req: AuthenticatedRequest, res: Response): void => {
+  getServiceStatus = (_req: AuthenticatedRequest, res: Response): void => {
     try {
       const status = this.imageService.getServiceStatus();
       res.json(status);

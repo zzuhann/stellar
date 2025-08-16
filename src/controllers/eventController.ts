@@ -45,7 +45,7 @@ export class EventController {
   };
 
   // 獲取待審核的活動（僅管理員）
-  getPendingEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  getPendingEvents = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const events = await this.eventService.getPendingEvents();
       res.json(events);

@@ -67,7 +67,7 @@ export class ArtistController {
   };
 
   // 獲取待審核的藝人（僅管理員）
-  getPendingArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  getPendingArtists = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const artists = await this.artistService.getPendingArtists();
       res.json(artists);
