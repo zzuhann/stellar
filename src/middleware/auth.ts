@@ -7,6 +7,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: 'user' | 'admin';
   };
+  file?: Express.Multer.File;
 }
 
 export const authenticateToken = async (

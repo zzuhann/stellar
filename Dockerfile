@@ -9,10 +9,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安裝所有依賴（包括 devDependencies）
-RUN npm ci --include=dev && \
+RUN npm install && \
     echo "🔍 Verifying @types packages installation:" && \
-    ls -la node_modules/@types/ && \
-    npm list --depth=0 | grep @types
+    ls -la node_modules/@types/ | grep -E "(express|multer|cors|morgan)" && \
+    echo "🔍 TypeScript version:" && npx tsc --version
 
 # 複製源碼和配置
 COPY . .
