@@ -1,6 +1,0 @@
-{
-  "*.{ts,js}": [
-    "eslint --fix --quiet",
-    "prettier --write"
-  ]
-}

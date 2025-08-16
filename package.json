@@ -18,8 +18,7 @@
     "lint": "eslint src tests --ext .ts",
     "lint:fix": "eslint src tests --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -60,7 +59,6 @@
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.3",
-    "husky": "^9.1.7",
     "jest": "^30.0.5",
     "lint-staged": "^16.1.2",
     "prettier": "^3.6.2",
