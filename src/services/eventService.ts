@@ -34,7 +34,18 @@ export class EventService {
       );
     }
     // 如果是 Date 物件或字串
-    return Timestamp.fromDate(new Date(dateValue));
+    if (dateValue instanceof Date) {
+      return Timestamp.fromDate(dateValue);
+    }
+    // 如果是字串
+    if (typeof dateValue === 'string') {
+      return Timestamp.fromDate(new Date(dateValue));
+    }
+    // 如果是 number
+    if (typeof dateValue === 'number') {
+      return Timestamp.fromMillis(dateValue);
+    }
+    throw new Error('Invalid date value');
   }
 
   // 根據 zoom 級別計算緯度範圍（度數）
@@ -64,7 +75,7 @@ export class EventService {
 
     // 使用複合索引按開始時間排序
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('status', '==', 'approved').orderBy('datetime.start', 'asc').get()
+      this.collection.where('status', '==', 'approved').orderBy('datetime.start', 'asc').get()
     );
 
     // 只需過濾未結束的活動（已按開始時間排序）
@@ -88,7 +99,7 @@ export class EventService {
   async getPendingEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
+      this.collection.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
     );
 
     return snapshot.docs.map(
@@ -120,11 +131,11 @@ export class EventService {
     if (status) {
       // 用狀態查詢（有單一欄位索引）
       snapshot = await withTimeoutAndRetry(() =>
-        this.collection!.where('status', '==', status).get()
+        this.collection.where('status', '==', status).get()
       );
     } else {
       // 取得所有文件
-      snapshot = await withTimeoutAndRetry(() => this.collection!.get());
+      snapshot = await withTimeoutAndRetry(() => this.collection.get());
     }
 
     let events = snapshot.docs.map(
@@ -167,7 +178,7 @@ export class EventService {
     const skip = (page - 1) * limit;
 
     // 基礎查詢
-    let query: Query<DocumentData> | CollectionReference<DocumentData> = this.collection!;
+    let query: Query<DocumentData> | CollectionReference<DocumentData> = this.collection;
 
     // 藝人篩選：先取得所有資料再在記憶體中篩選（因為要搜尋 artists 陣列）
     // 移除此篩選條件，改為記憶體篩選
@@ -259,7 +270,7 @@ export class EventService {
     }
 
     // 建立查詢（取得所有已審核的活動，再在記憶體中篩選）
-    const query = this.collection!.where('status', '==', 'approved');
+    const query = this.collection.where('status', '==', 'approved');
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
 
@@ -400,7 +411,7 @@ export class EventService {
       return cachedResult;
     }
 
-    const doc = await withTimeoutAndRetry(() => this.collection!.doc(eventId).get());
+    const doc = await withTimeoutAndRetry(() => this.collection.doc(eventId).get());
 
     if (!doc.exists) {
       // 也要快取 null 結果，避免重複查詢不存在的資料
@@ -431,7 +442,7 @@ export class EventService {
 
     for (const artistId of eventData.artistIds) {
       const artistDoc = await withTimeoutAndRetry(() =>
-        db!.collection('artists').doc(artistId).get()
+        db.collection('artists').doc(artistId).get()
       );
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
         throw new Error(`此偶像不存在或未通過審核`);
@@ -464,7 +475,7 @@ export class EventService {
       updatedAt: now,
     };
 
-    const docRef = await withTimeoutAndRetry(() => this.collection!.add(newEvent));
+    const docRef = await withTimeoutAndRetry(() => this.collection.add(newEvent));
 
     return {
       id: docRef.id,
@@ -479,7 +490,7 @@ export class EventService {
     userRole: string
   ): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(eventId);
+    const docRef = this.collection.doc(eventId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -529,7 +540,7 @@ export class EventService {
     reason?: string
   ): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(eventId);
+    const docRef = this.collection.doc(eventId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -580,7 +591,7 @@ export class EventService {
   // 重新送審功能
   async resubmitEvent(eventId: string, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(eventId);
+    const docRef = this.collection.doc(eventId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -678,7 +689,7 @@ export class EventService {
 
   async deleteEvent(eventId: string, userId: string, userRole: string): Promise<void> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(eventId);
+    const docRef = this.collection.doc(eventId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -746,7 +757,7 @@ export class EventService {
     }
 
     const now = Timestamp.now();
-    const query = this.collection!.where('status', '==', 'approved');
+    const query = this.collection.where('status', '==', 'approved');
 
     // 基本的搜尋功能（Firestore 的搜尋功能有限）
     const snapshot = await withTimeoutAndRetry(() => query.get());
@@ -802,7 +813,7 @@ export class EventService {
 
     // 獲取用戶的藝人投稿（簡化查詢避免索引問題）
     const artistsSnapshot = await withTimeoutAndRetry(() =>
-      db!.collection('artists').where('createdBy', '==', userId).get()
+      db.collection('artists').where('createdBy', '==', userId).get()
     );
 
     const artists = artistsSnapshot.docs
@@ -817,7 +828,7 @@ export class EventService {
 
     // 獲取用戶的活動投稿（簡化查詢避免索引問題）
     const eventsSnapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('createdBy', '==', userId).get()
+      this.collection.where('createdBy', '==', userId).get()
     );
 
     const events = eventsSnapshot.docs
@@ -856,7 +867,7 @@ export class EventService {
     const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 
     const expiredEvents = await withTimeoutAndRetry(() =>
-      this.collection!.where('datetime.end', '<', oneWeekAgo).get()
+      this.collection.where('datetime.end', '<', oneWeekAgo).get()
     );
 
     if (!db) {

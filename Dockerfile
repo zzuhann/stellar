@@ -14,7 +14,8 @@ RUN npm install && \
     ls -la node_modules/@types/ | grep -E "(express|multer|cors|morgan)" && \
     echo "🔍 TypeScript version:" && npx tsc --version
 
-RUN npx tsc --version
+# 確保使用正確的 tsconfig
+COPY tsconfig*.json ./
 # 複製源碼和配置
 COPY . .
 

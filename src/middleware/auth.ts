@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { auth, db } from '../config/firebase';
 
-export interface AuthenticatedRequest extends Request {
+export type AuthenticatedRequest = Request & {
   user?: {
     uid: string;
     email: string;
     role: 'user' | 'admin';
   };
-}
+};
 
 export const authenticateToken = async (
   req: AuthenticatedRequest,
