@@ -46,6 +46,14 @@ if (hasFirebaseConfig) {
     }
 
     db = admin.firestore();
+    // 設定 Firestore 超時和連接設定
+    db.settings({
+      ignoreUndefinedProperties: true,
+      // 設定最大重試次數和超時
+      maxIdleChannels: 1,
+      keepAlive: true,
+    });
+
     auth = admin.auth();
   } catch (error) {
     console.error('❌ Firebase initialization failed:', error);
@@ -57,6 +65,9 @@ if (hasFirebaseConfig) {
   db = null;
   auth = null;
 }
+
+// 導出包裝函數
+export { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 
 export { db, auth, hasFirebaseConfig };
 export default admin;

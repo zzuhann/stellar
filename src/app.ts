@@ -21,12 +21,11 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 安全中介軟體 - 暫時使用寬鬆設定來測試 CORS
+// 安全中介軟體
 app.use(
   helmet({
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false,
+    // 允許跨域請求資源（為了支援圖片上傳和顯示）
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
@@ -107,8 +106,29 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', routes);
 
 // 全域錯誤處理
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // 詳細的錯誤日誌記錄，幫助識別真正的問題
+  console.error('=== Unhandled Error ===', {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    userAgent: req.headers['user-agent'],
+    errorName: err.name,
+    errorMessage: err.message,
+    errorStack: err.stack,
+    // 特別記錄可能導致假 CORS 錯誤的情況
+    isPotentialTimeoutError: err.message.includes('timeout') || err.message.includes('ECONNRESET'),
+    isFirestoreError: err.message.includes('Firestore') || err.message.includes('GRPC'),
+    isR2Error: err.message.includes('S3') || err.message.includes('AWS'),
+  });
+
+  // 確保 CORS headers 被設置，避免錯誤被誤判為 CORS 問題
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
 
   // 生產環境不洩露敏感資訊
   const isProduction = process.env.NODE_ENV === 'production';

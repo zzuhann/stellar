@@ -22,6 +22,11 @@ if (hasR2Config) {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    requestHandler: {
+      requestTimeout: 30000, // 30 秒超時
+      connectionTimeout: 10000, // 10 秒連接超時
+    },
+    maxAttempts: 3, // 最多重試 3 次
   });
 } else {
   console.warn('⚠️  R2 configuration not found. Image upload features will be disabled.');

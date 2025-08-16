@@ -1,4 +1,4 @@
-import { db, hasFirebaseConfig } from '../config/firebase';
+import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
 import {
   Artist,
   CreateArtistData,
@@ -29,19 +29,18 @@ export class ArtistService {
       return cachedResult;
     }
 
-    // 暫時使用簡單查詢，等索引完全生效後再改回複合查詢
-    const snapshot = await this.collection!.where('status', '==', 'approved').get();
+    // 使用複合索引直接排序
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
+    );
 
-    // 在程式中排序
-    const artists = snapshot.docs.map(
+    const sortedArtists = snapshot.docs.map(
       doc =>
         ({
           id: doc.id,
           ...doc.data(),
         }) as Artist
     );
-
-    const sortedArtists = artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
 
     // 設定 30 分鐘快取
     cache.set(cacheKey, sortedArtists, 30);
@@ -51,9 +50,9 @@ export class ArtistService {
 
   async getPendingArtists(): Promise<Artist[]> {
     this.checkFirebaseConfig();
-    const snapshot = await this.collection!.where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .get();
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
+    );
 
     return snapshot.docs.map(
       doc =>
@@ -96,7 +95,7 @@ export class ArtistService {
       query = query.where('createdBy', '==', createdBy) as any;
     }
 
-    const snapshot = await query.get();
+    const snapshot = await withTimeoutAndRetry(() => query.get());
 
     const artists = snapshot.docs.map(
       doc =>
@@ -137,7 +136,7 @@ export class ArtistService {
       updatedAt: now,
     };
 
-    const docRef = await this.collection!.add(newArtist);
+    const docRef = await withTimeoutAndRetry(() => this.collection!.add(newArtist));
 
     return {
       id: docRef.id,
@@ -152,7 +151,7 @@ export class ArtistService {
   ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('偶像不存在');
@@ -174,9 +173,9 @@ export class ArtistService {
       updateData.rejectedReason = null;
     }
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedArtist = {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -217,7 +216,7 @@ export class ArtistService {
   ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('偶像不存在');
@@ -240,9 +239,9 @@ export class ArtistService {
       updatedAt: Timestamp.now(),
     };
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -253,7 +252,7 @@ export class ArtistService {
   async resubmitArtist(artistId: string, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('偶像不存在');
@@ -282,9 +281,9 @@ export class ArtistService {
       updatedAt: Timestamp.now(),
     };
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -298,7 +297,7 @@ export class ArtistService {
     if (!db) {
       throw new Error('Firebase 問題，請檢查環境變數');
     }
-    const eventsSnapshot = await db.collection('coffeeEvents').get();
+    const eventsSnapshot = await withTimeoutAndRetry(() => db!.collection('coffeeEvents').get());
 
     // 在記憶體中搜尋使用此藝人的活動
     const hasEvents = eventsSnapshot.docs.some(doc => {
@@ -314,7 +313,7 @@ export class ArtistService {
       throw new Error('不能刪除已經有生咖活動的偶像');
     }
 
-    await this.collection!.doc(artistId).delete();
+    await withTimeoutAndRetry(() => this.collection!.doc(artistId).delete());
   }
 
   async getArtistById(artistId: string): Promise<Artist | null> {
@@ -326,7 +325,7 @@ export class ArtistService {
       return cachedResult;
     }
 
-    const doc = await this.collection!.doc(artistId).get();
+    const doc = await withTimeoutAndRetry(() => this.collection!.doc(artistId).get());
 
     if (!doc.exists) {
       // 快取 null 結果
@@ -367,7 +366,7 @@ export class ArtistService {
       query = query.where('createdBy', '==', filters.createdBy) as any;
     }
 
-    const snapshot = await query.get();
+    const snapshot = await withTimeoutAndRetry(() => query.get());
     let artists = snapshot.docs.map(
       doc =>
         ({
@@ -466,7 +465,9 @@ export class ArtistService {
 
     try {
       // 先取得 artist 的 activeEventIds
-      const artistDoc = await db.collection('artists').doc(artistId).get();
+      const artistDoc = await withTimeoutAndRetry(() =>
+        db!.collection('artists').doc(artistId).get()
+      );
       const artistData = artistDoc.data();
       const activeEventIds = artistData?.activeEventIds || [];
 
@@ -475,11 +476,13 @@ export class ArtistService {
       }
 
       // 只查詢相關的 events
-      const eventsSnapshot = await db
-        .collection('coffeeEvents')
-        .where('__name__', 'in', activeEventIds)
-        .where('status', '==', 'approved')
-        .get();
+      const eventsSnapshot = await withTimeoutAndRetry(() =>
+        db!
+          .collection('coffeeEvents')
+          .where('__name__', 'in', activeEventIds)
+          .where('status', '==', 'approved')
+          .get()
+      );
 
       // 在記憶體中檢查是否尚未結束
       const activeEvents = eventsSnapshot.docs.filter(doc => {

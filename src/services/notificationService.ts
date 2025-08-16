@@ -1,4 +1,4 @@
-import { db, hasFirebaseConfig } from '../config/firebase';
+import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
 import { UserNotification, NotificationFilterParams, NotificationsResponse } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
@@ -33,7 +33,7 @@ export class NotificationService {
       createdAt: Timestamp.now(),
     };
 
-    const docRef = await this.collection!.add(notificationData);
+    const docRef = await withTimeoutAndRetry(() => this.collection!.add(notificationData));
 
     return {
       id: docRef.id,
@@ -65,7 +65,7 @@ export class NotificationService {
     }
 
     // 按時間排序（最新在前）
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await withTimeoutAndRetry(() => query.orderBy('createdAt', 'desc').get());
 
     const allNotifications = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -99,7 +99,7 @@ export class NotificationService {
   async markAsRead(notificationId: string, userId: string): Promise<UserNotification> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(notificationId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('通知不存在');
@@ -112,12 +112,14 @@ export class NotificationService {
       throw new Error('權限不足');
     }
 
-    await docRef.update({
-      isRead: true,
-      updatedAt: Timestamp.now(),
-    });
+    await withTimeoutAndRetry(() =>
+      docRef.update({
+        isRead: true,
+        updatedAt: Timestamp.now(),
+      })
+    );
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -136,7 +138,7 @@ export class NotificationService {
 
     for (const id of notificationIds) {
       const docRef = this.collection!.doc(id);
-      const doc = await docRef.get();
+      const doc = await withTimeoutAndRetry(() => docRef.get());
 
       if (doc.exists) {
         const data = doc.data() as UserNotification;
@@ -150,14 +152,14 @@ export class NotificationService {
       }
     }
 
-    await batch.commit();
+    await withTimeoutAndRetry(() => batch.commit());
   }
 
   // 刪除通知
   async deleteNotification(notificationId: string, userId: string): Promise<void> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(notificationId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('通知不存在');
@@ -170,15 +172,15 @@ export class NotificationService {
       throw new Error('權限不足');
     }
 
-    await docRef.delete();
+    await withTimeoutAndRetry(() => docRef.delete());
   }
 
   // 獲取未讀通知數量
   async getUnreadCount(userId: string): Promise<number> {
     this.checkFirebaseConfig();
-    const snapshot = await this.collection!.where('userId', '==', userId)
-      .where('isRead', '==', false)
-      .get();
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('userId', '==', userId).where('isRead', '==', false).get()
+    );
 
     return snapshot.size;
   }
@@ -188,7 +190,9 @@ export class NotificationService {
     this.checkFirebaseConfig();
     const cutoffDate = Timestamp.fromDate(new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000));
 
-    const snapshot = await this.collection!.where('createdAt', '<', cutoffDate).get();
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('createdAt', '<', cutoffDate).get()
+    );
 
     if (!db) {
       throw new Error('Firebase 問題，請檢查環境變數');
@@ -199,7 +203,7 @@ export class NotificationService {
       batch.delete(doc.ref);
     });
 
-    await batch.commit();
+    await withTimeoutAndRetry(() => batch.commit());
   }
 }
 

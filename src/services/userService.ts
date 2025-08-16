@@ -1,4 +1,4 @@
-import { db, hasFirebaseConfig } from '../config/firebase';
+import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
 import { User, UpdateUserData } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 
@@ -13,7 +13,7 @@ export class UserService {
 
   async getUserById(userId: string): Promise<User | null> {
     this.checkFirebaseConfig();
-    const doc = await this.collection!.doc(userId).get();
+    const doc = await withTimeoutAndRetry(() => this.collection!.doc(userId).get());
 
     if (!doc.exists) {
       return null;
@@ -28,7 +28,7 @@ export class UserService {
   async updateUser(userId: string, userData: UpdateUserData): Promise<User> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(userId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('用戶不存在');
@@ -39,9 +39,9 @@ export class UserService {
       updatedAt: Timestamp.now(),
     };
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       uid: updatedDoc.id,
       ...updatedDoc.data(),
@@ -56,7 +56,7 @@ export class UserService {
       createdAt: now,
     };
 
-    const docRef = await this.collection!.add(newUser);
+    const docRef = await withTimeoutAndRetry(() => this.collection!.add(newUser));
 
     return {
       uid: docRef.id,

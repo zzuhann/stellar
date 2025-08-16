@@ -1,4 +1,5 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
+import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import {
   CoffeeEvent,
   CreateEventData,
@@ -61,10 +62,12 @@ export class EventService {
       return cachedResult;
     }
 
-    // 暫時簡化查詢，等複合索引完成後再改回完整查詢
-    const snapshot = await this.collection!.where('status', '==', 'approved').get();
+    // 使用複合索引按開始時間排序
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('status', '==', 'approved').orderBy('datetime.start', 'asc').get()
+    );
 
-    // 在程式中過濾時間和排序
+    // 只需過濾未結束的活動（已按開始時間排序）
     const now = Date.now();
     const events = snapshot.docs.map(
       doc =>
@@ -74,9 +77,7 @@ export class EventService {
         }) as CoffeeEvent
     );
 
-    const activeEvents = events
-      .filter(event => event.datetime.end.toMillis() >= now)
-      .sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+    const activeEvents = events.filter(event => event.datetime.end.toMillis() >= now);
 
     // 設定 5 分鐘快取
     cache.set(cacheKey, activeEvents, 5);
@@ -86,9 +87,9 @@ export class EventService {
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
-    const snapshot = await this.collection!.where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .get();
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
+    );
 
     return snapshot.docs.map(
       doc =>
@@ -118,10 +119,12 @@ export class EventService {
 
     if (status) {
       // 用狀態查詢（有單一欄位索引）
-      snapshot = await this.collection!.where('status', '==', status).get();
+      snapshot = await withTimeoutAndRetry(() =>
+        this.collection!.where('status', '==', status).get()
+      );
     } else {
       // 取得所有文件
-      snapshot = await this.collection!.get();
+      snapshot = await withTimeoutAndRetry(() => this.collection!.get());
     }
 
     let events = snapshot.docs.map(
@@ -174,7 +177,7 @@ export class EventService {
       query = query.where('createdBy', '==', filters.createdBy);
     }
 
-    const snapshot = await query.get();
+    const snapshot = await withTimeoutAndRetry(() => query.get());
 
     let events = snapshot.docs.map(
       doc =>
@@ -258,7 +261,7 @@ export class EventService {
     // 建立查詢（取得所有已審核的活動，再在記憶體中篩選）
     const query = this.collection!.where('status', '==', 'approved');
 
-    const snapshot = await query.get();
+    const snapshot = await withTimeoutAndRetry(() => query.get());
 
     let events = snapshot.docs.map(
       doc =>
@@ -397,7 +400,7 @@ export class EventService {
       return cachedResult;
     }
 
-    const doc = await this.collection!.doc(eventId).get();
+    const doc = await withTimeoutAndRetry(() => this.collection!.doc(eventId).get());
 
     if (!doc.exists) {
       // 也要快取 null 結果，避免重複查詢不存在的資料
@@ -427,7 +430,9 @@ export class EventService {
     const artists: Array<{ id: string; name: string; profileImage?: string }> = [];
 
     for (const artistId of eventData.artistIds) {
-      const artistDoc = await db.collection('artists').doc(artistId).get();
+      const artistDoc = await withTimeoutAndRetry(() =>
+        db!.collection('artists').doc(artistId).get()
+      );
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
         throw new Error(`此偶像不存在或未通過審核`);
       }
@@ -459,7 +464,7 @@ export class EventService {
       updatedAt: now,
     };
 
-    const docRef = await this.collection!.add(newEvent);
+    const docRef = await withTimeoutAndRetry(() => this.collection!.add(newEvent));
 
     return {
       id: docRef.id,
@@ -475,7 +480,7 @@ export class EventService {
   ): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(eventId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('活動不存在');
@@ -509,9 +514,9 @@ export class EventService {
       };
     }
 
-    await docRef.update(updates);
+    await withTimeoutAndRetry(() => docRef.update(updates));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -525,7 +530,7 @@ export class EventService {
   ): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(eventId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('活動不存在');
@@ -547,9 +552,9 @@ export class EventService {
       updateData.rejectedReason = null;
     }
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedEvent = {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -576,7 +581,7 @@ export class EventService {
   async resubmitEvent(eventId: string, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(eventId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('活動不存在');
@@ -600,7 +605,7 @@ export class EventService {
       updatedAt: Timestamp.now(),
     };
 
-    await docRef.update(updateData);
+    await withTimeoutAndRetry(() => docRef.update(updateData));
 
     // 更新相關 artists 的 activeEventIds
     if (existingData.artists && Array.isArray(existingData.artists)) {
@@ -625,7 +630,7 @@ export class EventService {
     // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
     cache.clearPattern('artists:stats:');
 
-    const updatedDoc = await docRef.get();
+    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,
       ...updatedDoc.data(),
@@ -645,7 +650,7 @@ export class EventService {
 
       for (const artistId of artistIds) {
         const artistRef = db.collection('artists').doc(artistId);
-        const artistDoc = await artistRef.get();
+        const artistDoc = await withTimeoutAndRetry(() => artistRef.get());
 
         if (artistDoc.exists) {
           const artistData = artistDoc.data();
@@ -665,7 +670,7 @@ export class EventService {
         }
       }
 
-      await batch.commit();
+      await withTimeoutAndRetry(() => batch.commit());
     } catch (error) {
       console.error('Error updating artists activeEventIds:', error);
     }
@@ -674,7 +679,7 @@ export class EventService {
   async deleteEvent(eventId: string, userId: string, userRole: string): Promise<void> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(eventId);
-    const doc = await docRef.get();
+    const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
       throw new Error('活動不存在');
@@ -696,7 +701,7 @@ export class EventService {
     }
 
     // 直接刪除文件（不再使用軟刪除）
-    await docRef.delete();
+    await withTimeoutAndRetry(() => docRef.delete());
   }
 
   // 從 artists 的 activeEventIds 中移除 eventId
@@ -708,7 +713,7 @@ export class EventService {
 
       for (const artistId of artistIds) {
         const artistRef = db.collection('artists').doc(artistId);
-        const artistDoc = await artistRef.get();
+        const artistDoc = await withTimeoutAndRetry(() => artistRef.get());
 
         if (artistDoc.exists) {
           const artistData = artistDoc.data();
@@ -721,7 +726,7 @@ export class EventService {
         }
       }
 
-      await batch.commit();
+      await withTimeoutAndRetry(() => batch.commit());
     } catch (error) {
       console.error('Error removing event from artists:', error);
     }
@@ -744,7 +749,7 @@ export class EventService {
     const query = this.collection!.where('status', '==', 'approved');
 
     // 基本的搜尋功能（Firestore 的搜尋功能有限）
-    const snapshot = await query.get();
+    const snapshot = await withTimeoutAndRetry(() => query.get());
     let events = snapshot.docs.map(
       doc =>
         ({
@@ -796,7 +801,9 @@ export class EventService {
     }
 
     // 獲取用戶的藝人投稿（簡化查詢避免索引問題）
-    const artistsSnapshot = await db.collection('artists').where('createdBy', '==', userId).get();
+    const artistsSnapshot = await withTimeoutAndRetry(() =>
+      db!.collection('artists').where('createdBy', '==', userId).get()
+    );
 
     const artists = artistsSnapshot.docs
       .map(
@@ -809,7 +816,9 @@ export class EventService {
       .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
 
     // 獲取用戶的活動投稿（簡化查詢避免索引問題）
-    const eventsSnapshot = await this.collection!.where('createdBy', '==', userId).get();
+    const eventsSnapshot = await withTimeoutAndRetry(() =>
+      this.collection!.where('createdBy', '==', userId).get()
+    );
 
     const events = eventsSnapshot.docs
       .map(
@@ -846,7 +855,9 @@ export class EventService {
     this.checkFirebaseConfig();
     const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 
-    const expiredEvents = await this.collection!.where('datetime.end', '<', oneWeekAgo).get();
+    const expiredEvents = await withTimeoutAndRetry(() =>
+      this.collection!.where('datetime.end', '<', oneWeekAgo).get()
+    );
 
     if (!db) {
       throw new Error('Firebase 問題，請檢查環境變數');
