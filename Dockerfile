@@ -14,11 +14,9 @@ RUN npm install && \
     ls -la node_modules/@types/ | grep -E "(express|multer|cors|morgan)" && \
     echo "🔍 TypeScript version:" && npx tsc --version
 
+RUN npx tsc --version
 # 複製源碼和配置
 COPY . .
-
-# 複製本地構建結果（避免 Docker 中的 TypeScript 編譯問題）
-COPY dist ./dist
 
 # Stage 2: 生產階段
 FROM node:24-alpine AS production
