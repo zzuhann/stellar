@@ -65,5 +65,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # 使用 dumb-init 作為 PID 1，正確處理信號
 ENTRYPOINT ["dumb-init", "--"]
 
-# 啟動應用
-CMD ["node", "dist/server.js"]
+# 調試並啟動應用
+CMD ["sh", "-c", "pwd && ls -la && ls -la dist/ && npm start"]
