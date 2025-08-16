@@ -42,9 +42,7 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # 從構建階段複製構建結果
-COPY --from=builder /app/dist ./dist
-# 確保目錄結構正確
-RUN mkdir -p /app/dist/src
+COPY --from=builder /app/dist /src/dist
 
 # 複製其他必要文件
 COPY --from=builder /app/.dockerignore ./
@@ -68,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENTRYPOINT ["dumb-init", "--"]
 
 # 調試並啟動應用
-CMD ["sh", "-c", "pwd && ls -la && ls -la dist/ && npm start"]
+CMD ["sh", "-c", "echo '檢查檔案位置：' && ls -la /src/dist/src/ && npm start"]
