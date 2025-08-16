@@ -48,8 +48,18 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true, // 成功的請求不計入限制
 });
 
+// Places API 的寬鬆限制（因為地址搜尋會頻繁呼叫）
+const placesLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分鐘
+  max: 200, // 每個 IP 最多 200 次請求
+  message: { error: 'Too many places requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(limiter);
 app.use('/api/auth', authLimiter);
+app.use('/api/places', placesLimiter);
 
 // CORS 設定
 const allowedOrigins = [
