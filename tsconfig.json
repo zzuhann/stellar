@@ -3,15 +3,18 @@
     "target": "ES2020",
     "module": "commonjs",
     "outDir": "./dist",
+    "rootDir": "./",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
+    "declaration": false,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "sourceMap": false,
+    "removeComments": true
   },
-  "include": ["src/**/*", "tests/**/*", "api/**/*"],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "coverage", "tests", "**/*.test.ts", "**/*.spec.ts"]
 }
