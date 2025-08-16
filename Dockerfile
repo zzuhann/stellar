@@ -1,66 +1,16 @@
-# 多階段構建 Dockerfile for Stellar Backend
-# Stage 1: 構建階段
-FROM node:24-alpine AS builder
-
-# 設置工作目錄
+# Build 階段
+FROM node:18-alpine AS builder
 WORKDIR /app
-
-# 複製 package files
 COPY package*.json ./
-
-# 安裝所有依賴（包括 devDependencies）
-RUN npm install && \
-    echo "🔍 Verifying @types packages installation:" && \
-    ls -la node_modules/@types/ | grep -E "(express|multer|cors|morgan)" && \
-    echo "🔍 TypeScript version:" && npx tsc --version
-
-# 確保使用正確的 tsconfig
-COPY tsconfig*.json ./
-# 複製源碼和配置
+COPY tsconfig.json ./
+RUN npm install --ignore-scripts
 COPY . .
-
-# 構建 TypeScript
 RUN npm run build
 
-# Stage 2: 生產階段
-FROM node:24-alpine AS production
-
-# 安裝 dumb-init 用於正確處理信號
-RUN apk add --no-cache dumb-init
-
-# 創建非 root 用戶
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S stellar -u 1001
-
-# 設置工作目錄
+# Production 階段
+FROM node:18-alpine AS production
 WORKDIR /app
-
-# 從構建階段複製 package files
 COPY package*.json ./
-
-# 只安裝生產依賴（跳過 prepare 腳本）
-RUN npm ci --only=production --ignore-scripts && npm cache clean --force
-
-# 從構建階段複製構建結果
+RUN npm install --ignore-scripts --only=production
 COPY --from=builder /app/dist ./dist
-RUN ls -la dist/ && echo "確認編譯後的檔案結構"
-
-# 複製其他必要文件
-COPY --from=builder /app/.dockerignore ./
-
-# 設置文件權限
-RUN chown -R stellar:nodejs /app
-USER stellar
-
-# 暴露端口
-EXPOSE 8080
-
-# 設置環境變數
-ENV NODE_ENV=production
-ENV PORT=8080
-
-# 使用 dumb-init 作為 PID 1，正確處理信號
-ENTRYPOINT ["dumb-init", "--"]
-
-# 調試並啟動應用
-CMD ["sh", "-c", "echo '當前工作目錄：' && pwd && echo '目錄內容：' && ls -la && echo 'dist 目錄內容：' && ls -la dist/ && echo '開始執行應用：' && npm start"]
+CMD ["node", "dist/server.js"]
