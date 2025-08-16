@@ -11,11 +11,14 @@ COPY package*.json ./
 # 安裝所有依賴（包括 devDependencies）
 RUN npm install
 
-# 複製源碼
-COPY . .
+# 複製 TypeScript 配置
+COPY tsconfig.json ./
 
-# 構建 TypeScript
-RUN npx tsc
+# 複製源碼
+COPY src ./src
+
+# 檢查文件並構建 TypeScript
+RUN ls -la && cat tsconfig.json && npm run build
 
 # Stage 2: 生產階段
 FROM node:18-alpine AS production
