@@ -19,6 +19,9 @@ COPY tsconfig*.json ./
 # 複製源碼和配置
 COPY . .
 
+# 構建 TypeScript
+RUN npm run build
+
 # Stage 2: 生產階段
 FROM node:24-alpine AS production
 
@@ -63,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENTRYPOINT ["dumb-init", "--"]
 
 # 啟動應用
-CMD ["node", "dist/src/server.js"]
+CMD ["node", "dist/server.js"]
