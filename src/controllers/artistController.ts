@@ -109,14 +109,14 @@ export class ArtistController {
   reviewArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { status, reason } = req.body; // 加入 reason 參數
+      const { status, reason, adminUpdate } = req.body;
 
       if (!['approved', 'rejected', 'exists'].includes(status)) {
         res.status(400).json({ error: 'Invalid status' });
         return;
       }
 
-      const artist = await this.artistService.updateArtistStatus(id, status, reason);
+      const artist = await this.artistService.updateArtistStatus(id, status, reason, adminUpdate);
       res.json(artist);
     } catch (error) {
       console.error('Error reviewing artist:', error);
@@ -128,7 +128,13 @@ export class ArtistController {
   approveArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const artist = await this.artistService.updateArtistStatus(id, 'approved');
+      const { adminUpdate } = req.body; // 支援管理員更新團名
+      const artist = await this.artistService.updateArtistStatus(
+        id,
+        'approved',
+        undefined,
+        adminUpdate
+      );
       res.json(artist);
     } catch (error) {
       console.error('Error approving artist:', error);

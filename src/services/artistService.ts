@@ -5,6 +5,7 @@ import {
   UpdateArtistData,
   ArtistFilterParams,
   ArtistWithStats,
+  AdminArtistUpdate,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { NotificationHelper } from './notificationService';
@@ -127,6 +128,8 @@ export class ArtistService {
     const now = Timestamp.now();
     const newArtist = {
       stageName: artistData.stageName,
+      stageNameZh: artistData.stageNameZh || undefined,
+      groupName: artistData.groupName || undefined,
       realName: artistData.realName || undefined,
       birthday: artistData.birthday || undefined,
       profileImage: artistData.profileImage || undefined,
@@ -147,7 +150,8 @@ export class ArtistService {
   async updateArtistStatus(
     artistId: string,
     status: 'approved' | 'rejected' | 'exists',
-    reason?: string
+    reason?: string,
+    adminUpdate?: AdminArtistUpdate
   ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
@@ -171,6 +175,13 @@ export class ArtistService {
     // 如果是 approved 或 exists，清除之前的 rejectedReason
     else if (status === 'approved' || status === 'exists') {
       updateData.rejectedReason = null;
+      
+      // 如果是審核通過且有管理員更新，應用更新
+      if (adminUpdate) {
+        if (adminUpdate.groupName !== undefined) {
+          updateData.groupName = adminUpdate.groupName || undefined;
+        }
+      }
     }
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
@@ -386,6 +397,8 @@ export class ArtistService {
       artists = artists.filter(
         artist =>
           artist.stageName.toLowerCase().includes(searchTerm) ||
+          (artist.stageNameZh && artist.stageNameZh.toLowerCase().includes(searchTerm)) ||
+          (artist.groupName && artist.groupName.toLowerCase().includes(searchTerm)) ||
           (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
       );
     }

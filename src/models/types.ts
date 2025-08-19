@@ -2,7 +2,9 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 export interface Artist {
   id: string;
-  stageName: string; // 藝名（主要顯示）
+  stageName: string; // 英文藝名（主要顯示）
+  stageNameZh?: string; // 中文藝名（可選）
+  groupName?: string; // 團名（可選）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日 (YYYY-MM-DD 格式)
   profileImage?: string; // 照片 URL
@@ -109,7 +111,9 @@ export interface NotificationsResponse {
 }
 
 export interface CreateArtistData {
-  stageName: string; // 藝名（必填）
+  stageName: string; // 英文藝名（必填）
+  stageNameZh?: string; // 中文藝名（可選）
+  groupName?: string; // 團名（可選）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
@@ -117,10 +121,17 @@ export interface CreateArtistData {
 
 // 編輯藝人資料
 export interface UpdateArtistData {
-  stageName?: string; // 藝名
+  stageName?: string; // 英文藝名
+  stageNameZh?: string; // 中文藝名（可選）
+  groupName?: string; // 團名（可選）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
+}
+
+// 管理員審核時的更新資料
+export interface AdminArtistUpdate {
+  groupName?: string; // 管理員可以在審核通過時設定團名
 }
 
 // 藝人篩選參數
@@ -131,7 +142,7 @@ export interface ArtistFilterParams {
     startDate: string; // YYYY-MM-DD 格式，該週的開始日期
     endDate: string; // YYYY-MM-DD 格式，該週的結束日期
   }; // 生日週篩選
-  search?: string; // 搜尋藝名、本名
+  search?: string; // 搜尋英文藝名、中文藝名、團名、本名
   sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt'; // 排序方式
   sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }

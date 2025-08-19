@@ -3,7 +3,7 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
-RUN npm install
+RUN npm install --include=dev
 COPY . .
 RUN npm run build
 
