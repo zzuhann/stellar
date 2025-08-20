@@ -161,7 +161,7 @@ export class ArtistService {
       throw new Error('偶像不存在');
     }
 
-    const existingData = doc.data() as Artist;
+    // const existingData = doc.data() as Artist;
 
     const updateData: Record<string, any> = {
       status,
@@ -192,19 +192,19 @@ export class ArtistService {
       ...updatedDoc.data(),
     } as Artist;
 
-    // 發送通知給用戶
-    try {
-      await this.notificationHelper.notifyArtistReview(
-        existingData.createdBy,
-        existingData.stageName,
-        artistId,
-        status,
-        reason
-      );
-    } catch (notificationError) {
-      console.error('Failed to send notification:', notificationError);
-      // 不拋出錯誤，因為主要操作已成功
-    }
+    // TODO: 發送通知給用戶 (暫時移除)
+    // try {
+    //   await this.notificationHelper.notifyArtistReview(
+    //     existingData.createdBy,
+    //     existingData.stageName,
+    //     artistId,
+    //     status,
+    //     reason
+    //   );
+    // } catch (notificationError) {
+    //   console.error('Failed to send notification:', notificationError);
+    //   // 不拋出錯誤，因為主要操作已成功
+    // }
 
     // 清除相關快取
     cache.delete('artists:approved');

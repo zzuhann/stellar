@@ -548,7 +548,7 @@ export class EventService {
       throw new Error('活動不存在');
     }
 
-    const existingData = doc.data() as CoffeeEvent;
+    // const existingData = doc.data() as CoffeeEvent;
 
     const updateData: Record<string, unknown> = {
       status,
@@ -572,19 +572,19 @@ export class EventService {
       ...updatedDoc.data(),
     } as CoffeeEvent;
 
-    // 發送通知給用戶
-    try {
-      await this.notificationHelper.notifyEventReview(
-        existingData.createdBy,
-        existingData.title,
-        eventId,
-        status,
-        reason
-      );
-    } catch (notificationError) {
-      console.error('Failed to send notification:', notificationError);
-      // 不拋出錯誤，因為主要操作已成功
-    }
+    // TODO: 發送通知給用戶 (暫時移除)
+    // try {
+    //   await this.notificationHelper.notifyEventReview(
+    //     existingData.createdBy,
+    //     existingData.title,
+    //     eventId,
+    //     status,
+    //     reason
+    //   );
+    // } catch (notificationError) {
+    //   console.error('Failed to send notification:', notificationError);
+    //   // 不拋出錯誤，因為主要操作已成功
+    // }
 
     return updatedEvent;
   }
