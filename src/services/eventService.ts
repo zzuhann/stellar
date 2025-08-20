@@ -884,6 +884,14 @@ export class EventService {
     await batch.commit();
   }
 
+  // 輔助函數：將 Firestore Timestamp 轉為毫秒
+  private timestampToMillis(timestamp: Timestamp): number {
+    return (
+      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._seconds * 1000 +
+      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._nanoseconds / 1000000
+    );
+  }
+
   // 私有方法：活動排序
   private sortEvents(
     events: CoffeeEvent[],
@@ -892,7 +900,9 @@ export class EventService {
   ): CoffeeEvent[] {
     if (!sortBy) {
       // 預設按創建時間排序（最新在前）
-      return events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      return events.sort((a, b) => {
+        return this.timestampToMillis(b.createdAt) - this.timestampToMillis(a.createdAt);
+      });
     }
 
     return events.sort((a, b) => {
@@ -903,13 +913,14 @@ export class EventService {
           comparison = a.title.localeCompare(b.title);
           break;
         case 'startTime':
-          comparison = a.datetime.start.toMillis() - b.datetime.start.toMillis();
+          comparison =
+            this.timestampToMillis(a.datetime.start) - this.timestampToMillis(b.datetime.start);
           break;
         case 'createdAt':
-          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
         default:
-          comparison = b.createdAt.toMillis() - a.createdAt.toMillis();
+          comparison = this.timestampToMillis(b.createdAt) - this.timestampToMillis(a.createdAt);
       }
 
       return sortOrder === 'desc' ? -comparison : comparison;

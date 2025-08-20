@@ -519,6 +519,12 @@ export class ArtistService {
     }
   }
 
+  // 輔助函數：將 Firestore Timestamp 轉為毫秒
+  private timestampToMillis(timestamp: Timestamp): number {
+    return (timestamp as unknown as {_seconds: number, _nanoseconds: number})._seconds * 1000 + 
+           (timestamp as unknown as {_seconds: number, _nanoseconds: number})._nanoseconds / 1000000;
+  }
+
   // 私有方法：基本藝人排序
   private sortArtists(
     artists: Artist[],
@@ -538,7 +544,7 @@ export class ArtistService {
           comparison = a.stageName.localeCompare(b.stageName);
           break;
         case 'createdAt':
-          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
         case 'coffeeEventCount':
           // 基本 Artist 沒有 coffeeEventCount，預設為 0
@@ -574,7 +580,7 @@ export class ArtistService {
           comparison = a.coffeeEventCount - b.coffeeEventCount;
           break;
         case 'createdAt':
-          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
         default:
           comparison = a.stageName.localeCompare(b.stageName);
