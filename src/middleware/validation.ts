@@ -97,6 +97,8 @@ export const validateRequest = (schema: {
 export const artistSchemas = {
   create: z.object({
     stageName: z.string().min(1, '藝名為必填欄位').max(100, '藝名長度不能超過100個字元').trim(),
+    stageNameZh: z.string().max(100, '中文藝名長度不能超過100個字元').trim().optional(),
+    groupName: z.string().max(100, '團名長度不能超過100個字元').trim().optional(),
     realName: z.string().max(100, '本名長度不能超過100個字元').trim().optional(),
     birthday: z
       .string()
@@ -112,6 +114,8 @@ export const artistSchemas = {
       .max(100, '藝名長度不能超過100個字元')
       .trim()
       .optional(),
+    stageNameZh: z.string().max(100, '中文藝名長度不能超過100個字元').trim().optional(),
+    groupName: z.string().max(100, '團名長度不能超過100個字元').trim().optional(),
     realName: z.string().max(100, '本名長度不能超過100個字元').trim().optional(),
     birthday: z
       .string()

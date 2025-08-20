@@ -175,7 +175,7 @@ export class ArtistService {
     // 如果是 approved 或 exists，清除之前的 rejectedReason
     else if (status === 'approved' || status === 'exists') {
       updateData.rejectedReason = null;
-      
+
       // 如果是審核通過且有管理員更新，應用更新
       if (adminUpdate) {
         if (adminUpdate.groupName !== undefined) {
@@ -252,10 +252,21 @@ export class ArtistService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
+    // 清除相關快取
+    cache.delete('artists:approved');
+    cache.delete(`artist:${artistId}`);
+    cache.delete(`artist:${artistId}:eventCount`);
+
+    // 清除篩選和統計相關快取
+    cache.clearPattern('artists:filters:');
+    cache.clearPattern('artists:stats:');
+    cache.clearPattern('artists:status:');
+
+    // 直接構建更新後的物件，避免快取或讀取問題
     return {
-      id: updatedDoc.id,
-      ...updatedDoc.data(),
+      ...existingData,
+      ...updateData,
+      id: artistId,
     } as Artist;
   }
 
@@ -521,8 +532,10 @@ export class ArtistService {
 
   // 輔助函數：將 Firestore Timestamp 轉為毫秒
   private timestampToMillis(timestamp: Timestamp): number {
-    return (timestamp as unknown as {_seconds: number, _nanoseconds: number})._seconds * 1000 + 
-           (timestamp as unknown as {_seconds: number, _nanoseconds: number})._nanoseconds / 1000000;
+    return (
+      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._seconds * 1000 +
+      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._nanoseconds / 1000000
+    );
   }
 
   // 私有方法：基本藝人排序
