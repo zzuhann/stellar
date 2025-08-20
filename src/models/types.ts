@@ -214,6 +214,10 @@ export interface EventFilterParams {
   // 分頁參數
   page?: number; // 頁數，預設1
   limit?: number; // 每頁筆數，預設50
+
+  // 排序參數
+  sortBy?: 'title' | 'startTime' | 'createdAt'; // 排序方式
+  sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }
 
 // 活動列表回應格式

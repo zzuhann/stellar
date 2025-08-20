@@ -230,10 +230,11 @@ export class EventService {
     const filteredTotal = events.length;
     const filteredTotalPages = Math.ceil(filteredTotal / limit);
 
+    // 排序處理
+    const sortedEvents = this.sortEvents(events, filters.sortBy, filters.sortOrder);
+
     // 分頁處理
-    const finalPaginatedEvents = events
-      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // 按時間排序
-      .slice(skip, skip + limit);
+    const finalPaginatedEvents = sortedEvents.slice(skip, skip + limit);
 
     const result = {
       events: finalPaginatedEvents,
@@ -881,5 +882,37 @@ export class EventService {
     });
 
     await batch.commit();
+  }
+
+  // 私有方法：活動排序
+  private sortEvents(
+    events: CoffeeEvent[],
+    sortBy?: 'title' | 'startTime' | 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): CoffeeEvent[] {
+    if (!sortBy) {
+      // 預設按創建時間排序（最新在前）
+      return events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    }
+
+    return events.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'startTime':
+          comparison = a.datetime.start.toMillis() - b.datetime.start.toMillis();
+          break;
+        case 'createdAt':
+          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          break;
+        default:
+          comparison = b.createdAt.toMillis() - a.createdAt.toMillis();
+      }
+
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
   }
 }

@@ -21,6 +21,8 @@ export class EventController {
         createdBy: req.query.createdBy as string,
         page: req.query.page ? parseInt(req.query.page as string) : undefined,
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+        sortBy: req.query.sortBy as 'title' | 'startTime' | 'createdAt' | undefined,
+        sortOrder: req.query.sortOrder as 'asc' | 'desc' | undefined,
       };
 
       // 檢查權限：用戶只能查看自己的投稿或公開的資料

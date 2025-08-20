@@ -403,8 +403,8 @@ export class ArtistService {
       );
     }
 
-    // 排序（基本方法暫時保持藝名排序）
-    const sortedArtists = artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+    // 排序處理
+    const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
 
     // 設定 30 分鐘快取
     cache.set(cacheKey, sortedArtists, 30);
@@ -517,6 +517,39 @@ export class ArtistService {
       console.error('Error counting active events for artist:', error);
       return 0;
     }
+  }
+
+  // 私有方法：基本藝人排序
+  private sortArtists(
+    artists: Artist[],
+    sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): Artist[] {
+    if (!sortBy) {
+      // 預設按藝名排序
+      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+    }
+
+    return artists.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'stageName':
+          comparison = a.stageName.localeCompare(b.stageName);
+          break;
+        case 'createdAt':
+          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          break;
+        case 'coffeeEventCount':
+          // 基本 Artist 沒有 coffeeEventCount，預設為 0
+          comparison = 0;
+          break;
+        default:
+          comparison = a.stageName.localeCompare(b.stageName);
+      }
+
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
   }
 
   // 私有方法：帶統計資料的藝人排序
