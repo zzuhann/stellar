@@ -98,13 +98,18 @@ export class ArtistService {
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
 
-    const artists = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as Artist
-    );
+    const artists = snapshot.docs.map(doc => {
+      const data = doc.data();
+      // 處理向後兼容：如果有舊的 groupName，轉換為 groupNames
+      if (data.groupName && !data.groupNames) {
+        data.groupNames = [data.groupName];
+        delete data.groupName;
+      }
+      return ({
+        id: doc.id,
+        ...data,
+      }) as Artist;
+    });
 
     // 根據狀態決定排序方式
     let result: Artist[];
@@ -129,7 +134,7 @@ export class ArtistService {
     const newArtist = {
       stageName: artistData.stageName,
       stageNameZh: artistData.stageNameZh || undefined,
-      groupName: artistData.groupName || undefined,
+      groupNames: artistData.groupNames && artistData.groupNames.length > 0 ? artistData.groupNames : undefined,
       realName: artistData.realName || undefined,
       birthday: artistData.birthday || undefined,
       profileImage: artistData.profileImage || undefined,
@@ -178,8 +183,8 @@ export class ArtistService {
 
       // 如果是審核通過且有管理員更新，應用更新
       if (adminUpdate) {
-        if (adminUpdate.groupName !== undefined) {
-          updateData.groupName = adminUpdate.groupName || undefined;
+        if (adminUpdate.groupNames !== undefined) {
+          updateData.groupNames = adminUpdate.groupNames && adminUpdate.groupNames.length > 0 ? adminUpdate.groupNames : undefined;
         }
       }
     }
@@ -389,13 +394,18 @@ export class ArtistService {
     }
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
-    let artists = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as Artist
-    );
+    let artists = snapshot.docs.map(doc => {
+      const data = doc.data();
+      // 處理向後兼容：如果有舊的 groupName，轉換為 groupNames
+      if (data.groupName && !data.groupNames) {
+        data.groupNames = [data.groupName];
+        delete data.groupName;
+      }
+      return ({
+        id: doc.id,
+        ...data,
+      }) as Artist;
+    });
 
     // 生日週篩選（在記憶體中處理）
     if (filters.birthdayWeek) {
@@ -409,7 +419,7 @@ export class ArtistService {
         artist =>
           artist.stageName.toLowerCase().includes(searchTerm) ||
           (artist.stageNameZh && artist.stageNameZh.toLowerCase().includes(searchTerm)) ||
-          (artist.groupName && artist.groupName.toLowerCase().includes(searchTerm)) ||
+          (artist.groupNames && artist.groupNames.some(name => name.toLowerCase().includes(searchTerm))) ||
           (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
       );
     }

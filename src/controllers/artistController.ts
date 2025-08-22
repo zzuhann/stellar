@@ -80,7 +80,7 @@ export class ArtistController {
   // 新增藝人
   createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { stageName, stageNameZh, groupName, realName, birthday, profileImage } = req.body;
+      const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
       const userId = req.user!.uid;
 
       if (!stageName) {
@@ -92,7 +92,7 @@ export class ArtistController {
         {
           stageName,
           stageNameZh,
-          groupName,
+          groupNames,
           realName,
           birthday,
           profileImage,
@@ -179,7 +179,7 @@ export class ArtistController {
   updateArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { stageName, stageNameZh, groupName, realName, birthday, profileImage } = req.body;
+      const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
       const userId = req.user!.uid;
 
       const artist = await this.artistService.updateArtist(
@@ -187,7 +187,7 @@ export class ArtistController {
         {
           stageName,
           stageNameZh,
-          groupName,
+          groupNames,
           realName,
           birthday,
           profileImage,

@@ -4,7 +4,7 @@ export interface Artist {
   id: string;
   stageName: string; // 英文藝名（主要顯示）
   stageNameZh?: string; // 中文藝名（可選）
-  groupName?: string; // 團名（可選）
+  groupNames?: string[]; // 團名列表（可選，最多5個）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日 (YYYY-MM-DD 格式)
   profileImage?: string; // 照片 URL
@@ -113,7 +113,7 @@ export interface NotificationsResponse {
 export interface CreateArtistData {
   stageName: string; // 英文藝名（必填）
   stageNameZh?: string; // 中文藝名（可選）
-  groupName?: string; // 團名（可選）
+  groupNames?: string[]; // 團名列表（可選，最多5個）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
@@ -123,7 +123,7 @@ export interface CreateArtistData {
 export interface UpdateArtistData {
   stageName?: string; // 英文藝名
   stageNameZh?: string; // 中文藝名（可選）
-  groupName?: string; // 團名（可選）
+  groupNames?: string[]; // 團名列表（可選，最多5個）
   realName?: string; // 本名（可選）
   birthday?: string; // 生日（可選，YYYY-MM-DD）
   profileImage?: string; // 照片 URL（可選）
@@ -131,7 +131,7 @@ export interface UpdateArtistData {
 
 // 管理員審核時的更新資料
 export interface AdminArtistUpdate {
-  groupName?: string; // 管理員可以在審核通過時設定團名
+  groupNames?: string[]; // 管理員可以在審核通過時設定團名列表
 }
 
 // 藝人篩選參數
