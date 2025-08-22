@@ -209,20 +209,15 @@ export class ArtistController {
     try {
       const { id } = req.params;
       const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
-      const userId = req.user!.uid;
 
-      const artist = await this.artistService.updateArtist(
-        id,
-        {
-          stageName,
-          stageNameZh,
-          groupNames,
-          realName,
-          birthday,
-          profileImage,
-        },
-        userId
-      );
+      const artist = await this.artistService.updateArtist(id, {
+        stageName,
+        stageNameZh,
+        groupNames,
+        realName,
+        birthday,
+        profileImage,
+      });
 
       res.json(artist);
     } catch (error) {
@@ -236,9 +231,8 @@ export class ArtistController {
   resubmitArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const userId = req.user!.uid;
 
-      const artist = await this.artistService.resubmitArtist(id, userId);
+      const artist = await this.artistService.resubmitArtist(id);
       res.json(artist);
     } catch (error) {
       console.error('Error resubmitting artist:', error);
