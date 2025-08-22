@@ -191,6 +191,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
     // 只返回更新的欄位，前端已有完整資料
     return {
@@ -238,6 +239,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人資料改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    // 注意：藝人資料改變不會影響統計結果，所以不需要清除統計快取
 
     // 返回更新的欄位和 ID
     return {
@@ -301,6 +303,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
     // 清除相關藝人的個別快取
     for (const artistId of artistIds) {
@@ -350,6 +353,16 @@ export class ArtistService {
     };
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
+
+    // 清除相關快取
+    cache.delete('artists:approved');
+    cache.delete('artists:pending');
+    cache.delete(`artist:${artistId}`);
+    // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
+    cache.clearPattern('artists:filters:');
+    // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
+    cache.clearPattern('artists:status:');
+    // 注意：resubmit 不會影響已審核藝人的統計，所以不需要清除統計快取
 
     return {
       id: artistId,
@@ -483,22 +496,14 @@ export class ArtistService {
     // 先取得藝人列表
     const artists = await this.getArtistsWithFilters(filters);
 
-    // 為每個藝人計算生咖數量
-    const artistsWithStats: ArtistWithStats[] = [];
-
-    for (const artist of artists) {
-      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id, artist);
-      artistsWithStats.push({
-        ...artist,
-        coffeeEventCount,
-      });
-    }
+    // 批次計算所有藝人的生咖數量
+    const artistsWithStats = await this.batchGetActiveEventCounts(artists);
 
     // 套用排序
     const result = this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
 
-    // 設定 10 分鐘快取
-    cache.set(cacheKey, result, 10);
+    // 設定 30 分鐘快取
+    cache.set(cacheKey, result, 30);
 
     return result;
   }
@@ -520,7 +525,93 @@ export class ArtistService {
     });
   }
 
-  // 私有方法：計算藝人的進行中活動數量
+  // 私有方法：批次計算所有藝人的進行中活動數量
+  private async batchGetActiveEventCounts(artists: Artist[]): Promise<ArtistWithStats[]> {
+    if (!db || artists.length === 0) {
+      return artists.map(artist => ({ ...artist, coffeeEventCount: 0 }));
+    }
+
+    // 使用預計算的統計資料，避免 N+1 查詢
+    const artistsWithStats: ArtistWithStats[] = [];
+
+    try {
+      // 一次性查詢所有藝人的統計資料
+      const artistIds = artists.map(artist => artist.id);
+      const statsMap = await this.getArtistStatsBatch(artistIds);
+
+      for (const artist of artists) {
+        artistsWithStats.push({
+          ...artist,
+          coffeeEventCount: statsMap.get(artist.id) || 0,
+        });
+      }
+
+      return artistsWithStats;
+    } catch (error) {
+      console.error('Error in batch getting artist stats:', error);
+      // 如果批次查詢失敗，回退到個別查詢
+      return this.fallbackToIndividualQueries(artists);
+    }
+  }
+
+  // 私有方法：批次取得藝人統計資料
+  private async getArtistStatsBatch(artistIds: string[]): Promise<Map<string, number>> {
+    const statsMap = new Map<string, number>();
+    artistIds.forEach(id => statsMap.set(id, 0));
+
+    if (!db) return statsMap;
+
+    try {
+      // 使用複合索引查詢已審核且未結束的活動
+      const now = Timestamp.now();
+      const eventsSnapshot = await withTimeoutAndRetry(() =>
+        db!
+          .collection('coffeeEvents')
+          .where('status', '==', 'approved')
+          .where('datetime.end', '>', now)
+          .get()
+      );
+
+      const artistIdSet = new Set(artistIds);
+
+      // 計算每個藝人的活動數量
+      eventsSnapshot.docs.forEach(doc => {
+        const eventData = doc.data();
+
+        // 檢查活動是否包含這些藝人
+        if (eventData.artists && Array.isArray(eventData.artists)) {
+          eventData.artists.forEach((eventArtist: { id: string }) => {
+            if (artistIdSet.has(eventArtist.id)) {
+              const currentCount = statsMap.get(eventArtist.id) || 0;
+              statsMap.set(eventArtist.id, currentCount + 1);
+            }
+          });
+        }
+      });
+
+      return statsMap;
+    } catch (error) {
+      console.error('Error getting artist stats batch:', error);
+      return statsMap;
+    }
+  }
+
+  // 私有方法：回退到個別查詢（當批次查詢失敗時）
+  private async fallbackToIndividualQueries(artists: Artist[]): Promise<ArtistWithStats[]> {
+    const artistsWithStats: ArtistWithStats[] = [];
+
+    for (const artist of artists) {
+      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id, artist);
+      artistsWithStats.push({
+        ...artist,
+        coffeeEventCount,
+      });
+    }
+
+    return artistsWithStats;
+  }
+
+  // 私有方法：計算單個藝人的進行中活動數量
   private async getActiveEventCountForArtist(artistId: string, artistData?: any): Promise<number> {
     if (!db) {
       return 0;
@@ -574,8 +665,8 @@ export class ArtistService {
 
       const count = activeEvents.length;
 
-      // 設定 2 分鐘快取
-      cache.set(cacheKey, count, 2);
+      // 設定 10 分鐘快取
+      cache.set(cacheKey, count, 10);
 
       return count;
     } catch (error) {

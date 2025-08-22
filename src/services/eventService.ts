@@ -712,9 +712,7 @@ export class EventService {
       });
     }
 
-    // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
-    // 重新送審時也需要清除統計快取，因為事件狀態會改變
-    cache.clearPattern('artists:stats:');
+    // 注意：重新送審活動不會影響已審核活動的統計，所以不需要清除統計快取
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
