@@ -98,18 +98,13 @@ export class ArtistService {
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
 
-    const artists = snapshot.docs.map(doc => {
-      const data = doc.data();
-      // 處理向後兼容：如果有舊的 groupName，轉換為 groupNames
-      if (data.groupName && !data.groupNames) {
-        data.groupNames = [data.groupName];
-        delete data.groupName;
-      }
-      return {
-        id: doc.id,
-        ...data,
-      } as Artist;
-    });
+    const artists = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
 
     // 根據狀態決定排序方式
     let result: Artist[];
@@ -177,26 +172,26 @@ export class ArtistService {
     else if (status === 'approved' || status === 'exists') {
       updateData.rejectedReason = null;
 
-      // 如果是審核通過且有管理員更新，應用更新
-      if (adminUpdate) {
-        if (adminUpdate.groupNames !== undefined) {
-          updateData.groupNames =
-            adminUpdate.groupNames && adminUpdate.groupNames.length > 0
-              ? adminUpdate.groupNames
-              : undefined;
-        }
+      // 如果是審核通過且有管理員更新團名，應用更新
+      if (adminUpdate?.groupNames !== undefined) {
+        updateData.groupNames =
+          adminUpdate.groupNames && adminUpdate.groupNames.length > 0
+            ? adminUpdate.groupNames
+            : undefined;
       }
     }
 
-    // 直接更新，不檢查存在性
+    // 直接更新，前端已處理存在性和權限檢查
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 只清除特定快取，保留其他快取
+    // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
-    cache.delete(`artist:${artistId}:eventCount`);
+    cache.clearPattern('artists:filters:');
+    cache.clearPattern('artists:stats:');
+    cache.clearPattern('artists:status:');
 
-    // 返回更新資料，不重新讀取
+    // 只返回更新的欄位，前端已有完整資料
     return {
       id: artistId,
       ...updateData,
@@ -204,48 +199,30 @@ export class ArtistService {
   }
 
   // 編輯藝人資料
-  async updateArtist(
-    artistId: string,
-    artistData: UpdateArtistData,
-    userId: string
-  ): Promise<Artist> {
+  async updateArtist(artistId: string, artistData: UpdateArtistData): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await withTimeoutAndRetry(() => docRef.get());
-
-    if (!doc.exists) {
-      throw new Error('偶像不存在');
-    }
-
-    const existingData = doc.data() as Artist;
-
-    // 檢查權限：只有創建者可以編輯
-    if (existingData.createdBy !== userId) {
-      throw new Error('權限不足: 只能編輯自己的投稿');
-    }
-
-    // 檢查狀態：只有 pending 和 rejected 狀態可以編輯
-    if (!['pending', 'rejected'].includes(existingData.status)) {
-      throw new Error('只能編輯待審核或已拒絕的投稿');
-    }
 
     const updateData: Record<string, any> = {
       ...artistData,
       updatedAt: Timestamp.now(),
     };
 
+    // 直接更新，前端已處理權限和狀態檢查
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 只清除特定快取，保留其他快取
+    // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
-    cache.delete(`artist:${artistId}:eventCount`);
+    cache.clearPattern('artists:filters:');
+    cache.clearPattern('artists:stats:');
+    cache.clearPattern('artists:status:');
 
-    // 直接構建更新後的物件，避免快取或讀取問題
+    // 由於沒有讀取現有資料，返回更新的欄位和 ID
+    // 前端應該已經有完整的藝人資料
     return {
-      ...existingData,
-      ...updateData,
       id: artistId,
+      ...updateData,
     } as Artist;
   }
 
@@ -264,86 +241,67 @@ export class ArtistService {
 
     // 使用 Firestore 的 batch 操作
     const batch = db!.batch();
-    const results: Artist[] = [];
 
+    const updateData: Record<string, any> = {
+      status,
+      updatedAt: Timestamp.now(),
+    };
+
+    // 如果是 rejected 且有提供 reason，則加入 rejectedReason
+    if (status === 'rejected' && reason) {
+      updateData.rejectedReason = reason;
+    }
+    // 如果是 approved 或 exists，清除之前的 rejectedReason
+    else if (status === 'approved' || status === 'exists') {
+      updateData.rejectedReason = null;
+
+      // 如果是審核通過且有管理員更新團名，應用更新
+      if (adminUpdate?.groupNames !== undefined) {
+        updateData.groupNames =
+          adminUpdate.groupNames && adminUpdate.groupNames.length > 0
+            ? adminUpdate.groupNames
+            : undefined;
+      }
+    }
+
+    // 批次更新所有藝人，前端已處理存在性檢查
     for (const artistId of artistIds) {
       const docRef = this.collection!.doc(artistId);
-
-      const updateData: Record<string, any> = {
-        status,
-        updatedAt: Timestamp.now(),
-      };
-
-      // 如果是 rejected 且有提供 reason，則加入 rejectedReason
-      if (status === 'rejected' && reason) {
-        updateData.rejectedReason = reason;
-      }
-      // 如果是 approved 或 exists，清除之前的 rejectedReason
-      else if (status === 'approved' || status === 'exists') {
-        updateData.rejectedReason = null;
-
-        // 如果是審核通過且有管理員更新，應用更新
-        if (adminUpdate) {
-          if (adminUpdate.groupNames !== undefined) {
-            updateData.groupNames =
-              adminUpdate.groupNames && adminUpdate.groupNames.length > 0
-                ? adminUpdate.groupNames
-                : undefined;
-          }
-        }
-      }
-
       batch.update(docRef, updateData);
-
-      results.push({
-        id: artistId,
-        ...updateData,
-      } as Artist);
     }
 
     // 執行批次操作
     await withTimeoutAndRetry(() => batch.commit());
 
-    // 批次清除快取
+    // 清除相關快取
     cache.delete('artists:approved');
     cache.delete('artists:pending');
     cache.delete('artists:rejected');
+    cache.clearPattern('artists:filters:');
+    cache.clearPattern('artists:stats:');
+    cache.clearPattern('artists:status:');
 
-    // 清除相關藝人的快取
+    // 清除相關藝人的個別快取
     for (const artistId of artistIds) {
       cache.delete(`artist:${artistId}`);
-      cache.delete(`artist:${artistId}:eventCount`);
     }
+
+    // 只返回更新的欄位，前端已有完整資料
+    const results: Artist[] = artistIds.map(
+      artistId =>
+        ({
+          id: artistId,
+          ...updateData,
+        }) as Artist
+    );
 
     return results;
   }
 
   // 重新送審功能
-  async resubmitArtist(artistId: string, userId: string): Promise<Artist> {
+  async resubmitArtist(artistId: string): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await withTimeoutAndRetry(() => docRef.get());
-
-    if (!doc.exists) {
-      throw new Error('偶像不存在');
-    }
-
-    const existingData = doc.data() as Artist;
-
-    // 檢查權限：只有創建者可以重新送審
-    if (existingData.createdBy !== userId) {
-      throw new Error('權限不足: 只能重新送審自己的投稿');
-    }
-
-    // 檢查狀態：不能重新送審已存在狀態的藝人
-    if (existingData.status === 'exists') {
-      throw new Error('無法重新送審已通過審核的偶像');
-    }
-
-    // 只有 rejected 狀態可以重新送審
-    if (existingData.status !== 'rejected') {
-      throw new Error('只能重新送審已拒絕的投稿');
-    }
 
     const updateData = {
       status: 'pending' as const,
@@ -439,11 +397,6 @@ export class ArtistService {
     const snapshot = await withTimeoutAndRetry(() => query.get());
     let artists = snapshot.docs.map(doc => {
       const data = doc.data();
-      // 處理向後兼容：如果有舊的 groupName，轉換為 groupNames
-      if (data.groupName && !data.groupNames) {
-        data.groupNames = [data.groupName];
-        delete data.groupName;
-      }
       return {
         id: doc.id,
         ...data,
