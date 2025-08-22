@@ -199,16 +199,30 @@ export class ArtistService {
   }
 
   // 編輯藝人資料
-  async updateArtist(artistId: string, artistData: UpdateArtistData): Promise<Artist> {
+  async updateArtist(artistId: string, artistData: UpdateArtistData, userId: string, userRole: string): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
+
+    // 讀取一次檢查存在性和權限
+    const doc = await withTimeoutAndRetry(() => docRef.get());
+
+    if (!doc.exists) {
+      throw new Error('藝人不存在');
+    }
+
+    const existingData = doc.data();
+
+    // 檢查權限：管理員可以編輯任何藝人，一般用戶只能編輯自己的投稿
+    if (userRole !== 'admin' && existingData?.createdBy !== userId) {
+      throw new Error('權限不足');
+    }
 
     const updateData: Record<string, any> = {
       ...artistData,
       updatedAt: Timestamp.now(),
     };
 
-    // 直接更新，前端已處理權限和狀態檢查
+    // 直接更新
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
     // 清除相關快取
@@ -218,8 +232,7 @@ export class ArtistService {
     cache.clearPattern('artists:stats:');
     cache.clearPattern('artists:status:');
 
-    // 由於沒有讀取現有資料，返回更新的欄位和 ID
-    // 前端應該已經有完整的藝人資料
+    // 返回更新的欄位和 ID
     return {
       id: artistId,
       ...updateData,
@@ -299,9 +312,28 @@ export class ArtistService {
   }
 
   // 重新送審功能
-  async resubmitArtist(artistId: string): Promise<Artist> {
+  async resubmitArtist(artistId: string, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
+
+    // 讀取一次檢查存在性、權限和狀態
+    const doc = await withTimeoutAndRetry(() => docRef.get());
+
+    if (!doc.exists) {
+      throw new Error('藝人不存在');
+    }
+
+    const existingData = doc.data();
+
+    // 檢查權限：只有創建者可以重新送審
+    if (existingData?.createdBy !== userId) {
+      throw new Error('權限不足: 只能重新送審自己的投稿');
+    }
+
+    // 只有 rejected 狀態可以重新送審
+    if (existingData?.status !== 'rejected') {
+      throw new Error('只能重新送審已拒絕的藝人');
+    }
 
     const updateData = {
       status: 'pending' as const,
@@ -311,10 +343,10 @@ export class ArtistService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
-      id: updatedDoc.id,
-      ...updatedDoc.data(),
+      id: artistId,
+      ...existingData,
+      ...updateData,
     } as Artist;
   }
 
