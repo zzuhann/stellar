@@ -105,10 +105,10 @@ export class ArtistService {
         data.groupNames = [data.groupName];
         delete data.groupName;
       }
-      return ({
+      return {
         id: doc.id,
         ...data,
-      }) as Artist;
+      } as Artist;
     });
 
     // 根據狀態決定排序方式
@@ -134,7 +134,10 @@ export class ArtistService {
     const newArtist = {
       stageName: artistData.stageName,
       stageNameZh: artistData.stageNameZh || undefined,
-      groupNames: artistData.groupNames && artistData.groupNames.length > 0 ? artistData.groupNames : undefined,
+      groupNames:
+        artistData.groupNames && artistData.groupNames.length > 0
+          ? artistData.groupNames
+          : undefined,
       realName: artistData.realName || undefined,
       birthday: artistData.birthday || undefined,
       profileImage: artistData.profileImage || undefined,
@@ -160,13 +163,6 @@ export class ArtistService {
   ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
-    const doc = await withTimeoutAndRetry(() => docRef.get());
-
-    if (!doc.exists) {
-      throw new Error('偶像不存在');
-    }
-
-    // const existingData = doc.data() as Artist;
 
     const updateData: Record<string, any> = {
       status,
@@ -184,44 +180,27 @@ export class ArtistService {
       // 如果是審核通過且有管理員更新，應用更新
       if (adminUpdate) {
         if (adminUpdate.groupNames !== undefined) {
-          updateData.groupNames = adminUpdate.groupNames && adminUpdate.groupNames.length > 0 ? adminUpdate.groupNames : undefined;
+          updateData.groupNames =
+            adminUpdate.groupNames && adminUpdate.groupNames.length > 0
+              ? adminUpdate.groupNames
+              : undefined;
         }
       }
     }
 
+    // 直接更新，不檢查存在性
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
-    const updatedArtist = {
-      id: updatedDoc.id,
-      ...updatedDoc.data(),
-    } as Artist;
-
-    // TODO: 發送通知給用戶 (暫時移除)
-    // try {
-    //   await this.notificationHelper.notifyArtistReview(
-    //     existingData.createdBy,
-    //     existingData.stageName,
-    //     artistId,
-    //     status,
-    //     reason
-    //   );
-    // } catch (notificationError) {
-    //   console.error('Failed to send notification:', notificationError);
-    //   // 不拋出錯誤，因為主要操作已成功
-    // }
-
-    // 清除相關快取
+    // 只清除特定快取，保留其他快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
     cache.delete(`artist:${artistId}:eventCount`);
 
-    // 清除篩選和統計相關快取
-    cache.clearPattern('artists:filters:');
-    cache.clearPattern('artists:stats:');
-    cache.clearPattern('artists:status:');
-
-    return updatedArtist;
+    // 返回更新資料，不重新讀取
+    return {
+      id: artistId,
+      ...updateData,
+    } as Artist;
   }
 
   // 編輯藝人資料
@@ -257,15 +236,10 @@ export class ArtistService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 清除相關快取
+    // 只清除特定快取，保留其他快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
     cache.delete(`artist:${artistId}:eventCount`);
-
-    // 清除篩選和統計相關快取
-    cache.clearPattern('artists:filters:');
-    cache.clearPattern('artists:stats:');
-    cache.clearPattern('artists:status:');
 
     // 直接構建更新後的物件，避免快取或讀取問題
     return {
@@ -273,6 +247,75 @@ export class ArtistService {
       ...updateData,
       id: artistId,
     } as Artist;
+  }
+
+  // 批次審核藝人
+  async batchUpdateArtistStatus(
+    artistIds: string[],
+    status: 'approved' | 'rejected' | 'exists',
+    reason?: string,
+    adminUpdate?: AdminArtistUpdate
+  ): Promise<Artist[]> {
+    this.checkFirebaseConfig();
+
+    if (artistIds.length === 0) {
+      return [];
+    }
+
+    // 使用 Firestore 的 batch 操作
+    const batch = db!.batch();
+    const results: Artist[] = [];
+
+    for (const artistId of artistIds) {
+      const docRef = this.collection!.doc(artistId);
+
+      const updateData: Record<string, any> = {
+        status,
+        updatedAt: Timestamp.now(),
+      };
+
+      // 如果是 rejected 且有提供 reason，則加入 rejectedReason
+      if (status === 'rejected' && reason) {
+        updateData.rejectedReason = reason;
+      }
+      // 如果是 approved 或 exists，清除之前的 rejectedReason
+      else if (status === 'approved' || status === 'exists') {
+        updateData.rejectedReason = null;
+
+        // 如果是審核通過且有管理員更新，應用更新
+        if (adminUpdate) {
+          if (adminUpdate.groupNames !== undefined) {
+            updateData.groupNames =
+              adminUpdate.groupNames && adminUpdate.groupNames.length > 0
+                ? adminUpdate.groupNames
+                : undefined;
+          }
+        }
+      }
+
+      batch.update(docRef, updateData);
+
+      results.push({
+        id: artistId,
+        ...updateData,
+      } as Artist);
+    }
+
+    // 執行批次操作
+    await withTimeoutAndRetry(() => batch.commit());
+
+    // 批次清除快取
+    cache.delete('artists:approved');
+    cache.delete('artists:pending');
+    cache.delete('artists:rejected');
+
+    // 清除相關藝人的快取
+    for (const artistId of artistIds) {
+      cache.delete(`artist:${artistId}`);
+      cache.delete(`artist:${artistId}:eventCount`);
+    }
+
+    return results;
   }
 
   // 重新送審功能
@@ -401,10 +444,10 @@ export class ArtistService {
         data.groupNames = [data.groupName];
         delete data.groupName;
       }
-      return ({
+      return {
         id: doc.id,
         ...data,
-      }) as Artist;
+      } as Artist;
     });
 
     // 生日週篩選（在記憶體中處理）
@@ -419,7 +462,8 @@ export class ArtistService {
         artist =>
           artist.stageName.toLowerCase().includes(searchTerm) ||
           (artist.stageNameZh && artist.stageNameZh.toLowerCase().includes(searchTerm)) ||
-          (artist.groupNames && artist.groupNames.some(name => name.toLowerCase().includes(searchTerm))) ||
+          (artist.groupNames &&
+            artist.groupNames.some(name => name.toLowerCase().includes(searchTerm))) ||
           (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
       );
     }
@@ -450,7 +494,7 @@ export class ArtistService {
     const artistsWithStats: ArtistWithStats[] = [];
 
     for (const artist of artists) {
-      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id);
+      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id, artist);
       artistsWithStats.push({
         ...artist,
         coffeeEventCount,
@@ -460,8 +504,8 @@ export class ArtistService {
     // 套用排序
     const result = this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
 
-    // 設定 3 分鐘快取
-    cache.set(cacheKey, result, 3);
+    // 設定 10 分鐘快取
+    cache.set(cacheKey, result, 10);
 
     return result;
   }
@@ -484,7 +528,7 @@ export class ArtistService {
   }
 
   // 私有方法：計算藝人的進行中活動數量
-  private async getActiveEventCountForArtist(artistId: string): Promise<number> {
+  private async getActiveEventCountForArtist(artistId: string, artistData?: any): Promise<number> {
     if (!db) {
       return 0;
     }
@@ -498,14 +542,21 @@ export class ArtistService {
     const now = Timestamp.now();
 
     try {
-      // 先取得 artist 的 activeEventIds
-      const artistDoc = await withTimeoutAndRetry(() =>
-        db!.collection('artists').doc(artistId).get()
-      );
-      const artistData = artistDoc.data();
-      const activeEventIds = artistData?.activeEventIds || [];
+      // 如果沒有傳入 artistData，才去讀取
+      let activeEventIds: string[] = [];
+      if (artistData) {
+        activeEventIds = artistData.activeEventIds || [];
+      } else {
+        const artistDoc = await withTimeoutAndRetry(() =>
+          db!.collection('artists').doc(artistId).get()
+        );
+        const data = artistDoc.data();
+        activeEventIds = data?.activeEventIds || [];
+      }
 
       if (activeEventIds.length === 0) {
+        // 快取 0 結果，避免重複查詢
+        cache.set(cacheKey, 0, 10); // 10 分鐘快取
         return 0;
       }
 
@@ -530,8 +581,8 @@ export class ArtistService {
 
       const count = activeEvents.length;
 
-      // 設定 1 分鐘快取
-      cache.set(cacheKey, count, 1);
+      // 設定 2 分鐘快取
+      cache.set(cacheKey, count, 2);
 
       return count;
     } catch (error) {

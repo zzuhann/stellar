@@ -144,6 +144,35 @@ export class ArtistController {
     }
   };
 
+  // 批次審核藝人（僅管理員）
+  batchReviewArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { artistIds, status, reason, adminUpdate } = req.body;
+
+      if (!Array.isArray(artistIds) || artistIds.length === 0) {
+        res.status(400).json({ error: 'Artist IDs array is required' });
+        return;
+      }
+
+      if (!['approved', 'rejected', 'exists'].includes(status)) {
+        res.status(400).json({ error: 'Invalid status' });
+        return;
+      }
+
+      const artists = await this.artistService.batchUpdateArtistStatus(
+        artistIds,
+        status,
+        reason,
+        adminUpdate
+      );
+
+      res.json(artists);
+    } catch (error) {
+      console.error('Error batch reviewing artists:', error);
+      res.status(500).json({ error: 'Failed to batch review artists' });
+    }
+  };
+
   // 拒絕藝人（僅管理員）
   rejectArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
