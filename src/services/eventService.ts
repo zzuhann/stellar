@@ -367,6 +367,12 @@ export class EventService {
     // 套用視窗篩選
     if (viewBounds) {
       events = events.filter(event => {
+        // 檢查座標是否存在且有效
+        if (!event.location?.coordinates?.lat || !event.location?.coordinates?.lng) {
+          console.warn(`Event ${event.id} missing coordinates:`, event.location);
+          return false; // 排除缺少座標的活動
+        }
+
         const lat = event.location.coordinates.lat;
         const lng = event.location.coordinates.lng;
         return (
@@ -379,18 +385,23 @@ export class EventService {
     }
 
     // 轉換為地圖格式
-    const mapEvents = events.map(event => {
-      return {
-        id: event.id,
-        title: event.title,
-        mainImage: event.mainImage,
-        location: event.location, // 完整的 location 物件
-        datetime: {
-          start: event.datetime.start.toDate().toISOString(),
-          end: event.datetime.end.toDate().toISOString(),
-        },
-      };
-    });
+    const mapEvents = events
+      .filter(event => {
+        // 確保活動有完整的座標資料
+        return event.location?.coordinates?.lat && event.location?.coordinates?.lng;
+      })
+      .map(event => {
+        return {
+          id: event.id,
+          title: event.title,
+          mainImage: event.mainImage,
+          location: event.location, // 完整的 location 物件
+          datetime: {
+            start: event.datetime.start.toDate().toISOString(),
+            end: event.datetime.end.toDate().toISOString(),
+          },
+        };
+      });
 
     const result = {
       events: mapEvents,
@@ -457,6 +468,11 @@ export class EventService {
       });
     }
 
+    // 驗證座標資料
+    if (!eventData.location?.coordinates?.lat || !eventData.location?.coordinates?.lng) {
+      throw new Error('活動地點必須包含有效的座標資料');
+    }
+
     const now = Timestamp.now();
     const newEvent = {
       artists: artists,
@@ -477,6 +493,18 @@ export class EventService {
     };
 
     const docRef = await withTimeoutAndRetry(() => this.collection.add(newEvent));
+
+    // 清除相關快取（新增事件會影響藝人的活動統計）
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+
+    // 清除相關 artists 的 eventCount 快取
+    eventData.artistIds.forEach((artistId: string) => {
+      cache.delete(`artist:${artistId}:eventCount`);
+    });
+
+    // 清除 artists 統計快取（因為新增事件會影響藝人的活動數量）
+    cache.clearPattern('artists:stats:');
 
     return {
       id: docRef.id,
@@ -513,7 +541,13 @@ export class EventService {
     // 只更新提供的欄位
     if (updateData.title !== undefined) updates.title = updateData.title;
     if (updateData.description !== undefined) updates.description = updateData.description;
-    if (updateData.location !== undefined) updates.location = updateData.location;
+    if (updateData.location !== undefined) {
+      // 驗證座標資料
+      if (!updateData.location?.coordinates?.lat || !updateData.location?.coordinates?.lng) {
+        throw new Error('活動地點必須包含有效的座標資料');
+      }
+      updates.location = updateData.location;
+    }
     if (updateData.socialMedia !== undefined) updates.socialMedia = updateData.socialMedia;
     if (updateData.mainImage !== undefined) updates.mainImage = updateData.mainImage;
     if (updateData.detailImage !== undefined) updates.detailImage = updateData.detailImage;
@@ -527,6 +561,20 @@ export class EventService {
     }
 
     await withTimeoutAndRetry(() => docRef.update(updates));
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+    cache.delete(`event:${eventId}`);
+
+    // 清除相關藝人的統計快取（編輯事件可能會影響藝人的活動統計）
+    if (eventData?.artists && Array.isArray(eventData.artists)) {
+      eventData.artists.forEach((artist: { id: string }) => {
+        cache.delete(`artist:${artist.id}:eventCount`);
+      });
+      // 清除統計快取
+      cache.clearPattern('artists:stats:');
+    }
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
@@ -548,7 +596,7 @@ export class EventService {
       throw new Error('活動不存在');
     }
 
-    // const existingData = doc.data() as CoffeeEvent;
+    const existingData = doc.data() as CoffeeEvent;
 
     const updateData: Record<string, unknown> = {
       status,
@@ -565,6 +613,31 @@ export class EventService {
     }
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
+
+    // 更新相關 artists 的 activeEventIds
+    if (existingData.artists && Array.isArray(existingData.artists)) {
+      await this.updateArtistsActiveEventIds(
+        existingData.artists.map((a: { id: string }) => a.id),
+        eventId,
+        status
+      );
+    }
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+    cache.delete(`event:${eventId}`);
+
+    // 清除相關 artists 的 eventCount 快取
+    if (existingData.artists && Array.isArray(existingData.artists)) {
+      existingData.artists.forEach((artist: { id: string }) => {
+        cache.delete(`artist:${artist.id}:eventCount`);
+      });
+    }
+
+    // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
+    // 這裡需要清除統計快取，因為事件狀態改變會影響藝人的活動數量
+    cache.clearPattern('artists:stats:');
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedEvent = {
@@ -640,6 +713,7 @@ export class EventService {
     }
 
     // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
+    // 重新送審時也需要清除統計快取，因為事件狀態會改變
     cache.clearPattern('artists:stats:');
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
@@ -714,6 +788,21 @@ export class EventService {
 
     // 直接刪除文件（不再使用軟刪除）
     await withTimeoutAndRetry(() => docRef.delete());
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+    cache.delete(`event:${eventId}`);
+
+    // 清除相關 artists 的 eventCount 快取
+    if (eventData?.artists && Array.isArray(eventData.artists)) {
+      eventData.artists.forEach((artist: { id: string }) => {
+        cache.delete(`artist:${artist.id}:eventCount`);
+      });
+    }
+
+    // 清除 artists 統計快取（因為刪除事件會影響藝人的活動數量）
+    cache.clearPattern('artists:stats:');
   }
 
   // 從 artists 的 activeEventIds 中移除 eventId

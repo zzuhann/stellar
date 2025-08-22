@@ -187,8 +187,9 @@ export class ArtistService {
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
+    // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
-    cache.clearPattern('artists:stats:');
+    // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
 
     // 只返回更新的欄位，前端已有完整資料
@@ -199,7 +200,12 @@ export class ArtistService {
   }
 
   // 編輯藝人資料
-  async updateArtist(artistId: string, artistData: UpdateArtistData, userId: string, userRole: string): Promise<Artist> {
+  async updateArtist(
+    artistId: string,
+    artistData: UpdateArtistData,
+    userId: string,
+    userRole: string
+  ): Promise<Artist> {
     this.checkFirebaseConfig();
     const docRef = this.collection!.doc(artistId);
 
@@ -228,8 +234,9 @@ export class ArtistService {
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
+    // 清除篩選快取（因為藝人資料改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
-    cache.clearPattern('artists:stats:');
+    // 清除狀態快取（因為藝人資料改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
 
     // 返回更新的欄位和 ID
@@ -290,8 +297,9 @@ export class ArtistService {
     cache.delete('artists:approved');
     cache.delete('artists:pending');
     cache.delete('artists:rejected');
+    // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
-    cache.clearPattern('artists:stats:');
+    // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
 
     // 清除相關藝人的個別快取
