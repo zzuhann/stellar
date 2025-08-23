@@ -429,6 +429,12 @@ export class ArtistService {
   async getArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
     this.checkFirebaseConfig();
 
+    // 如果是 approved 狀態，優先使用基礎快取
+    if (filters.status === 'approved') {
+      return this.getApprovedArtistsWithFilters(filters);
+    }
+
+    // 非 approved 狀態或沒有指定狀態，使用原本邏輯
     const cacheKey = `artists:filters:${JSON.stringify(filters)}`;
     const cachedResult = cache.get<Artist[]>(cacheKey);
     if (cachedResult) {
@@ -456,15 +462,66 @@ export class ArtistService {
       } as Artist;
     });
 
-    // 生日週篩選（在記憶體中處理）
-    if (filters.birthdayWeek) {
-      artists = this.filterByBirthdayWeek(artists, filters.birthdayWeek);
+    // 在記憶體中篩選
+    artists = this.filterArtistsInMemory(artists, filters);
+
+    // 排序處理
+    const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
+
+    // 設定較短的快取時間（因為非基礎資料）
+    cache.set(cacheKey, sortedArtists, 15);
+
+    return sortedArtists;
+  }
+
+  // 私有方法：使用基礎快取的 approved 藝人篩選
+  private async getApprovedArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
+    // 先嘗試從基礎快取取得所有 approved 藝人
+    let approvedArtists = cache.get<Artist[]>('artists:approved');
+
+    if (!approvedArtists) {
+      // 沒有快取才查詢 Firestore
+      const snapshot = await withTimeoutAndRetry(() =>
+        this.collection!.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
+      );
+
+      approvedArtists = snapshot.docs.map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as Artist
+      );
+
+      // 設定 30 分鐘快取
+      cache.set('artists:approved', approvedArtists, 30);
     }
 
-    // 搜尋篩選（在記憶體中處理）
+    // 在記憶體中篩選
+    const filteredArtists = this.filterArtistsInMemory(approvedArtists, filters);
+
+    // 排序處理
+    return this.sortArtists(filteredArtists, filters.sortBy, filters.sortOrder);
+  }
+
+  // 私有方法：記憶體中篩選藝人
+  private filterArtistsInMemory(artists: Artist[], filters: ArtistFilterParams): Artist[] {
+    let result = [...artists];
+
+    // 創建者篩選
+    if (filters.createdBy) {
+      result = result.filter(artist => artist.createdBy === filters.createdBy);
+    }
+
+    // 生日週篩選
+    if (filters.birthdayWeek) {
+      result = this.filterByBirthdayWeek(result, filters.birthdayWeek);
+    }
+
+    // 搜尋篩選
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
-      artists = artists.filter(
+      result = result.filter(
         artist =>
           artist.stageName.toLowerCase().includes(searchTerm) ||
           (artist.stageNameZh && artist.stageNameZh.toLowerCase().includes(searchTerm)) ||
@@ -474,36 +531,24 @@ export class ArtistService {
       );
     }
 
-    // 排序處理
-    const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
-
-    // 設定 30 分鐘快取
-    cache.set(cacheKey, sortedArtists, 30);
-
-    return sortedArtists;
+    return result;
   }
 
   // 新增：帶統計資料的藝人查詢
   async getArtistsWithStats(filters: ArtistFilterParams): Promise<ArtistWithStats[]> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `artists:stats:${JSON.stringify(filters)}`;
-    const cachedResult = cache.get<ArtistWithStats[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
     // 先取得藝人列表
     const artists = await this.getArtistsWithFilters(filters);
 
-    // 批次計算所有藝人的生咖數量
-    const artistsWithStats = await this.batchGetActiveEventCounts(artists);
+    // 直接使用 activeEventIds.length，不需要額外查詢
+    const artistsWithStats: ArtistWithStats[] = artists.map(artist => ({
+      ...artist,
+      coffeeEventCount: artist.activeEventIds?.length || 0,
+    }));
 
     // 套用排序
     const result = this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
-
-    // 設定 30 分鐘快取
-    cache.set(cacheKey, result, 30);
 
     return result;
   }
@@ -523,156 +568,6 @@ export class ArtistService {
 
       return birthdayThisYear >= birthdayWeek.startDate && birthdayThisYear <= birthdayWeek.endDate;
     });
-  }
-
-  // 私有方法：批次計算所有藝人的進行中活動數量
-  private async batchGetActiveEventCounts(artists: Artist[]): Promise<ArtistWithStats[]> {
-    if (!db || artists.length === 0) {
-      return artists.map(artist => ({ ...artist, coffeeEventCount: 0 }));
-    }
-
-    // 使用預計算的統計資料，避免 N+1 查詢
-    const artistsWithStats: ArtistWithStats[] = [];
-
-    try {
-      // 一次性查詢所有藝人的統計資料
-      const artistIds = artists.map(artist => artist.id);
-      const statsMap = await this.getArtistStatsBatch(artistIds);
-
-      for (const artist of artists) {
-        artistsWithStats.push({
-          ...artist,
-          coffeeEventCount: statsMap.get(artist.id) || 0,
-        });
-      }
-
-      return artistsWithStats;
-    } catch (error) {
-      console.error('Error in batch getting artist stats:', error);
-      // 如果批次查詢失敗，回退到個別查詢
-      return this.fallbackToIndividualQueries(artists);
-    }
-  }
-
-  // 私有方法：批次取得藝人統計資料
-  private async getArtistStatsBatch(artistIds: string[]): Promise<Map<string, number>> {
-    const statsMap = new Map<string, number>();
-    artistIds.forEach(id => statsMap.set(id, 0));
-
-    if (!db) return statsMap;
-
-    try {
-      // 使用複合索引查詢已審核且未結束的活動
-      const now = Timestamp.now();
-      const eventsSnapshot = await withTimeoutAndRetry(() =>
-        db!
-          .collection('coffeeEvents')
-          .where('status', '==', 'approved')
-          .where('datetime.end', '>', now)
-          .get()
-      );
-
-      const artistIdSet = new Set(artistIds);
-
-      // 計算每個藝人的活動數量
-      eventsSnapshot.docs.forEach(doc => {
-        const eventData = doc.data();
-
-        // 檢查活動是否包含這些藝人
-        if (eventData.artists && Array.isArray(eventData.artists)) {
-          eventData.artists.forEach((eventArtist: { id: string }) => {
-            if (artistIdSet.has(eventArtist.id)) {
-              const currentCount = statsMap.get(eventArtist.id) || 0;
-              statsMap.set(eventArtist.id, currentCount + 1);
-            }
-          });
-        }
-      });
-
-      return statsMap;
-    } catch (error) {
-      console.error('Error getting artist stats batch:', error);
-      return statsMap;
-    }
-  }
-
-  // 私有方法：回退到個別查詢（當批次查詢失敗時）
-  private async fallbackToIndividualQueries(artists: Artist[]): Promise<ArtistWithStats[]> {
-    const artistsWithStats: ArtistWithStats[] = [];
-
-    for (const artist of artists) {
-      const coffeeEventCount = await this.getActiveEventCountForArtist(artist.id, artist);
-      artistsWithStats.push({
-        ...artist,
-        coffeeEventCount,
-      });
-    }
-
-    return artistsWithStats;
-  }
-
-  // 私有方法：計算單個藝人的進行中活動數量
-  private async getActiveEventCountForArtist(artistId: string, artistData?: any): Promise<number> {
-    if (!db) {
-      return 0;
-    }
-
-    const cacheKey = `artist:${artistId}:eventCount`;
-    const cachedResult = cache.get<number>(cacheKey);
-    if (cachedResult !== null) {
-      return cachedResult;
-    }
-
-    const now = Timestamp.now();
-
-    try {
-      // 如果沒有傳入 artistData，才去讀取
-      let activeEventIds: string[] = [];
-      if (artistData) {
-        activeEventIds = artistData.activeEventIds || [];
-      } else {
-        const artistDoc = await withTimeoutAndRetry(() =>
-          db!.collection('artists').doc(artistId).get()
-        );
-        const data = artistDoc.data();
-        activeEventIds = data?.activeEventIds || [];
-      }
-
-      if (activeEventIds.length === 0) {
-        // 快取 0 結果，避免重複查詢
-        cache.set(cacheKey, 0, 10); // 10 分鐘快取
-        return 0;
-      }
-
-      // 只查詢相關的 events
-      const eventsSnapshot = await withTimeoutAndRetry(() =>
-        db!
-          .collection('coffeeEvents')
-          .where('__name__', 'in', activeEventIds)
-          .where('status', '==', 'approved')
-          .get()
-      );
-
-      // 在記憶體中檢查是否尚未結束
-      const activeEvents = eventsSnapshot.docs.filter(doc => {
-        const data = doc.data();
-        const endTime = data.datetime?.end;
-
-        if (!endTime) return false;
-
-        return endTime.toMillis() >= now.toMillis();
-      });
-
-      const count = activeEvents.length;
-
-      // 設定 10 分鐘快取
-      cache.set(cacheKey, count, 10);
-
-      return count;
-    } catch (error) {
-      console.error('Error counting active events for artist:', error);
-      return 0;
-    }
   }
 
   // 輔助函數：將 Firestore Timestamp 轉為毫秒

@@ -614,12 +614,11 @@ export class EventService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 更新相關 artists 的 activeEventIds
-    if (existingData.artists && Array.isArray(existingData.artists)) {
+    // 更新相關 artists 的 activeEventIds（只有 approved 時才加入）
+    if (status === 'approved' && existingData.artists && Array.isArray(existingData.artists)) {
       await this.updateArtistsActiveEventIds(
         existingData.artists.map((a: { id: string }) => a.id),
-        eventId,
-        status
+        eventId
       );
     }
 
@@ -628,16 +627,8 @@ export class EventService {
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
 
-    // 清除相關 artists 的 eventCount 快取
-    if (existingData.artists && Array.isArray(existingData.artists)) {
-      existingData.artists.forEach((artist: { id: string }) => {
-        cache.delete(`artist:${artist.id}:eventCount`);
-      });
-    }
-
-    // 清除 artists 統計快取（因為 coffeeEventCount 會改變）
-    // 這裡需要清除統計快取，因為事件狀態改變會影響藝人的活動數量
-    cache.clearPattern('artists:stats:');
+    // 清除基礎快取，因為 activeEventIds 改變會影響統計
+    cache.delete('artists:approved');
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedEvent = {
@@ -692,27 +683,9 @@ export class EventService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 更新相關 artists 的 activeEventIds
-    if (existingData.artists && Array.isArray(existingData.artists)) {
-      await this.updateArtistsActiveEventIds(
-        existingData.artists.map((a: { id: string }) => a.id),
-        eventId,
-        'rejected'
-      );
-    }
-
     // 清除相關快取
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
-
-    // 清除相關 artists 的 eventCount 快取
-    if (existingData.artists && Array.isArray(existingData.artists)) {
-      existingData.artists.forEach((artist: { id: string }) => {
-        cache.delete(`artist:${artist.id}:eventCount`);
-      });
-    }
-
-    // 注意：重新送審活動不會影響已審核活動的統計，所以不需要清除統計快取
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
@@ -721,12 +694,8 @@ export class EventService {
     } as CoffeeEvent;
   }
 
-  // 更新 artists 的 activeEventIds
-  private async updateArtistsActiveEventIds(
-    artistIds: string[],
-    eventId: string,
-    status: 'approved' | 'rejected'
-  ): Promise<void> {
+  // 更新 artists 的 activeEventIds（只有 approved 時才加入）
+  private async updateArtistsActiveEventIds(artistIds: string[], eventId: string): Promise<void> {
     if (!db) return;
 
     try {
@@ -738,16 +707,11 @@ export class EventService {
 
         if (artistDoc.exists) {
           const artistData = artistDoc.data();
-          let activeEventIds = artistData?.activeEventIds || [];
+          const activeEventIds = artistData?.activeEventIds || [];
 
-          if (status === 'approved') {
-            // 加入 eventId（如果尚未存在）
-            if (!activeEventIds.includes(eventId)) {
-              activeEventIds.push(eventId);
-            }
-          } else if (status === 'rejected') {
-            // 移除 eventId
-            activeEventIds = activeEventIds.filter((id: string) => id !== eventId);
+          // 只有 approved 時才加入 eventId
+          if (!activeEventIds.includes(eventId)) {
+            activeEventIds.push(eventId);
           }
 
           batch.update(artistRef, { activeEventIds });
@@ -792,15 +756,8 @@ export class EventService {
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
 
-    // 清除相關 artists 的 eventCount 快取
-    if (eventData?.artists && Array.isArray(eventData.artists)) {
-      eventData.artists.forEach((artist: { id: string }) => {
-        cache.delete(`artist:${artist.id}:eventCount`);
-      });
-    }
-
-    // 清除 artists 統計快取（因為刪除事件會影響藝人的活動數量）
-    cache.clearPattern('artists:stats:');
+    // 清除基礎快取，因為 activeEventIds 改變會影響統計
+    cache.delete('artists:approved');
   }
 
   // 從 artists 的 activeEventIds 中移除 eventId
@@ -961,6 +918,11 @@ export class EventService {
     if (!db) {
       throw new Error('Firebase 問題，請檢查環境變數');
     }
+
+    if (expiredEvents.size === 0) {
+      return;
+    }
+
     const batch = db.batch();
 
     expiredEvents.docs.forEach(doc => {

@@ -10,6 +10,7 @@ export interface Artist {
   profileImage?: string; // 照片 URL
   status: 'pending' | 'approved' | 'rejected' | 'exists';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
+  activeEventIds?: string[]; // 進行中的活動 ID 列表
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
