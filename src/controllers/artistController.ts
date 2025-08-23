@@ -13,16 +13,8 @@ export class ArtistController {
   // 獲取藝人列表（支援進階篩選）
   getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const {
-        status,
-        createdBy,
-        birthdayStartDate,
-        birthdayEndDate,
-        search,
-        includeStats,
-        sortBy,
-        sortOrder,
-      } = req.query;
+      const { status, createdBy, birthdayStartDate, birthdayEndDate, search, sortBy, sortOrder } =
+        req.query;
 
       // 建構篩選參數
       const filters: ArtistFilterParams = {
@@ -52,14 +44,9 @@ export class ArtistController {
         }
       }
 
-      // 根據是否需要統計資料選擇不同的服務方法
-      if (includeStats === 'true') {
-        const artists = await this.artistService.getArtistsWithStats(filters);
-        res.json(artists);
-      } else {
-        const artists = await this.artistService.getArtistsWithFilters(filters);
-        res.json(artists);
-      }
+      // 統一使用 getArtistsWithFilters（已包含統計資料）
+      const artists = await this.artistService.getArtistsWithFilters(filters);
+      res.json(artists);
     } catch (error) {
       console.error('Error fetching artists:', error);
       res.status(500).json({ error: 'Failed to fetch artists' });
@@ -212,14 +199,19 @@ export class ArtistController {
       const userId = req.user!.uid;
       const userRole = req.user!.role;
 
-      const artist = await this.artistService.updateArtist(id, {
-        stageName,
-        stageNameZh,
-        groupNames,
-        realName,
-        birthday,
-        profileImage,
-      }, userId, userRole);
+      const artist = await this.artistService.updateArtist(
+        id,
+        {
+          stageName,
+          stageNameZh,
+          groupNames,
+          realName,
+          birthday,
+          profileImage,
+        },
+        userId,
+        userRole
+      );
 
       res.json(artist);
     } catch (error) {

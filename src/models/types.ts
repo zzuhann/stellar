@@ -148,11 +148,6 @@ export interface ArtistFilterParams {
   sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }
 
-// 藝人回應格式（包含額外計算欄位）
-export interface ArtistWithStats extends Artist {
-  coffeeEventCount: number; // 進行中的生咖活動數量
-}
-
 export interface CreateEventData {
   artistIds: string[]; // 改為陣列，支援聯合應援
   title: string;

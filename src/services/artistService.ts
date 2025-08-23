@@ -4,7 +4,6 @@ import {
   CreateArtistData,
   UpdateArtistData,
   ArtistFilterParams,
-  ArtistWithStats,
   AdminArtistUpdate,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -462,8 +461,14 @@ export class ArtistService {
       } as Artist;
     });
 
-    // 在記憶體中篩選
-    artists = this.filterArtistsInMemory(artists, filters);
+    // 在記憶體中篩選，並加上 coffeeEventCount
+    artists = this.filterArtistsInMemory(artists, filters).map(
+      artist =>
+        ({
+          ...artist,
+          coffeeEventCount: artist.activeEventIds?.length || 0, // 加入 coffeeEventCount 用於前端
+        }) as any
+    );
 
     // 排序處理
     const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
@@ -497,8 +502,14 @@ export class ArtistService {
       cache.set('artists:approved', approvedArtists, 30);
     }
 
-    // 在記憶體中篩選
-    const filteredArtists = this.filterArtistsInMemory(approvedArtists, filters);
+    // 在記憶體中篩選，並加上 coffeeEventCount
+    const filteredArtists = this.filterArtistsInMemory(approvedArtists, filters).map(
+      artist =>
+        ({
+          ...artist,
+          coffeeEventCount: artist.activeEventIds?.length || 0, // 加入 coffeeEventCount 用於前端
+        }) as any
+    );
 
     // 排序處理
     return this.sortArtists(filteredArtists, filters.sortBy, filters.sortOrder);
@@ -530,25 +541,6 @@ export class ArtistService {
           (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
       );
     }
-
-    return result;
-  }
-
-  // 新增：帶統計資料的藝人查詢
-  async getArtistsWithStats(filters: ArtistFilterParams): Promise<ArtistWithStats[]> {
-    this.checkFirebaseConfig();
-
-    // 先取得藝人列表
-    const artists = await this.getArtistsWithFilters(filters);
-
-    // 直接使用 activeEventIds.length，不需要額外查詢
-    const artistsWithStats: ArtistWithStats[] = artists.map(artist => ({
-      ...artist,
-      coffeeEventCount: artist.activeEventIds?.length || 0,
-    }));
-
-    // 套用排序
-    const result = this.sortArtistsWithStats(artistsWithStats, filters.sortBy, filters.sortOrder);
 
     return result;
   }
@@ -600,40 +592,8 @@ export class ArtistService {
           comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
         case 'coffeeEventCount':
-          // 基本 Artist 沒有 coffeeEventCount，預設為 0
-          comparison = 0;
-          break;
-        default:
-          comparison = a.stageName.localeCompare(b.stageName);
-      }
-
-      return sortOrder === 'desc' ? -comparison : comparison;
-    });
-  }
-
-  // 私有方法：帶統計資料的藝人排序
-  private sortArtistsWithStats(
-    artists: ArtistWithStats[],
-    sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt',
-    sortOrder: 'asc' | 'desc' = 'desc'
-  ): ArtistWithStats[] {
-    if (!sortBy) {
-      // 預設按藝名排序
-      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
-    }
-
-    return artists.sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortBy) {
-        case 'stageName':
-          comparison = a.stageName.localeCompare(b.stageName);
-          break;
-        case 'coffeeEventCount':
-          comparison = a.coffeeEventCount - b.coffeeEventCount;
-          break;
-        case 'createdAt':
-          comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
+          // 現在所有 Artist 都有 coffeeEventCount
+          comparison = (a as any).coffeeEventCount - (b as any).coffeeEventCount;
           break;
         default:
           comparison = a.stageName.localeCompare(b.stageName);
