@@ -29,19 +29,19 @@ app.use(
   })
 );
 
-// Rate Limiting
+// Rate Limiting - 放寬限制以避免正常使用受阻
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 100, // 每個 IP 最多 100 次請求
+  max: 1000, // 提高到 1000 次請求 (平均 67/分鐘)
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// 登入相關的嚴格限制
+// 登入相關的適度限制
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 5, // 每個 IP 最多 5 次登入嘗試
+  max: 30, // 提高到 30 次登入嘗試
   message: { error: 'Too many authentication attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -51,7 +51,7 @@ const authLimiter = rateLimit({
 // Places API 的寬鬆限制（因為地址搜尋會頻繁呼叫）
 const placesLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 200, // 每個 IP 最多 200 次請求
+  max: 2000, // 提高到 2000 次請求
   message: { error: 'Too many places requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -76,27 +76,27 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.error(`CORS request from origin: ${origin}, allowed origins:`, allowedOrigins);
+      // 開發環境才印詳細日誌，生產環境使用 console.log
+      const logFn = process.env.NODE_ENV === 'development' ? console.log : console.log;
+      logFn(`CORS request from origin: ${origin}`);
+      
       // 允許沒有 origin 的請求（例如同源請求）
       if (!origin) {
-        console.error('No origin, allowing request');
         return callback(null, true);
       }
 
       // 檢查是否在允許的清單中
       if (allowedOrigins.includes(origin)) {
-        console.error('Origin allowed');
         return callback(null, true);
       }
 
       // 開發環境允許所有來源
       if (process.env.NODE_ENV === 'development') {
-        console.error('Development mode, allowing all origins');
         return callback(null, true);
       }
 
       // 生產環境拒絕未授權的來源
-      console.error('Origin not allowed, rejecting');
+      console.warn(`CORS: Origin ${origin} not in allowed list:`, allowedOrigins);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
