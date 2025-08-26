@@ -42,8 +42,8 @@ export class ArtistService {
         }) as Artist
     );
 
-    // 設定 30 分鐘快取
-    cache.set(cacheKey, sortedArtists, 30);
+    // 設定 24 小時快取（基礎資料變動不頻繁）
+    cache.set(cacheKey, sortedArtists, 1440);
 
     return sortedArtists;
   }
@@ -75,7 +75,7 @@ export class ArtistService {
 
     if (status && status !== 'pending') {
       cacheKey = `artists:status:${status}:${createdBy || 'all'}`;
-      ttl = status === 'approved' ? 30 : 15; // approved: 30分鐘, rejected: 15分鐘
+      ttl = status === 'approved' ? 1440 : 60; // approved: 24小時, rejected: 1小時
 
       const cachedResult = cache.get<Artist[]>(cacheKey);
       if (cachedResult) {
@@ -418,8 +418,8 @@ export class ArtistService {
       ...doc.data(),
     } as Artist;
 
-    // 設定 15 分鐘快取
-    cache.set(cacheKey, artist, 15);
+    // 設定 6 小時快取
+    cache.set(cacheKey, artist, 360);
 
     return artist;
   }
@@ -473,8 +473,8 @@ export class ArtistService {
     // 排序處理
     const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
 
-    // 設定較短的快取時間（因為非基礎資料）
-    cache.set(cacheKey, sortedArtists, 15);
+    // 設定 4 小時快取（因為非基礎資料）
+    cache.set(cacheKey, sortedArtists, 240);
 
     return sortedArtists;
   }
@@ -498,8 +498,8 @@ export class ArtistService {
           }) as Artist
       );
 
-      // 設定 30 分鐘快取
-      cache.set('artists:approved', approvedArtists, 30);
+      // 設定 24 小時快取
+      cache.set('artists:approved', approvedArtists, 1440);
     }
 
     // 在記憶體中篩選，並加上 coffeeEventCount
