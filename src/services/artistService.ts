@@ -31,7 +31,7 @@ export class ArtistService {
 
     // 使用複合索引直接排序
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
+      this.collection.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
     );
 
     const sortedArtists = snapshot.docs.map(
@@ -51,7 +51,7 @@ export class ArtistService {
   async getPendingArtists(): Promise<Artist[]> {
     this.checkFirebaseConfig();
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
+      this.collection.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
     );
 
     return snapshot.docs.map(
@@ -83,7 +83,7 @@ export class ArtistService {
       }
     }
 
-    let query = this.collection!;
+    let query = this.collection;
 
     // 如果有指定狀態，就篩選
     if (status) {
@@ -141,7 +141,7 @@ export class ArtistService {
       updatedAt: now,
     };
 
-    const docRef = await withTimeoutAndRetry(() => this.collection!.add(newArtist));
+    const docRef = await withTimeoutAndRetry(() => this.collection.add(newArtist));
 
     return {
       id: docRef.id,
@@ -156,7 +156,7 @@ export class ArtistService {
     adminUpdate?: AdminArtistUpdate
   ): Promise<Artist> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(artistId);
+    const docRef = this.collection.doc(artistId);
 
     const updateData: Record<string, any> = {
       status,
@@ -207,7 +207,7 @@ export class ArtistService {
     userRole: string
   ): Promise<Artist> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(artistId);
+    const docRef = this.collection.doc(artistId);
 
     // 讀取一次檢查存在性和權限
     const doc = await withTimeoutAndRetry(() => docRef.get());
@@ -261,7 +261,7 @@ export class ArtistService {
     }
 
     // 使用 Firestore 的 batch 操作
-    const batch = db!.batch();
+    const batch = db.batch();
 
     const updateData: Record<string, any> = {
       status,
@@ -287,7 +287,7 @@ export class ArtistService {
 
     // 批次更新所有藝人，前端已處理存在性檢查
     for (const artistId of artistIds) {
-      const docRef = this.collection!.doc(artistId);
+      const docRef = this.collection.doc(artistId);
       batch.update(docRef, updateData);
     }
 
@@ -324,7 +324,7 @@ export class ArtistService {
   // 重新送審功能
   async resubmitArtist(artistId: string, userId: string): Promise<Artist> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(artistId);
+    const docRef = this.collection.doc(artistId);
 
     // 讀取一次檢查存在性、權限和狀態
     const doc = await withTimeoutAndRetry(() => docRef.get());
@@ -377,7 +377,7 @@ export class ArtistService {
     if (!db) {
       throw new Error('Firebase 問題，請檢查環境變數');
     }
-    const eventsSnapshot = await withTimeoutAndRetry(() => db!.collection('coffeeEvents').get());
+    const eventsSnapshot = await withTimeoutAndRetry(() => db.collection('coffeeEvents').get());
 
     // 在記憶體中搜尋使用此藝人的活動
     const hasEvents = eventsSnapshot.docs.some(doc => {
@@ -393,7 +393,7 @@ export class ArtistService {
       throw new Error('不能刪除已經有生咖活動的偶像');
     }
 
-    await withTimeoutAndRetry(() => this.collection!.doc(artistId).delete());
+    await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());
   }
 
   async getArtistById(artistId: string): Promise<Artist | null> {
@@ -405,7 +405,7 @@ export class ArtistService {
       return cachedResult;
     }
 
-    const doc = await withTimeoutAndRetry(() => this.collection!.doc(artistId).get());
+    const doc = await withTimeoutAndRetry(() => this.collection.doc(artistId).get());
 
     if (!doc.exists) {
       // 快取 null 結果
@@ -440,7 +440,7 @@ export class ArtistService {
       return cachedResult;
     }
 
-    let query = this.collection!;
+    let query = this.collection;
 
     // 狀態篩選
     if (filters.status) {
@@ -487,7 +487,7 @@ export class ArtistService {
     if (!approvedArtists) {
       // 沒有快取才查詢 Firestore
       const snapshot = await withTimeoutAndRetry(() =>
-        this.collection!.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
+        this.collection.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
       );
 
       approvedArtists = snapshot.docs.map(
@@ -553,12 +553,14 @@ export class ArtistService {
     return artists.filter(artist => {
       if (!artist.birthday) return false;
 
-      // 將生日轉換為今年的日期進行比較
-      const currentYear = new Date().getFullYear();
+      // 從查詢參數中提取年份，將生日轉換為該年份的日期進行比較
+      const queryYear = new Date(birthdayWeek.startDate).getFullYear();
       const [, month, day] = artist.birthday.split('-');
-      const birthdayThisYear = `${currentYear}-${month}-${day}`;
+      const birthdayInQueryYear = `${queryYear}-${month}-${day}`;
 
-      return birthdayThisYear >= birthdayWeek.startDate && birthdayThisYear <= birthdayWeek.endDate;
+      return (
+        birthdayInQueryYear >= birthdayWeek.startDate && birthdayInQueryYear <= birthdayWeek.endDate
+      );
     });
   }
 
@@ -591,10 +593,33 @@ export class ArtistService {
         case 'createdAt':
           comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
-        case 'coffeeEventCount':
-          // 現在所有 Artist 都有 coffeeEventCount
-          comparison = (a as any).coffeeEventCount - (b as any).coffeeEventCount;
-          break;
+        case 'coffeeEventCount': {
+          // 直接處理複合排序，不使用 comparison
+          const aCount = (a as any).coffeeEventCount;
+          const bCount = (b as any).coffeeEventCount;
+
+          // 主要排序：生咖數量
+          if (aCount !== bCount) {
+            return sortOrder === 'desc' ? bCount - aCount : aCount - bCount;
+          }
+
+          // 次要排序：生咖數量相同時，按生日排序 (生日早的在前)
+          if (a.birthday && b.birthday) {
+            const [, aMonth, aDay] = a.birthday.split('-').map(Number);
+            const [, bMonth, bDay] = b.birthday.split('-').map(Number);
+            const aDate = aMonth * 100 + aDay; // 例：0218
+            const bDate = bMonth * 100 + bDay; // 例：0222
+            return aDate - bDate; // 218 - 222 = -4，所以 2/18 排在前面
+          } else if (a.birthday && !b.birthday) {
+            return -1; // 有生日的排前面
+          } else if (!a.birthday && b.birthday) {
+            return 1; // 有生日的排前面
+          } else {
+            // 都沒生日，按藝名排序
+            return a.stageName.localeCompare(b.stageName);
+          }
+          // 注意：這裡直接 return，不會走到最後的 sortOrder 處理
+        }
         default:
           comparison = a.stageName.localeCompare(b.stageName);
       }
