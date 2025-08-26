@@ -143,6 +143,10 @@ export class ArtistService {
 
     const docRef = await withTimeoutAndRetry(() => this.collection.add(newArtist));
 
+    // 清除相關快取（新增 pending 藝人會影響 pending 列表）
+    cache.clearPattern('artists:status:pending');
+    cache.clearPattern('artists:filters:');
+
     return {
       id: docRef.id,
       ...newArtist,
