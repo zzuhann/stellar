@@ -384,11 +384,15 @@ export class EventService {
       });
     }
 
-    // 轉換為地圖格式
+    // 轉換為地圖格式並按開始時間排序
     const mapEvents = events
       .filter(event => {
         // 確保活動有完整的座標資料
         return event.location?.coordinates?.lat && event.location?.coordinates?.lng;
+      })
+      .sort((a, b) => {
+        // 按開始時間排序 (時間早的在前)
+        return a.datetime.start.toMillis() - b.datetime.start.toMillis();
       })
       .map(event => {
         return {
