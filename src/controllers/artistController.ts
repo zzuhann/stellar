@@ -68,7 +68,7 @@ export class ArtistController {
   createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
-      const userId = req.user!.uid;
+      const userId = req.user.uid;
 
       if (!stageName) {
         res.status(400).json({ error: 'Stage name is required' });
@@ -131,27 +131,29 @@ export class ArtistController {
     }
   };
 
-  // 批次審核藝人（僅管理員）
+  // 批次審核藝人（僅管理員）- 支援個別團名更新
   batchReviewArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { artistIds, status, reason, adminUpdate } = req.body;
+      const { updates } = req.body;
 
-      if (!Array.isArray(artistIds) || artistIds.length === 0) {
-        res.status(400).json({ error: 'Artist IDs array is required' });
+      if (!Array.isArray(updates) || updates.length === 0) {
+        res.status(400).json({ error: 'Updates array is required' });
         return;
       }
 
-      if (!['approved', 'rejected', 'exists'].includes(status)) {
-        res.status(400).json({ error: 'Invalid status' });
-        return;
+      // 驗證每個更新項目
+      for (const update of updates) {
+        if (!update.artistId || !update.status) {
+          res.status(400).json({ error: 'Each update must have artistId and status' });
+          return;
+        }
+        if (!['approved', 'rejected', 'exists'].includes(update.status)) {
+          res.status(400).json({ error: `Invalid status: ${update.status}` });
+          return;
+        }
       }
 
-      const artists = await this.artistService.batchUpdateArtistStatus(
-        artistIds,
-        status,
-        reason,
-        adminUpdate
-      );
+      const artists = await this.artistService.batchUpdateArtistStatus(updates);
 
       res.json(artists);
     } catch (error) {
@@ -196,8 +198,8 @@ export class ArtistController {
     try {
       const { id } = req.params;
       const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
-      const userId = req.user!.uid;
-      const userRole = req.user!.role;
+      const userId = req.user.uid;
+      const userRole = req.user.role;
 
       const artist = await this.artistService.updateArtist(
         id,
@@ -225,7 +227,7 @@ export class ArtistController {
   resubmitArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const userId = req.user!.uid;
+      const userId = req.user.uid;
 
       const artist = await this.artistService.resubmitArtist(id, userId);
       res.json(artist);

@@ -251,47 +251,48 @@ export class ArtistService {
     } as Artist;
   }
 
-  // 批次審核藝人
+  // 批次審核藝人 (支援個別團名更新)
   async batchUpdateArtistStatus(
-    artistIds: string[],
-    status: 'approved' | 'rejected' | 'exists',
-    reason?: string,
-    adminUpdate?: AdminArtistUpdate
+    updates: Array<{
+      artistId: string;
+      status: 'approved' | 'rejected' | 'exists';
+      reason?: string;
+      groupNames?: string[];
+    }>
   ): Promise<Artist[]> {
     this.checkFirebaseConfig();
 
-    if (artistIds.length === 0) {
+    if (updates.length === 0) {
       return [];
     }
 
     // 使用 Firestore 的 batch 操作
     const batch = db.batch();
 
-    const updateData: Record<string, any> = {
-      status,
-      updatedAt: Timestamp.now(),
-    };
+    // 為每個藝人建立個別的更新資料
+    for (const update of updates) {
+      const docRef = this.collection.doc(update.artistId);
 
-    // 如果是 rejected 且有提供 reason，則加入 rejectedReason
-    if (status === 'rejected' && reason) {
-      updateData.rejectedReason = reason;
-    }
-    // 如果是 approved 或 exists，清除之前的 rejectedReason
-    else if (status === 'approved' || status === 'exists') {
-      updateData.rejectedReason = null;
+      const updateData: Record<string, any> = {
+        status: update.status,
+        updatedAt: Timestamp.now(),
+      };
 
-      // 如果是審核通過且有管理員更新團名，應用更新
-      if (adminUpdate?.groupNames !== undefined) {
-        updateData.groupNames =
-          adminUpdate.groupNames && adminUpdate.groupNames.length > 0
-            ? adminUpdate.groupNames
-            : undefined;
+      // 如果是 rejected 且有提供 reason，則加入 rejectedReason
+      if (update.status === 'rejected' && update.reason) {
+        updateData.rejectedReason = update.reason;
       }
-    }
+      // 如果是 approved 或 exists，清除之前的 rejectedReason
+      else if (update.status === 'approved' || update.status === 'exists') {
+        updateData.rejectedReason = null;
 
-    // 批次更新所有藝人，前端已處理存在性檢查
-    for (const artistId of artistIds) {
-      const docRef = this.collection.doc(artistId);
+        // 如果有提供團名，應用更新
+        if (update.groupNames !== undefined) {
+          updateData.groupNames =
+            update.groupNames && update.groupNames.length > 0 ? update.groupNames : undefined;
+        }
+      }
+
       batch.update(docRef, updateData);
     }
 
@@ -309,18 +310,18 @@ export class ArtistService {
     // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
     // 清除相關藝人的個別快取
-    for (const artistId of artistIds) {
-      cache.delete(`artist:${artistId}`);
+    for (const update of updates) {
+      cache.delete(`artist:${update.artistId}`);
     }
 
-    // 只返回更新的欄位，前端已有完整資料
-    const results: Artist[] = artistIds.map(
-      artistId =>
-        ({
-          id: artistId,
-          ...updateData,
-        }) as Artist
-    );
+    // 返回更新的結果
+    const results: Artist[] = updates.map(update => ({
+      id: update.artistId,
+      status: update.status,
+      rejectedReason: update.status === 'rejected' ? update.reason || null : null,
+      groupNames: update.groupNames || undefined,
+      updatedAt: Timestamp.now(),
+    })) as Artist[];
 
     return results;
   }
