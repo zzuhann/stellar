@@ -206,6 +206,8 @@ export interface EventFilterParams {
   status?: 'all' | 'pending' | 'approved' | 'rejected'; // 審核狀態
   region?: string; // 地區名稱（台北市、新北市等）
   createdBy?: string; // 創建者 UID（篩選用戶自己的投稿）
+  startTimeFrom?: string; // 開始時間範圍（從）
+  startTimeTo?: string; // 開始時間範圍（到）
 
   // 分頁參數
   page?: number; // 頁數，預設1

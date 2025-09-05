@@ -90,14 +90,15 @@ export class EventService {
 
     const activeEvents = events.filter(event => event.datetime.end.toMillis() >= now);
 
-    // 設定 5 分鐘快取
-    cache.set(cacheKey, activeEvents, 5);
+    // 設定 24 小時快取
+    cache.set(cacheKey, activeEvents, 1440);
 
     return activeEvents;
   }
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
+    // pending 狀態不快取，因為需要即時性
     const snapshot = await withTimeoutAndRetry(() =>
       this.collection.where('status', '==', 'pending').orderBy('createdAt', 'desc').get()
     );
@@ -114,15 +115,18 @@ export class EventService {
   async getEventsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `events:status:${status || 'all'}`;
-    let ttl = 5; // 預設 5 分鐘
+    // 只有非 pending 狀態才快取
+    let cacheKey: string | null = null;
+    let ttl = 0;
 
-    if (status === 'rejected') ttl = 10; // rejected: 10分鐘
-    if (status === 'pending') ttl = 1; // pending: 1分鐘
+    if (status && status !== 'pending') {
+      cacheKey = `events:status:${status}`;
+      ttl = status === 'approved' ? 1440 : 240; // approved: 24小時, rejected: 4小時
 
-    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
+      const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
+      if (cachedResult) {
+        return cachedResult;
+      }
     }
 
     // 簡化查詢策略：先用單一條件查詢，再在記憶體中篩選
@@ -156,8 +160,10 @@ export class EventService {
     // 按建立時間排序（最新在前）
     const result = events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
 
-    // 設定快取
-    cache.set(cacheKey, result, ttl);
+    // 設定快取（僅非 pending 狀態）
+    if (cacheKey && ttl > 0) {
+      cache.set(cacheKey, result, ttl);
+    }
 
     return result;
   }
@@ -226,6 +232,38 @@ export class EventService {
       events = events.filter(event => event.artists.some(artist => artist.id === filters.artistId));
     }
 
+    // 時間範圍篩選 - 檢查活動時間區間與查詢區間是否有重疊
+    if (filters.startTimeFrom || filters.startTimeTo) {
+      events = events.filter(event => {
+        const eventStartTime = event.datetime.start.toMillis();
+        const eventEndTime = event.datetime.end.toMillis();
+
+        // 如果只有開始時間，檢查活動是否在開始時間之後開始或正在進行
+        if (filters.startTimeFrom && !filters.startTimeTo) {
+          const fromTime = new Date(filters.startTimeFrom).getTime();
+          return eventEndTime >= fromTime; // 活動結束時間 >= 查詢開始時間
+        }
+
+        // 如果只有結束時間，檢查活動是否在結束時間之前結束或正在進行
+        if (filters.startTimeTo && !filters.startTimeFrom) {
+          const toTime = new Date(filters.startTimeTo).getTime();
+          return eventStartTime <= toTime; // 活動開始時間 <= 查詢結束時間
+        }
+
+        // 如果有完整的時間區間，檢查兩個區間是否重疊
+        if (filters.startTimeFrom && filters.startTimeTo) {
+          const fromTime = new Date(filters.startTimeFrom).getTime();
+          const toTime = new Date(filters.startTimeTo).getTime();
+
+          // 兩個時間區間重疊的條件：
+          // 活動開始時間 <= 查詢結束時間 AND 活動結束時間 >= 查詢開始時間
+          return eventStartTime <= toTime && eventEndTime >= fromTime;
+        }
+
+        return true;
+      });
+    }
+
     // 重新計算總數（因為加了藝人篩選）
     const filteredTotal = events.length;
     const filteredTotalPages = Math.ceil(filteredTotal / limit);
@@ -252,8 +290,8 @@ export class EventService {
       },
     };
 
-    // 設定 3 分鐘快取
-    cache.set(cacheKey, result, 3);
+    // 設定 24 小時快取
+    cache.set(cacheKey, result, 1440);
 
     return result;
   }
@@ -412,8 +450,8 @@ export class EventService {
       total: mapEvents.length,
     };
 
-    // 設定 10 分鐘快取
-    cache.set(cacheKey, result, 10);
+    // 設定 24 小時快取
+    cache.set(cacheKey, result, 1440);
 
     return result;
   }
@@ -430,8 +468,8 @@ export class EventService {
     const doc = await withTimeoutAndRetry(() => this.collection.doc(eventId).get());
 
     if (!doc.exists) {
-      // 也要快取 null 結果，避免重複查詢不存在的資料
-      cache.set(cacheKey, null, 2);
+      // 快取 null 結果，避免重複查詢不存在的資料
+      cache.set(cacheKey, null, 60);
       return null;
     }
 
@@ -440,8 +478,8 @@ export class EventService {
       ...doc.data(),
     } as CoffeeEvent;
 
-    // 設定 2 分鐘快取
-    cache.set(cacheKey, event, 2);
+    // 設定 24 小時快取
+    cache.set(cacheKey, event, 1440);
 
     return event;
   }
@@ -690,6 +728,7 @@ export class EventService {
     // 清除相關快取
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
+    cache.delete(`event:${eventId}`);
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
@@ -846,8 +885,8 @@ export class EventService {
 
     const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
 
-    // 設定 3 分鐘快取
-    cache.set(cacheKey, result, 3);
+    // 設定 4 小時快取
+    cache.set(cacheKey, result, 240);
 
     return result;
   }

@@ -19,6 +19,8 @@ export class EventController {
         status: req.query.status as 'all' | 'pending' | 'approved' | 'rejected',
         region: req.query.region as string,
         createdBy: req.query.createdBy as string,
+        startTimeFrom: req.query.startTimeFrom as string,
+        startTimeTo: req.query.startTimeTo as string,
         page: req.query.page ? parseInt(req.query.page as string) : undefined,
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
         sortBy: req.query.sortBy as 'title' | 'startTime' | 'createdAt' | undefined,
