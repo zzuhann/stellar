@@ -33,7 +33,7 @@ export class NotificationService {
       createdAt: Timestamp.now(),
     };
 
-    const docRef = await withTimeoutAndRetry(() => this.collection!.add(notificationData));
+    const docRef = await withTimeoutAndRetry(() => this.collection.add(notificationData));
 
     return {
       id: docRef.id,
@@ -52,7 +52,7 @@ export class NotificationService {
     const limit = Math.min(filters.limit || 20, 100); // 預設20筆，最大100筆
     const skip = (page - 1) * limit;
 
-    let query = this.collection!.where('userId', '==', userId);
+    let query = this.collection.where('userId', '==', userId);
 
     // 已讀/未讀篩選
     if (filters.isRead !== undefined) {
@@ -98,7 +98,7 @@ export class NotificationService {
   // 標記通知為已讀
   async markAsRead(notificationId: string, userId: string): Promise<UserNotification> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(notificationId);
+    const docRef = this.collection.doc(notificationId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -137,7 +137,7 @@ export class NotificationService {
     const batch = db.batch();
 
     for (const id of notificationIds) {
-      const docRef = this.collection!.doc(id);
+      const docRef = this.collection.doc(id);
       const doc = await withTimeoutAndRetry(() => docRef.get());
 
       if (doc.exists) {
@@ -158,7 +158,7 @@ export class NotificationService {
   // 刪除通知
   async deleteNotification(notificationId: string, userId: string): Promise<void> {
     this.checkFirebaseConfig();
-    const docRef = this.collection!.doc(notificationId);
+    const docRef = this.collection.doc(notificationId);
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
@@ -179,7 +179,7 @@ export class NotificationService {
   async getUnreadCount(userId: string): Promise<number> {
     this.checkFirebaseConfig();
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('userId', '==', userId).where('isRead', '==', false).get()
+      this.collection.where('userId', '==', userId).where('isRead', '==', false).get()
     );
 
     return snapshot.size;
@@ -191,7 +191,7 @@ export class NotificationService {
     const cutoffDate = Timestamp.fromDate(new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000));
 
     const snapshot = await withTimeoutAndRetry(() =>
-      this.collection!.where('createdAt', '<', cutoffDate).get()
+      this.collection.where('createdAt', '<', cutoffDate).get()
     );
 
     if (!db) {
