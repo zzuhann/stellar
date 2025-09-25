@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx web-push:*)"
+    ],
+    "deny": []
+  }
+}

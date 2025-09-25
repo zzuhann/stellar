@@ -5,6 +5,7 @@ import placesRoutes from './placesRoutes';
 import imageRoutes from './imageRoutes';
 import userRoutes from './userRoutes';
 import cacheRoutes from './cacheRoutes';
+import notificationRoutes from './notificationRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -72,6 +73,11 @@ router.use('/places', placesRoutes);
 
 // R2 圖片上傳路由（不需要 Firebase）
 router.use('/images', imageRoutes);
+
+// 通知路由（需要 Firebase）
+if (hasFirebaseConfig) {
+  router.use('/notifications', notificationRoutes);
+}
 
 // Firebase 配置完成，啟用完整路由
 if (hasFirebaseConfig) {
