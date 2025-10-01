@@ -580,15 +580,49 @@ export class ArtistService {
   // 私有方法：基本藝人排序
   private sortArtists(
     artists: Artist[],
-    sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt',
+    sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt' | 'birthday',
     sortOrder: 'asc' | 'desc' = 'desc'
   ): Artist[] {
     if (!sortBy) {
-      // 預設按藝名排序
-      return artists.sort((a, b) => a.stageName.localeCompare(b.stageName));
+      // 預設按生日排序
+      return this.sortByBirthday(artists, 'asc');
     }
 
-    return artists.sort((a, b) => {
+    // 特殊處理生日排序和生咖數量排序
+    if (sortBy === 'birthday') {
+      return this.sortByBirthday(artists, sortOrder);
+    }
+
+    if (sortBy === 'coffeeEventCount') {
+      return [...artists].sort((a, b) => {
+        const aCount = (a as any).coffeeEventCount;
+        const bCount = (b as any).coffeeEventCount;
+
+        // 主要排序：生咖數量
+        if (aCount !== bCount) {
+          return sortOrder === 'desc' ? bCount - aCount : aCount - bCount;
+        }
+
+        // 次要排序：生咖數量相同時，按生日排序 (生日早的在前)
+        if (a.birthday && b.birthday) {
+          const [, aMonth, aDay] = a.birthday.split('-').map(Number);
+          const [, bMonth, bDay] = b.birthday.split('-').map(Number);
+          const aDate = aMonth * 100 + aDay; // 例：0218
+          const bDate = bMonth * 100 + bDay; // 例：0222
+          return aDate - bDate; // 218 - 222 = -4，所以 2/18 排在前面
+        } else if (a.birthday && !b.birthday) {
+          return -1; // 有生日的排前面
+        } else if (!a.birthday && b.birthday) {
+          return 1; // 有生日的排前面
+        } else {
+          // 都沒生日，按藝名排序
+          return a.stageName.localeCompare(b.stageName);
+        }
+      });
+    }
+
+    // 一般排序處理
+    return [...artists].sort((a, b) => {
       let comparison = 0;
 
       switch (sortBy) {
@@ -598,38 +632,38 @@ export class ArtistService {
         case 'createdAt':
           comparison = this.timestampToMillis(a.createdAt) - this.timestampToMillis(b.createdAt);
           break;
-        case 'coffeeEventCount': {
-          // 直接處理複合排序，不使用 comparison
-          const aCount = (a as any).coffeeEventCount;
-          const bCount = (b as any).coffeeEventCount;
-
-          // 主要排序：生咖數量
-          if (aCount !== bCount) {
-            return sortOrder === 'desc' ? bCount - aCount : aCount - bCount;
-          }
-
-          // 次要排序：生咖數量相同時，按生日排序 (生日早的在前)
-          if (a.birthday && b.birthday) {
-            const [, aMonth, aDay] = a.birthday.split('-').map(Number);
-            const [, bMonth, bDay] = b.birthday.split('-').map(Number);
-            const aDate = aMonth * 100 + aDay; // 例：0218
-            const bDate = bMonth * 100 + bDay; // 例：0222
-            return aDate - bDate; // 218 - 222 = -4，所以 2/18 排在前面
-          } else if (a.birthday && !b.birthday) {
-            return -1; // 有生日的排前面
-          } else if (!a.birthday && b.birthday) {
-            return 1; // 有生日的排前面
-          } else {
-            // 都沒生日，按藝名排序
-            return a.stageName.localeCompare(b.stageName);
-          }
-          // 注意：這裡直接 return，不會走到最後的 sortOrder 處理
-        }
         default:
           comparison = a.stageName.localeCompare(b.stageName);
       }
 
       return sortOrder === 'desc' ? -comparison : comparison;
+    });
+  }
+
+  // 私有方法：專門的生日排序
+  private sortByBirthday(artists: Artist[], sortOrder: 'asc' | 'desc' = 'asc'): Artist[] {
+    return [...artists].sort((a, b) => {
+      // 有生日的排在沒有生日的前面
+      if (a.birthday && !b.birthday) return -1;
+      if (!a.birthday && b.birthday) return 1;
+
+      // 都沒有生日時，按藝名排序
+      if (!a.birthday && !b.birthday) {
+        return a.stageName.localeCompare(b.stageName);
+      }
+
+      // 都有生日時，按月日排序（忽略年份）
+      if (a.birthday && b.birthday) {
+        const [, aMonth, aDay] = a.birthday.split('-').map(Number);
+        const [, bMonth, bDay] = b.birthday.split('-').map(Number);
+        const aDate = aMonth * 100 + aDay; // 例：0218
+        const bDate = bMonth * 100 + bDay; // 例：0222
+
+        const comparison = aDate - bDate;
+        return sortOrder === 'desc' ? -comparison : comparison;
+      }
+
+      return 0;
     });
   }
 }

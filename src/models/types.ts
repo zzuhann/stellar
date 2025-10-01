@@ -144,7 +144,7 @@ export interface ArtistFilterParams {
     endDate: string; // YYYY-MM-DD 格式，該週的結束日期
   }; // 生日週篩選
   search?: string; // 搜尋英文藝名、中文藝名、團名、本名
-  sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt'; // 排序方式
+  sortBy?: 'stageName' | 'coffeeEventCount' | 'createdAt' | 'birthday'; // 排序方式
   sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }
 

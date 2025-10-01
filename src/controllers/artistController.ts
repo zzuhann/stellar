@@ -21,7 +21,7 @@ export class ArtistController {
         status: status as 'approved' | 'pending' | 'rejected' | undefined,
         createdBy: createdBy as string | undefined,
         search: search as string | undefined,
-        sortBy: sortBy as 'stageName' | 'coffeeEventCount' | 'createdAt' | undefined,
+        sortBy: sortBy as 'stageName' | 'coffeeEventCount' | 'createdAt' | 'birthday' | undefined,
         sortOrder: sortOrder as 'asc' | 'desc' | undefined,
       };
 
