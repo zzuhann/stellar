@@ -171,7 +171,7 @@ export const eventSchemas = {
     mainImage: z.string().url('主圖片網址格式不正確').optional(),
     detailImage: z
       .array(z.string().url('詳細圖片網址格式不正確'))
-      .max(5, '最多只能上傳5張詳細圖片')
+      .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
   }),
 
@@ -224,7 +224,7 @@ export const eventSchemas = {
     mainImage: z.string().url('主圖片網址格式不正確').optional(),
     detailImage: z
       .array(z.string().url('詳細圖片網址格式不正確'))
-      .max(5, '最多只能上傳5張詳細圖片')
+      .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
   }),
 };
