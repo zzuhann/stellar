@@ -40,7 +40,11 @@ export class EventController {
         filters.status = 'approved';
       }
 
-      const result = await this.eventService.getEventsWithFilters(filters);
+      // 如果有 checkFavorite=true 且用戶已登入，則傳遞 userId
+      const checkFavorite = req.query.checkFavorite === 'true';
+      const userId = checkFavorite && req.user ? req.user.uid : undefined;
+
+      const result = await this.eventService.getEventsWithFilters(filters, userId);
       res.json(result);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -63,7 +67,9 @@ export class EventController {
   getEventById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const event = await this.eventService.getEventById(id);
+      // 如果用戶已登入，則傳遞 userId 以取得收藏狀態
+      const userId = req.user?.uid;
+      const event = await this.eventService.getEventById(id, userId);
 
       if (!event) {
         res.status(404).json({ error: 'Event not found' });
@@ -81,7 +87,7 @@ export class EventController {
   createEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const eventData = req.body;
-      const userId = req.user!.uid;
+      const userId = req.user?.uid;
 
       // 驗證必填欄位
       const requiredFields = ['artistIds', 'title', 'location', 'datetime'];
@@ -111,8 +117,8 @@ export class EventController {
     try {
       const { id } = req.params;
       const updateData: UpdateEventData = req.body;
-      const userId = req.user!.uid;
-      const userRole = req.user!.role;
+      const userId = req.user?.uid;
+      const userRole = req.user?.role;
 
       // 驗證時間資料格式（如果提供）
       if (updateData.datetime) {
@@ -190,8 +196,8 @@ export class EventController {
   deleteEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const userId = req.user!.uid;
-      const userRole = req.user!.role;
+      const userId = req.user?.uid;
+      const userRole = req.user?.role;
 
       await this.eventService.deleteEvent(id, userId, userRole);
       res.json({ message: 'Event deleted successfully' });
@@ -205,7 +211,7 @@ export class EventController {
   resubmitEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const userId = req.user!.uid;
+      const userId = req.user?.uid;
 
       const event = await this.eventService.resubmitEvent(id, userId);
       res.json(event);
@@ -256,7 +262,7 @@ export class EventController {
   // 獲取當前用戶的投稿資料
   getUserSubmissions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const userId = req.user!.uid;
+      const userId = req.user?.uid;
       const result = await this.eventService.getUserSubmissions(userId);
       res.json(result);
     } catch (error) {

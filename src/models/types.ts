@@ -279,3 +279,57 @@ export interface UserSubmissionsResponse {
     approvedEvents: number;
   };
 }
+
+// 用戶收藏
+export interface UserFavorite {
+  id: string;
+  userId: string;
+  eventId: string;
+  createdAt: Timestamp;
+}
+
+// 收藏篩選參數
+export interface FavoriteFilterParams {
+  sort?: 'favoritedAt' | 'startTime';
+  sortOrder?: 'asc' | 'desc';
+  status?: 'notEnded' | 'active' | 'upcoming' | 'ended' | 'all'; // 預設 notEnded
+  artistIds?: string[];
+  page?: number;
+  limit?: number;
+}
+
+// 收藏列表回應格式
+export interface FavoritesResponse {
+  favorites: Array<{
+    favorite: UserFavorite;
+    event: CoffeeEvent;
+  }>;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// 帶有收藏狀態的活動
+export interface CoffeeEventWithFavorite extends CoffeeEvent {
+  isFavorited?: boolean;
+}
+
+// 活動列表回應格式（帶收藏狀態）
+export interface EventsResponseWithFavorite {
+  events: CoffeeEventWithFavorite[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  filters: {
+    search?: string;
+    artistId?: string;
+    status?: string;
+    region?: string;
+  };
+}

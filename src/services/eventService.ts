@@ -2,21 +2,25 @@ import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import {
   CoffeeEvent,
+  CoffeeEventWithFavorite,
   CreateEventData,
   UpdateEventData,
   EventFilterParams,
   EventsResponse,
+  EventsResponseWithFavorite,
   MapDataParams,
   MapDataResponse,
   UserSubmissionsResponse,
 } from '../models/types';
 import { NotificationHelper } from './notificationService';
+import { UserService } from './userService';
 import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
   private notificationHelper = new NotificationHelper();
+  private userService = new UserService();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -169,12 +173,17 @@ export class EventService {
   }
 
   // 新增：進階篩選和分頁功能
-  async getEventsWithFilters(filters: EventFilterParams): Promise<EventsResponse> {
+  async getEventsWithFilters(
+    filters: EventFilterParams,
+    userId?: string
+  ): Promise<EventsResponse | EventsResponseWithFavorite> {
     this.checkFirebaseConfig();
 
     const cacheKey = `events:filters:${JSON.stringify(filters)}`;
     const cachedResult = cache.get<EventsResponse>(cacheKey);
-    if (cachedResult) {
+
+    // 如果有快取且不需要檢查收藏狀態，直接返回
+    if (cachedResult && !userId) {
       return cachedResult;
     }
 
@@ -274,7 +283,34 @@ export class EventService {
     // 分頁處理
     const finalPaginatedEvents = sortedEvents.slice(skip, skip + limit);
 
-    const result = {
+    // 如果需要檢查收藏狀態
+    if (userId) {
+      const eventIds = finalPaginatedEvents.map(e => e.id);
+      const favoritedEventIds = await this.userService.checkFavoritesBatch(userId, eventIds);
+
+      const eventsWithFavorite: CoffeeEventWithFavorite[] = finalPaginatedEvents.map(event => ({
+        ...event,
+        isFavorited: favoritedEventIds.has(event.id),
+      }));
+
+      return {
+        events: eventsWithFavorite,
+        pagination: {
+          page,
+          limit,
+          total: filteredTotal,
+          totalPages: filteredTotalPages,
+        },
+        filters: {
+          search: filters.search,
+          artistId: filters.artistId,
+          status: filters.status,
+          region: filters.region,
+        },
+      };
+    }
+
+    const result: EventsResponse = {
       events: finalPaginatedEvents,
       pagination: {
         page,
@@ -290,7 +326,7 @@ export class EventService {
       },
     };
 
-    // 設定 24 小時快取
+    // 設定 24 小時快取（只有沒有 userId 的情況才快取）
     cache.set(cacheKey, result, 1440);
 
     return result;
@@ -456,20 +492,30 @@ export class EventService {
     return result;
   }
 
-  async getEventById(eventId: string): Promise<CoffeeEvent | null> {
+  async getEventById(
+    eventId: string,
+    userId?: string
+  ): Promise<CoffeeEvent | CoffeeEventWithFavorite | null> {
     this.checkFirebaseConfig();
 
     const cacheKey = `event:${eventId}`;
     const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
+
     if (cachedResult) {
+      // 如果有快取且需要檢查收藏狀態
+      if (userId) {
+        const isFavorited = await this.userService.isFavorited(userId, eventId);
+        return {
+          ...cachedResult,
+          isFavorited,
+        };
+      }
       return cachedResult;
     }
 
     const doc = await withTimeoutAndRetry(() => this.collection.doc(eventId).get());
 
     if (!doc.exists) {
-      // 快取 null 結果，避免重複查詢不存在的資料
-      cache.set(cacheKey, null, 60);
       return null;
     }
 
@@ -480,6 +526,15 @@ export class EventService {
 
     // 設定 24 小時快取
     cache.set(cacheKey, event, 1440);
+
+    // 如果需要檢查收藏狀態
+    if (userId) {
+      const isFavorited = await this.userService.isFavorited(userId, eventId);
+      return {
+        ...event,
+        isFavorited,
+      };
+    }
 
     return event;
   }

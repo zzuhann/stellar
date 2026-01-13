@@ -19,4 +19,10 @@ router.patch('/notifications/:id/read', userController.markNotificationAsRead);
 router.patch('/notifications/read', userController.markMultipleAsRead);
 router.delete('/notifications/:id', userController.deleteNotification);
 
+// 收藏相關
+router.get('/favorites', userController.getFavorites);
+router.post('/favorites', userController.addFavorite);
+router.get('/favorites/:eventId/check', userController.checkFavorite);
+router.delete('/favorites/:eventId', userController.removeFavorite);
+
 export default router;
