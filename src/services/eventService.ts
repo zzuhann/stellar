@@ -12,14 +12,12 @@ import {
   MapDataResponse,
   UserSubmissionsResponse,
 } from '../models/types';
-import { NotificationHelper } from './notificationService';
 import { UserService } from './userService';
 import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
-  private notificationHelper = new NotificationHelper();
   private userService = new UserService();
 
   private checkFirebaseConfig() {
@@ -732,20 +730,6 @@ export class EventService {
       id: updatedDoc.id,
       ...updatedDoc.data(),
     } as CoffeeEvent;
-
-    // TODO: 發送通知給用戶 (暫時移除)
-    // try {
-    //   await this.notificationHelper.notifyEventReview(
-    //     existingData.createdBy,
-    //     existingData.title,
-    //     eventId,
-    //     status,
-    //     reason
-    //   );
-    // } catch (notificationError) {
-    //   console.error('Failed to send notification:', notificationError);
-    //   // 不拋出錯誤，因為主要操作已成功
-    // }
 
     return updatedEvent;
   }

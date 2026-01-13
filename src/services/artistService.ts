@@ -7,12 +7,10 @@ import {
   AdminArtistUpdate,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
-import { NotificationHelper } from './notificationService';
 import { cache } from '../utils/cache';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
-  private notificationHelper = new NotificationHelper();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {

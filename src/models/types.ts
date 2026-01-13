@@ -65,52 +65,6 @@ export interface UpdateUserData {
   displayName?: string;
 }
 
-// 通知類型
-export interface UserNotification {
-  id: string;
-  userId: string;
-  type:
-    | 'artist_approved'
-    | 'artist_rejected'
-    | 'event_approved'
-    | 'event_rejected'
-    | 'artist_exists';
-  title: string; // 通知標題
-  message: string; // 通知內容
-  relatedId: string; // 關聯的藝人或活動ID
-  relatedType: 'artist' | 'event'; // 關聯類型
-  isRead: boolean; // 是否已讀
-  createdAt: Timestamp;
-}
-
-// 通知查詢參數
-export interface NotificationFilterParams {
-  isRead?: boolean; // 篩選已讀/未讀
-  type?:
-    | 'artist_approved'
-    | 'artist_rejected'
-    | 'event_approved'
-    | 'event_rejected'
-    | 'artist_exists';
-  page?: number;
-  limit?: number;
-}
-
-// 通知列表回應格式
-export interface NotificationsResponse {
-  notifications: UserNotification[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-  summary: {
-    unreadCount: number;
-    totalCount: number;
-  };
-}
-
 export interface CreateArtistData {
   stageName: string; // 英文藝名（必填）
   stageNameZh?: string; // 中文藝名（可選）
