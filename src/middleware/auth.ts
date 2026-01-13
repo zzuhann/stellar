@@ -55,3 +55,38 @@ export const requireAdmin = (
   }
   next();
 };
+
+// Optional 認證：嘗試解析 token，但不強制要求登入
+export const optionalAuthenticate = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      // 沒有 token，繼續但不設定 user 資料
+      next();
+      return;
+    }
+
+    const decodedToken = await auth.verifyIdToken(token);
+
+    // 從 Firestore 取得用戶資料
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    const userData = userDoc.data();
+
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email || '',
+      role: userData?.role || 'user',
+    };
+
+    next();
+  } catch {
+    // token 無效，繼續但不設定 user 資料
+    next();
+  }
+};

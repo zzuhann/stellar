@@ -150,7 +150,7 @@ export class UserService {
     // 檢查快取
     const cacheKey = `favorite:${userId}:${eventId}`;
     const cachedResult = cache.get<boolean>(cacheKey);
-    if (cachedResult !== undefined) {
+    if (cachedResult !== null) {
       return cachedResult;
     }
 

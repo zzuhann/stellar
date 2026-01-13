@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { EventController } from '../controllers/eventController';
-import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { authenticateToken, requireAdmin, optionalAuthenticate } from '../middleware/auth';
 import { validateRequest, eventSchemas } from '../middleware/validation';
 
 const router = Router();
 const eventController = new EventController();
 
-// 公開路由
-router.get('/', (req, res) => void eventController.getActiveEvents(req, res));
+// 公開路由（使用 optionalAuthenticate 來支援 checkFavorite 參數）
+router.get('/', optionalAuthenticate, (req, res) => void eventController.getActiveEvents(req, res));
 router.get('/map-data', (req, res) => void eventController.getMapData(req, res));
 router.get('/search', (req, res) => void eventController.searchEvents(req, res));
 
@@ -19,7 +19,8 @@ router.get(
 );
 
 // 公開路由 (動態參數路由放最後)
-router.get('/:id', (req, res) => void eventController.getEventById(req, res));
+// 使用 optionalAuthenticate 來取得收藏狀態（如果已登入）
+router.get('/:id', optionalAuthenticate, (req, res) => void eventController.getEventById(req, res));
 
 // 其他需要登入的路由
 router.post(
