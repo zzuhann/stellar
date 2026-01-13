@@ -48,7 +48,7 @@ class MemoryCache {
     }
   }
 
-  // 獲取快取統計
+  // 取得快取統計
   getStats(): { size: number; keys: string[] } {
     return {
       size: this.cache.size,

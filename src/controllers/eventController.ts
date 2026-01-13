@@ -10,7 +10,7 @@ export class EventController {
     this.eventService = new EventService();
   }
 
-  // 獲取活動列表（支援進階篩選和分頁）
+  // 取得活動列表（支援進階篩選和分頁）
   getActiveEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const filters: EventFilterParams = {
@@ -52,7 +52,7 @@ export class EventController {
     }
   };
 
-  // 獲取待審核的活動（僅管理員）
+  // 取得待審核的活動（僅管理員）
   getPendingEvents = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const events = await this.eventService.getPendingEvents();
@@ -63,7 +63,7 @@ export class EventController {
     }
   };
 
-  // 獲取單一活動詳情
+  // 取得單一活動詳情
   getEventById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -259,7 +259,7 @@ export class EventController {
     }
   };
 
-  // 獲取當前用戶的投稿資料
+  // 取得當前用戶的投稿資料
   getUserSubmissions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const userId = req.user?.uid;

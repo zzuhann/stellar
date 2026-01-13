@@ -13,7 +13,7 @@ export class UserController {
     this.notificationService = new NotificationService();
   }
 
-  // 獲取用戶資料
+  // 取得用戶資料
   getUserProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const userId = req.user?.uid;
@@ -54,7 +54,7 @@ export class UserController {
     }
   };
 
-  // 獲取通知列表
+  // 取得通知列表
   getNotifications = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const userId = req.user?.uid;
@@ -124,7 +124,7 @@ export class UserController {
     }
   };
 
-  // 獲取未讀通知數量
+  // 取得未讀通知數量
   getUnreadCount = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const userId = req.user?.uid;

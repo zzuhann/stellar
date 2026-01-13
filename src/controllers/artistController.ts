@@ -10,7 +10,7 @@ export class ArtistController {
     this.artistService = new ArtistService();
   }
 
-  // 獲取藝人列表（支援進階篩選）
+  // 取得藝人列表（支援進階篩選）
   getAllArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { status, createdBy, birthdayStartDate, birthdayEndDate, search, sortBy, sortOrder } =
@@ -53,7 +53,7 @@ export class ArtistController {
     }
   };
 
-  // 獲取待審核的藝人（僅管理員）
+  // 取得待審核的藝人（僅管理員）
   getPendingArtists = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const artists = await this.artistService.getPendingArtists();
@@ -175,7 +175,7 @@ export class ArtistController {
     }
   };
 
-  // 獲取單一藝人詳情
+  // 取得單一藝人詳情
   getArtistById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;

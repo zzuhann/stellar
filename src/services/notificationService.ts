@@ -41,7 +41,7 @@ export class NotificationService {
     };
   }
 
-  // 獲取用戶通知（支援篩選和分頁）
+  // 取得用戶通知（支援篩選和分頁）
   async getUserNotifications(
     userId: string,
     filters: NotificationFilterParams = {}
@@ -175,7 +175,7 @@ export class NotificationService {
     await withTimeoutAndRetry(() => docRef.delete());
   }
 
-  // 獲取未讀通知數量
+  // 取得未讀通知數量
   async getUnreadCount(userId: string): Promise<number> {
     this.checkFirebaseConfig();
     const snapshot = await withTimeoutAndRetry(() =>

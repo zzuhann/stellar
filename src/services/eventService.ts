@@ -946,7 +946,7 @@ export class EventService {
     return result;
   }
 
-  // 獲取用戶的所有投稿（藝人和活動）
+  // 取得用戶的所有投稿（藝人和活動）
   async getUserSubmissions(userId: string): Promise<UserSubmissionsResponse> {
     this.checkFirebaseConfig();
 
@@ -954,7 +954,7 @@ export class EventService {
       throw new Error('Firebase 問題，請檢查環境變數');
     }
 
-    // 獲取用戶的藝人投稿（簡化查詢避免索引問題）
+    // 取得用戶的藝人投稿（簡化查詢避免索引問題）
     const artistsSnapshot = await withTimeoutAndRetry(() =>
       db.collection('artists').where('createdBy', '==', userId).get()
     );
@@ -969,7 +969,7 @@ export class EventService {
       )
       .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
 
-    // 獲取用戶的活動投稿（簡化查詢避免索引問題）
+    // 取得用戶的活動投稿（簡化查詢避免索引問題）
     const eventsSnapshot = await withTimeoutAndRetry(() =>
       this.collection.where('createdBy', '==', userId).get()
     );
