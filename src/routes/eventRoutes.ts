@@ -18,6 +18,13 @@ router.get(
   (req, res) => void eventController.getUserSubmissions(req, res)
 );
 
+// 檢查活動的收藏狀態（需要登入，必須在 /:id 之前）
+router.get(
+  '/:id/favorite/status',
+  authenticateToken,
+  (req, res) => void eventController.checkFavoriteStatus(req, res)
+);
+
 // 公開路由 (動態參數路由放最後)
 // 使用 optionalAuthenticate 來取得收藏狀態（如果已登入）
 router.get('/:id', optionalAuthenticate, (req, res) => void eventController.getEventById(req, res));
