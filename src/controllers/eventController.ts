@@ -270,23 +270,4 @@ export class EventController {
       res.status(500).json({ error: 'Failed to fetch user submissions' });
     }
   };
-
-  // 檢查活動的收藏狀態
-  checkFavoriteStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const userId = req.user?.uid;
-
-      if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-
-      const isFavorited = await this.eventService.checkEventFavoriteStatus(id, userId);
-      res.json({ isFavorited });
-    } catch (error) {
-      console.error('Error checking favorite status:', error);
-      res.status(500).json({ error: 'Failed to check favorite status' });
-    }
-  };
 }

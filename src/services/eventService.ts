@@ -537,12 +537,6 @@ export class EventService {
     return event;
   }
 
-  // 檢查活動的收藏狀態
-  async checkEventFavoriteStatus(eventId: string, userId: string): Promise<boolean> {
-    this.checkFirebaseConfig();
-    return await this.userService.isFavorited(userId, eventId);
-  }
-
   async createEvent(eventData: CreateEventData, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
 
