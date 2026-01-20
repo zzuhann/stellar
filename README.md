@@ -16,8 +16,7 @@ Stellar is a backend service that powers a platform where fans can create, manag
 ## Tech Stack
 
 **Backend Framework:**
-- Express.js 4.18+ with TypeScript 5.8+
-- Node.js with Bun runtime support
+- Express, Node.js with Bun runtime, TypeScript
 
 **Database & Authentication:**
 - Firebase Firestore (NoSQL document database)
@@ -34,41 +33,11 @@ Stellar is a backend service that powers a platform where fans can create, manag
 - Built-in health checks and monitoring
 
 **Development Tools:**
-- Jest for testing (unit + integration)
 - ESLint + Prettier for code quality
 - Morgan for request logging
 - Express rate limiting and security middleware
 
 ## Architecture
-
-### Project Structure
-```
-src/
-├── app.ts              # Express app configuration
-├── server.ts           # Server entry point
-├── config/             # Configuration files
-│   ├── firebase.ts     # Firebase Admin setup
-│   ├── r2-client.ts    # Cloudflare R2 client
-│   └── webpush.ts      # Push notification config
-├── controllers/        # Request handlers
-│   ├── artistController.ts
-│   ├── eventController.ts
-│   ├── userController.ts
-│   └── notificationController.ts
-├── services/           # Business logic layer
-│   ├── artistService.ts
-│   ├── eventService.ts
-│   └── notificationService.ts
-├── middleware/         # Express middleware
-│   ├── auth.ts         # JWT authentication
-│   ├── upload.ts       # File upload handling
-│   └── validation.ts   # Input validation
-├── routes/             # API route definitions
-├── models/             # TypeScript interfaces
-└── utils/              # Utility functions
-    ├── cache.ts        # In-memory caching
-    └── firestoreTimeout.ts
-```
 
 ### Data Flow
 
@@ -78,6 +47,48 @@ src/
 - **Cloudflare R2**: Cost-effective S3-compatible storage for images
 - **Memory Caching**: Reduces Firestore reads for frequently accessed data
 - **Type Safety**: Comprehensive TypeScript interfaces for all data models
+
+## 🚀 開發指南
+
+### 環境需求
+
+- **Node.js 20+** 或 **Node.js 24**（推薦，與生產環境一致）
+- **Bun**（開發時使用，提供更快的 hot reload）
+- npm 或其他套件管理工具
+
+### 安裝與執行
+
+1. **安裝依賴**
+
+```bash
+npm install
+```
+
+2. **設定環境變數**
+
+本專案需要設定環境變數才能正常運行。請向團隊成員索取 `.env` 檔案，並放在專案根目錄。
+
+3. **啟動開發伺服器**
+
+```bash
+# 使用 Bun（推薦，支援hot reload）
+bun run dev
+
+# 或使用 Node.js
+npm run build
+npm start
+```
+
+開發伺服器預設運行在 `http://localhost:3001`
+
+### 常用指令
+
+```bash
+# 開發
+bun run dev              # 啟動開發伺服器
+npm run build            # 編譯 TypeScript
+npm start                # 執行編譯後的程式碼
+```
 
 ## Key Features & Implementation
 
