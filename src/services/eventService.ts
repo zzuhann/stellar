@@ -822,6 +822,9 @@ export class EventService {
       throw new Error('權限不足');
     }
 
+    // 刪除所有用戶對此活動的收藏
+    await this.userService.removeAllFavoritesForEvent(eventId);
+
     // 從相關 artists 的 activeEventIds 中移除
     if (eventData?.artists && Array.isArray(eventData.artists)) {
       await this.removeEventFromArtists(

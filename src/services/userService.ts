@@ -357,4 +357,34 @@ export class UserService {
 
     return snapshot.docs.map(doc => doc.data().eventId);
   }
+
+  // 刪除所有對某個活動的收藏（當活動被刪除時使用）
+  async removeAllFavoritesForEvent(eventId: string): Promise<void> {
+    this.checkFirebaseConfig();
+
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.favoritesCollection.where('eventId', '==', eventId).get()
+    );
+
+    if (snapshot.empty) {
+      return; // 沒有收藏記錄，直接返回
+    }
+
+    // 批次刪除所有相關收藏
+    const batch = db.batch();
+    const affectedUserIds = new Set<string>();
+
+    snapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+      affectedUserIds.add(doc.data().userId);
+    });
+
+    await withTimeoutAndRetry(() => batch.commit());
+
+    // 清除所有受影響用戶的快取
+    affectedUserIds.forEach(userId => {
+      cache.clearPattern(`favorites:${userId}:`);
+      cache.delete(`favorite:${userId}:${eventId}`);
+    });
+  }
 }
