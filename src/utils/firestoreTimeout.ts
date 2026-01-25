@@ -62,7 +62,7 @@ export async function withRetry<T>(
     }
   }
 
-  throw new FirestoreRetryError(maxAttempts, lastError!);
+  throw new FirestoreRetryError(maxAttempts, lastError);
 }
 
 /**

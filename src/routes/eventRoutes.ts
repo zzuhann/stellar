@@ -67,5 +67,11 @@ router.put(
   requireAdmin,
   (req, res) => void eventController.rejectEvent(req, res)
 );
+router.post(
+  '/batch-review',
+  authenticateToken,
+  requireAdmin,
+  (req, res) => void eventController.batchReviewEvents(req, res)
+);
 
 export default router;

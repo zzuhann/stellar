@@ -192,6 +192,45 @@ export class EventController {
     }
   };
 
+  // 批次審核活動（僅管理員）
+  batchReviewEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { updates } = req.body;
+
+      if (!Array.isArray(updates) || updates.length === 0) {
+        res.status(400).json({ error: 'Updates array is required' });
+        return;
+      }
+
+      // 驗證每個更新項目
+      for (const update of updates) {
+        if (!update.eventId || !update.status) {
+          res.status(400).json({ error: 'Each update must have eventId and status' });
+          return;
+        }
+        if (!['approved', 'rejected'].includes(update.status)) {
+          res.status(400).json({ error: `Invalid status: ${update.status}` });
+          return;
+        }
+      }
+
+      const events = await this.eventService.batchUpdateEventStatus(updates);
+
+      res.json(events);
+    } catch (error) {
+      console.error('Error batch reviewing events:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('活動不存在')) {
+          res.status(404).json({ error: error.message });
+        } else {
+          res.status(500).json({ error: 'Failed to batch review events' });
+        }
+      } else {
+        res.status(500).json({ error: 'Failed to batch review events' });
+      }
+    }
+  };
+
   // 刪除活動（僅管理員或活動創建者）
   deleteEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {

@@ -734,6 +734,166 @@ export class EventService {
     return updatedEvent;
   }
 
+  // 批次審核活動 (減少快取清除次數)
+  async batchUpdateEventStatus(
+    updates: Array<{
+      eventId: string;
+      status: 'approved' | 'rejected';
+      reason?: string;
+    }>
+  ): Promise<CoffeeEvent[]> {
+    this.checkFirebaseConfig();
+
+    if (updates.length === 0) {
+      return [];
+    }
+
+    if (!db) {
+      throw new Error('Firebase 問題，請檢查環境變數');
+    }
+
+    // 先讀取所有需要更新的 events，以便取得 artists 資訊
+    const eventDocs = await Promise.all(
+      updates.map(update => withTimeoutAndRetry(() => this.collection.doc(update.eventId).get()))
+    );
+
+    // 檢查所有 events 是否存在
+    const missingEvents = eventDocs
+      .map((doc, index) => (!doc.exists ? updates[index].eventId : null))
+      .filter((id): id is string => id !== null);
+
+    if (missingEvents.length > 0) {
+      throw new Error(`活動不存在: ${missingEvents.join(', ')}`);
+    }
+
+    // 使用 Firestore 的 batch 操作批次更新 events
+    const eventBatch = db.batch();
+    const approvedEvents: Array<{ eventId: string; artistIds: string[] }> = [];
+
+    // 為每個活動建立個別的更新資料
+    for (let i = 0; i < updates.length; i++) {
+      const update = updates[i];
+      const doc = eventDocs[i];
+      const existingData = doc.data() as CoffeeEvent;
+      const docRef = this.collection.doc(update.eventId);
+
+      const updateData: Record<string, unknown> = {
+        status: update.status,
+        updatedAt: Timestamp.now(),
+      };
+
+      // 如果是 rejected 且有提供 reason，則加入 rejectedReason
+      if (update.status === 'rejected' && update.reason) {
+        updateData.rejectedReason = update.reason;
+      }
+      // 如果是 approved，清除之前的 rejectedReason
+      else if (update.status === 'approved') {
+        updateData.rejectedReason = null;
+
+        // 收集需要更新 activeEventIds 的 artists
+        if (existingData.artists && Array.isArray(existingData.artists)) {
+          approvedEvents.push({
+            eventId: update.eventId,
+            artistIds: existingData.artists.map((a: { id: string }) => a.id),
+          });
+        }
+      }
+
+      eventBatch.update(docRef, updateData);
+    }
+
+    // 執行批次更新 events
+    await withTimeoutAndRetry(() => eventBatch.commit());
+
+    // 批次更新所有相關 artists 的 activeEventIds
+    if (approvedEvents.length > 0) {
+      await this.batchUpdateArtistsActiveEventIds(approvedEvents);
+    }
+
+    // 清除相關快取（只清一次，大幅減少 DB 負擔）
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+    // 清除基礎快取，因為 activeEventIds 改變會影響統計
+    cache.delete('artists:approved');
+
+    // 清除相關活動的個別快取
+    for (const update of updates) {
+      cache.delete(`event:${update.eventId}`);
+    }
+
+    // 返回更新的結果
+    const results: CoffeeEvent[] = updates.map(update => {
+      const doc = eventDocs.find(d => d.id === update.eventId);
+      if (!doc || !doc.exists) {
+        throw new Error(`活動不存在: ${update.eventId}`);
+      }
+      return {
+        id: doc.id,
+        ...doc.data(),
+        status: update.status,
+        rejectedReason: update.status === 'rejected' ? update.reason || null : null,
+        updatedAt: Timestamp.now(),
+      } as CoffeeEvent;
+    });
+
+    return results;
+  }
+
+  // 批次更新 artists 的 activeEventIds（優化版本，減少 DB 查詢）
+  private async batchUpdateArtistsActiveEventIds(
+    approvedEvents: Array<{ eventId: string; artistIds: string[] }>
+  ): Promise<void> {
+    if (!db) return;
+
+    try {
+      // 收集所有需要更新的 artistId 和對應的 eventIds
+      const artistEventMap = new Map<string, string[]>();
+
+      for (const { eventId, artistIds } of approvedEvents) {
+        for (const artistId of artistIds) {
+          if (!artistEventMap.has(artistId)) {
+            artistEventMap.set(artistId, []);
+          }
+          artistEventMap.get(artistId)?.push(eventId);
+        }
+      }
+
+      // 批次讀取所有 artists
+      const artistDocs = await Promise.all(
+        Array.from(artistEventMap.keys()).map(artistId =>
+          withTimeoutAndRetry(() => db.collection('artists').doc(artistId).get())
+        )
+      );
+
+      // 使用 batch 批次更新
+      const artistBatch = db.batch();
+
+      for (let i = 0; i < artistDocs.length; i++) {
+        const artistDoc = artistDocs[i];
+        const artistId = Array.from(artistEventMap.keys())[i];
+        const eventIds = artistEventMap.get(artistId) || [];
+
+        if (artistDoc.exists) {
+          const artistData = artistDoc.data();
+          const activeEventIds = artistData?.activeEventIds || [];
+
+          // 加入所有新的 eventIds（去重）
+          for (const eventId of eventIds) {
+            if (!activeEventIds.includes(eventId)) {
+              activeEventIds.push(eventId);
+            }
+          }
+
+          artistBatch.update(artistDoc.ref, { activeEventIds });
+        }
+      }
+
+      await withTimeoutAndRetry(() => artistBatch.commit());
+    } catch (error) {
+      console.error('Error batch updating artists activeEventIds:', error);
+    }
+  }
+
   // 重新送審功能
   async resubmitEvent(eventId: string, userId: string): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
