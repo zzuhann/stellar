@@ -79,7 +79,6 @@ app.use(
       // 開發環境才印詳細日誌，生產環境使用 console.log
       const logFn = process.env.NODE_ENV === 'development' ? console.log : console.log;
       logFn(`CORS request from origin: ${origin}`);
-      
       // 允許沒有 origin 的請求（例如同源請求）
       if (!origin) {
         return callback(null, true);
@@ -87,6 +86,11 @@ app.use(
 
       // 檢查是否在允許的清單中
       if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // 檢查是否符合 Vercel preview deployment pattern
+      if (/^https:\/\/stellar-.*-zzuhanns-projects\.vercel\.app$/.test(origin)) {
         return callback(null, true);
       }
 
