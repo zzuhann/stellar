@@ -13,12 +13,32 @@ import {
   UserSubmissionsResponse,
 } from '../models/types';
 import { UserService } from './userService';
-import { Timestamp, Query, CollectionReference, DocumentData } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
   private userService = new UserService();
+
+  // 取得所有已審核且未過期的活動（基礎資料層，使用 Lock 防止雪崩）
+  private async getApprovedActiveEventsBase(): Promise<CoffeeEvent[]> {
+    this.checkFirebaseConfig();
+
+    return cache.getWithLock(
+      'events:approved:active',
+      async () => {
+        const snapshot = await withTimeoutAndRetry(() =>
+          this.collection.where('status', '==', 'approved').get()
+        );
+
+        const now = Date.now();
+        return snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
+          .filter(event => event.datetime.end.toMillis() >= now);
+      },
+      1440 // 24 小時 TTL
+    );
+  }
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -177,43 +197,54 @@ export class EventService {
   ): Promise<EventsResponse | EventsResponseWithFavorite> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `events:filters:${JSON.stringify(filters)}`;
-    const cachedResult = cache.get<EventsResponse>(cacheKey);
-
-    // 如果有快取且不需要檢查收藏狀態，直接返回
-    if (cachedResult && !userId) {
-      return cachedResult;
-    }
-
     // 設定預設值
     const page = filters.page || 1;
     const limit = Math.min(filters.limit || 50, 100); // 最大限制100筆
     const skip = (page - 1) * limit;
 
-    // 基礎查詢
-    let query: Query<DocumentData> | CollectionReference<DocumentData> = this.collection;
+    let events: CoffeeEvent[];
 
-    // 藝人篩選：先取得所有資料再在記憶體中篩選（因為要搜尋 artists 陣列）
-    // 移除此篩選條件，改為記憶體篩選
-
-    // 創建者篩選
+    // 如果有創建者篩選，需要單獨查詢（無法使用共用快取）
     if (filters.createdBy) {
-      query = query.where('createdBy', '==', filters.createdBy);
-    }
+      const query = this.collection.where('createdBy', '==', filters.createdBy);
+      const snapshot = await withTimeoutAndRetry(() => query.get());
+      events = snapshot.docs.map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      );
 
-    const snapshot = await withTimeoutAndRetry(() => query.get());
-
-    let events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
-
-    // 審核狀態篩選
-    if (filters.status && filters.status !== 'all') {
-      events = events.filter(event => event.status === filters.status);
+      // 審核狀態篩選
+      if (filters.status && filters.status !== 'all') {
+        events = events.filter(event => event.status === filters.status);
+      }
+    } else if (!filters.status || filters.status === 'approved') {
+      // 使用分層快取的基礎資料（所有請求共用，防止雪崩）
+      events = await this.getApprovedActiveEventsBase();
+    } else if (filters.status === 'all') {
+      // 需要查詢所有狀態
+      const snapshot = await withTimeoutAndRetry(() => this.collection.get());
+      events = snapshot.docs.map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      );
+    } else {
+      // 其他狀態 (pending, rejected)
+      const snapshot = await withTimeoutAndRetry(() =>
+        this.collection.where('status', '==', filters.status).get()
+      );
+      events = snapshot.docs.map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      );
     }
 
     // 搜尋篩選
@@ -308,7 +339,8 @@ export class EventService {
       };
     }
 
-    const result: EventsResponse = {
+    // 不需要額外快取，因為基礎資料已經使用 getWithLock 快取
+    return {
       events: finalPaginatedEvents,
       pagination: {
         page,
@@ -323,11 +355,6 @@ export class EventService {
         region: filters.region,
       },
     };
-
-    // 設定 24 小時快取（只有沒有 userId 的情況才快取）
-    cache.set(cacheKey, result, 1440);
-
-    return result;
   }
 
   // 新增：地圖資料 API
@@ -335,35 +362,12 @@ export class EventService {
     this.checkFirebaseConfig();
 
     const status = params.status || 'active';
-    const cacheKey = `map-data:${status}:${JSON.stringify(params)}`;
 
-    const cachedResult = cache.get<MapDataResponse>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
-    // 建立查詢（取得所有已審核的活動，再在記憶體中篩選）
-    const query = this.collection.where('status', '==', 'approved');
-
-    const snapshot = await withTimeoutAndRetry(() => query.get());
-
-    let events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
-
-    // 已在查詢中篩選 approved 狀態
+    // 使用分層快取的基礎資料（所有請求共用，防止雪崩）
+    // 基礎資料已經篩選過 approved 且未過期的活動
+    let events = await this.getApprovedActiveEventsBase();
 
     const now = Date.now();
-
-    // 只顯示未結束的活動（進行中或即將開始）
-    events = events.filter(event => {
-      const endTime = event.datetime.end.toMillis();
-      return endTime >= now; // 結束時間還沒到
-    });
 
     // 如果有指定 status 參數，額外篩選
     if (status !== 'all') {
@@ -484,9 +488,7 @@ export class EventService {
       total: mapEvents.length,
     };
 
-    // 設定 24 小時快取
-    cache.set(cacheKey, result, 1440);
-
+    // 不需要額外快取，因為基礎資料已經使用 getWithLock 快取
     return result;
   }
 
