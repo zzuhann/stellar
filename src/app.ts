@@ -15,17 +15,6 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// 強制 HTTPS (生產環境)
-if (process.env.NODE_ENV === 'production') {
-  app.use((req, res, next) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
-      res.redirect(301, `https://${req.header('host')}${req.url}`);
-    } else {
-      next();
-    }
-  });
-}
-
 // 安全中介軟體
 app.use(
   helmet({
