@@ -5,6 +5,7 @@ import {
   UpdateArtistData,
   ArtistFilterParams,
   AdminArtistUpdate,
+  UserSubmissionsArtistsListResponse,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
@@ -663,5 +664,60 @@ export class ArtistService {
 
       return 0;
     });
+  }
+
+  /** 與前端「我的投稿」一致：rejected 置頂，其餘依建立時間新到舊 */
+  private sortArtistsForMySubmissionsList(artists: Artist[]): Artist[] {
+    return [...artists].sort((a, b) => {
+      const ar = a.status === 'rejected' ? 0 : 1;
+      const br = b.status === 'rejected' ? 0 : 1;
+      if (ar !== br) return ar - br;
+      return this.timestampToMillis(b.createdAt) - this.timestampToMillis(a.createdAt);
+    });
+  }
+
+  /** 分頁取得當前用戶投稿藝人（與 getFavorites 相同 page/limit 語意） */
+  async getUserSubmittedArtistsPaginated(
+    userId: string,
+    page = 1,
+    limit = 20
+  ): Promise<UserSubmissionsArtistsListResponse> {
+    this.checkFirebaseConfig();
+
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection.where('createdBy', '==', userId).get()
+    );
+
+    const artists = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Artist
+    );
+
+    const sorted = this.sortArtistsForMySubmissionsList(artists);
+
+    const pending = sorted.filter(a => a.status === 'pending').length;
+    const approved = sorted.filter(a => a.status === 'approved').length;
+    const total = sorted.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
+    const clampedPage = total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
+    const skipClamped = (clampedPage - 1) * safeLimit;
+    const pageItems = sorted.slice(skipClamped, skipClamped + safeLimit);
+
+    return {
+      artists: pageItems,
+      summary: { total, pending, approved },
+      pagination: {
+        page: clampedPage,
+        limit: safeLimit,
+        total,
+        totalPages,
+      },
+    };
   }
 }

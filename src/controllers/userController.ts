@@ -1,13 +1,19 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { UserService } from '../services/userService';
+import { EventService } from '../services/eventService';
+import { ArtistService } from '../services/artistService';
 import { FavoriteFilterParams } from '../models/types';
 
 export class UserController {
   private userService: UserService;
+  private eventService: EventService;
+  private artistService: ArtistService;
 
   constructor() {
     this.userService = new UserService();
+    this.eventService = new EventService();
+    this.artistService = new ArtistService();
   }
 
   // 取得用戶資料
@@ -48,6 +54,54 @@ export class UserController {
       console.error('Error updating user profile:', error);
       const message = error instanceof Error ? error.message : 'Failed to update user profile';
       res.status(400).json({ error: message });
+    }
+  };
+
+  // ==================== 我的投稿（分頁） ====================
+
+  getMySubmittedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.uid;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+      const result = await this.eventService.getUserSubmittedEventsPaginated(
+        userId,
+        Number.isFinite(page) ? page : 1,
+        Number.isFinite(limit) ? limit : 20
+      );
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching user submitted events:', error);
+      res.status(500).json({ error: 'Failed to fetch submitted events' });
+    }
+  };
+
+  getMySubmittedArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.uid;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+      const result = await this.artistService.getUserSubmittedArtistsPaginated(
+        userId,
+        Number.isFinite(page) ? page : 1,
+        Number.isFinite(limit) ? limit : 20
+      );
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching user submitted artists:', error);
+      res.status(500).json({ error: 'Failed to fetch submitted artists' });
     }
   };
 

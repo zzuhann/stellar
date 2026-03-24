@@ -12,6 +12,10 @@ router.use(authenticateToken);
 router.get('/profile', userController.getUserProfile);
 router.put('/profile', userController.updateUserProfile);
 
+// 我的投稿（分頁，各資源獨立統計）
+router.get('/me/submissions/events', userController.getMySubmittedEvents);
+router.get('/me/submissions/artists', userController.getMySubmittedArtists);
+
 // 收藏相關
 router.get('/favorites', userController.getFavorites);
 router.post('/favorites', userController.addFavorite);

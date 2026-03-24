@@ -297,16 +297,4 @@ export class EventController {
       res.status(500).json({ error: 'Failed to fetch map data' });
     }
   };
-
-  // 取得當前用戶的投稿資料
-  getUserSubmissions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const result = await this.eventService.getUserSubmissions(userId);
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user submissions:', error);
-      res.status(500).json({ error: 'Failed to fetch user submissions' });
-    }
-  };
 }

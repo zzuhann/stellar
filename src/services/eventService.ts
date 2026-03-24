@@ -10,7 +10,7 @@ import {
   EventsResponseWithFavorite,
   MapDataParams,
   MapDataResponse,
-  UserSubmissionsResponse,
+  UserSubmissionsEventsListResponse,
 } from '../models/types';
 import { UserService } from './userService';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -1095,60 +1095,58 @@ export class EventService {
     return result;
   }
 
-  // 取得用戶的所有投稿（藝人和活動）
-  async getUserSubmissions(userId: string): Promise<UserSubmissionsResponse> {
+  /** 與前端「我的投稿」一致：rejected 置頂，其餘依建立時間新到舊 */
+  private sortEventsForMySubmissionsList(events: CoffeeEvent[]): CoffeeEvent[] {
+    return [...events].sort((a, b) => {
+      const ar = a.status === 'rejected' ? 0 : 1;
+      const br = b.status === 'rejected' ? 0 : 1;
+      if (ar !== br) return ar - br;
+      return b.createdAt.toMillis() - a.createdAt.toMillis();
+    });
+  }
+
+  /** 分頁取得當前用戶投稿活動（與 getFavorites 相同 page/limit 語意） */
+  async getUserSubmittedEventsPaginated(
+    userId: string,
+    page = 1,
+    limit = 20
+  ): Promise<UserSubmissionsEventsListResponse> {
     this.checkFirebaseConfig();
 
-    if (!db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
-    }
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
 
-    // 取得用戶的藝人投稿（簡化查詢避免索引問題）
-    const artistsSnapshot = await withTimeoutAndRetry(() =>
-      db.collection('artists').where('createdBy', '==', userId).get()
-    );
-
-    const artists = artistsSnapshot.docs
-      .map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as import('../models/types').Artist
-      )
-      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
-
-    // 取得用戶的活動投稿（簡化查詢避免索引問題）
     const eventsSnapshot = await withTimeoutAndRetry(() =>
       this.collection.where('createdBy', '==', userId).get()
     );
 
-    const events = eventsSnapshot.docs
-      .map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
-      )
-      .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // 在記憶體中排序
+    const events = eventsSnapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
 
-    // 計算統計資訊
-    const pendingArtists = artists.filter(a => a.status === 'pending').length;
-    const approvedArtists = artists.filter(a => a.status === 'approved').length;
-    const pendingEvents = events.filter(e => e.status === 'pending').length;
-    const approvedEvents = events.filter(e => e.status === 'approved').length;
+    const sorted = this.sortEventsForMySubmissionsList(events);
+
+    const pending = sorted.filter(e => e.status === 'pending').length;
+    const approved = sorted.filter(e => e.status === 'approved').length;
+    const total = sorted.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
+    const clampedPage =
+      total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
+    const skipClamped = (clampedPage - 1) * safeLimit;
+    const pageItems = sorted.slice(skipClamped, skipClamped + safeLimit);
 
     return {
-      artists,
-      events,
-      summary: {
-        totalArtists: artists.length,
-        totalEvents: events.length,
-        pendingArtists,
-        pendingEvents,
-        approvedArtists,
-        approvedEvents,
+      events: pageItems,
+      summary: { total, pending, approved },
+      pagination: {
+        page: clampedPage,
+        limit: safeLimit,
+        total,
+        totalPages,
       },
     };
   }

@@ -12,11 +12,14 @@ router.get('/map-data', (req, res) => void eventController.getMapData(req, res))
 router.get('/search', (req, res) => void eventController.searchEvents(req, res));
 
 // 需要登入的路由 (必須在 /:id 之前)
-router.get(
-  '/me',
-  authenticateToken,
-  (req, res) => void eventController.getUserSubmissions(req, res)
-);
+// Deprecated: 改用 GET /users/me/submissions/events 與 /users/me/submissions/artists
+router.get('/me', authenticateToken, (_req, res) => {
+  res.set('Deprecation', 'true');
+  res.status(410).json({
+    error:
+      'This endpoint is removed. Use GET /users/me/submissions/events and GET /users/me/submissions/artists',
+  });
+});
 
 // 公開路由 (動態參數路由放最後)
 // 使用 optionalAuthenticate 來取得收藏狀態（如果已登入）

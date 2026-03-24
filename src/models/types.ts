@@ -220,18 +220,30 @@ export interface MapDataResponse {
   total: number;
 }
 
-// 用戶投稿資料回應格式
-export interface UserSubmissionsResponse {
-  artists: Artist[];
+// 用戶投稿列表：單一資源統計（僅該資源）
+export interface UserSubmissionResourceSummary {
+  total: number;
+  pending: number;
+  approved: number;
+}
+
+export interface UserSubmissionsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface UserSubmissionsEventsListResponse {
   events: CoffeeEvent[];
-  summary: {
-    totalArtists: number;
-    totalEvents: number;
-    pendingArtists: number;
-    pendingEvents: number;
-    approvedArtists: number;
-    approvedEvents: number;
-  };
+  summary: UserSubmissionResourceSummary;
+  pagination: UserSubmissionsPagination;
+}
+
+export interface UserSubmissionsArtistsListResponse {
+  artists: Artist[];
+  summary: UserSubmissionResourceSummary;
+  pagination: UserSubmissionsPagination;
 }
 
 // 用戶收藏
