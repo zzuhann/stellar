@@ -10,6 +10,11 @@ dotenv.config();
 
 const app = express();
 
+// 信任 proxy（修復 rate limiter ValidationError）
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // 強制 HTTPS (生產環境)
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
@@ -115,6 +120,9 @@ app.use(morgan('combined'));
 // 解析中介軟體
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 健康檢查路由
+app.get('/', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // API 路由
 app.use('/api', routes);
