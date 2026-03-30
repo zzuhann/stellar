@@ -11,10 +11,17 @@ interface GoogleSuggestion {
   };
 }
 
+interface AddressComponent {
+  longText: string;
+  shortText: string;
+  types: string[];
+}
+
 interface GooglePlaceDetails {
   location?: { latitude?: number; longitude?: number };
   formattedAddress?: string;
   displayName?: { text?: string };
+  addressComponents?: AddressComponent[];
 }
 
 export class PlacesController {
@@ -105,7 +112,7 @@ export class PlacesController {
           method: 'GET',
           headers: {
             'X-Goog-Api-Key': this.apiKey,
-            'X-Goog-FieldMask': 'location,formattedAddress,displayName',
+            'X-Goog-FieldMask': 'location,formattedAddress,displayName,addressComponents',
             Referer: 'http://localhost:3000/',
           },
         }
@@ -113,6 +120,11 @@ export class PlacesController {
 
       if (response.ok) {
         const data = (await response.json()) as GooglePlaceDetails;
+
+        // 從 addressComponents 提取城市（台灣的縣市對應 administrative_area_level_1）
+        const city =
+          data.addressComponents?.find(c => c.types.includes('administrative_area_level_1'))
+            ?.longText || '';
 
         // 轉換為前端期望的格式
         const result = {
@@ -124,6 +136,7 @@ export class PlacesController {
           },
           formatted_address: data.formattedAddress || '',
           name: data.displayName?.text || '',
+          city,
         };
 
         res.json(result);

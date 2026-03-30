@@ -28,6 +28,7 @@ export interface CoffeeEvent {
   location: {
     name: string; // 新增：地點名稱
     address: string;
+    city?: string; // 城市（如：臺北市）
     coordinates: {
       lat: number;
       lng: number;
@@ -109,6 +110,7 @@ export interface CreateEventData {
   location: {
     name: string; // 地點名稱
     address: string;
+    city?: string; // 城市（如：臺北市）
     coordinates: {
       lat: number;
       lng: number;
@@ -134,6 +136,7 @@ export interface UpdateEventData {
   location?: {
     name: string; // 地點名稱
     address: string;
+    city?: string; // 城市（如：臺北市）
     coordinates: {
       lat: number;
       lng: number;
@@ -210,6 +213,7 @@ export interface MapDataResponse {
     location: {
       name: string;
       address: string;
+      city?: string;
       coordinates: { lat: number; lng: number };
     };
     datetime: {

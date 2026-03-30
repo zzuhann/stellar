@@ -139,6 +139,7 @@ export const eventSchemas = {
     location: z.object({
       name: z.string().min(1, '地點名稱為必填').max(200, '地點名稱不能超過 200 個字').trim(),
       address: z.string().max(500, '地點地址不能超過 500 個字').trim().optional(),
+      city: z.string().max(50, '城市名稱不能超過 50 個字').trim().optional(),
       coordinates: z.object({
         lat: z.number(),
         lng: z.number(),
@@ -187,6 +188,7 @@ export const eventSchemas = {
       .object({
         name: z.string().min(1, '地點名稱為必填欄位').max(200, '地點名稱不能超過200個字元').trim(),
         address: z.string().max(500, '地點地址不能超過500個字元').trim().optional(),
+        city: z.string().max(50, '城市名稱不能超過50個字元').trim().optional(),
         coordinates: z.object({
           lat: z.number(),
           lng: z.number(),
