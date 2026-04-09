@@ -9,9 +9,12 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
+import { sendArtistApprovalEmails } from './emailService';
+import { UserService } from './userService';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
+  private userService = new UserService();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -120,7 +123,11 @@ export class ArtistService {
     return result;
   }
 
-  async createArtist(artistData: CreateArtistData, userId: string): Promise<Artist> {
+  async createArtist(
+    artistData: CreateArtistData,
+    userId: string,
+    userEmail: string
+  ): Promise<Artist> {
     this.checkFirebaseConfig();
 
     const now = Timestamp.now();
@@ -136,6 +143,7 @@ export class ArtistService {
       profileImage: artistData.profileImage || undefined,
       status: 'pending' as const,
       createdBy: userId,
+      createdByEmail: userEmail || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -161,7 +169,16 @@ export class ArtistService {
     this.checkFirebaseConfig();
     const docRef = this.collection.doc(artistId);
 
-    const updateData: Record<string, any> = {
+    // 如果是 approved，先讀取 artist 資料用於寄信
+    let artistData: Artist | null = null;
+    if (status === 'approved') {
+      const doc = await withTimeoutAndRetry(() => docRef.get());
+      if (doc.exists) {
+        artistData = { id: doc.id, ...doc.data() } as Artist;
+      }
+    }
+
+    const updateData: Record<string, unknown> = {
       status,
       updatedAt: Timestamp.now(),
     };
@@ -195,11 +212,28 @@ export class ArtistService {
     cache.clearPattern('artists:status:');
     // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
+    // 審核通過時寄送通知信（非同步，不阻塞回應）
+    if (status === 'approved' && artistData?.createdByEmail) {
+      this.sendApprovalEmailAsync([artistData]);
+    }
+
     // 只返回更新的欄位，前端已有完整資料
     return {
       id: artistId,
       ...updateData,
     } as Artist;
+  }
+
+  // 非同步寄送審核通過通知信（不阻塞主流程）
+  private sendApprovalEmailAsync(artists: Artist[]): void {
+    const getUserDisplayName = async (userId: string): Promise<string | undefined> => {
+      const user = await this.userService.getUserById(userId);
+      return user?.displayName;
+    };
+
+    sendArtistApprovalEmails(artists, getUserDisplayName).catch(err => {
+      console.error('Failed to send approval emails:', err);
+    });
   }
 
   // 編輯藝人資料
@@ -265,6 +299,22 @@ export class ArtistService {
       return [];
     }
 
+    // 找出所有要 approved 的 artistIds，用於寄信
+    const approvedArtistIds = updates.filter(u => u.status === 'approved').map(u => u.artistId);
+
+    // 如果有要 approved 的，先批次讀取這些 artist 資料
+    const approvedArtistsData: Artist[] = [];
+    if (approvedArtistIds.length > 0) {
+      const artistDocs = await Promise.all(
+        approvedArtistIds.map(id => withTimeoutAndRetry(() => this.collection.doc(id).get()))
+      );
+      for (const doc of artistDocs) {
+        if (doc.exists) {
+          approvedArtistsData.push({ id: doc.id, ...doc.data() } as Artist);
+        }
+      }
+    }
+
     // 使用 Firestore 的 batch 操作
     const batch = db.batch();
 
@@ -272,7 +322,7 @@ export class ArtistService {
     for (const update of updates) {
       const docRef = this.collection.doc(update.artistId);
 
-      const updateData: Record<string, any> = {
+      const updateData: Record<string, unknown> = {
         status: update.status,
         updatedAt: Timestamp.now(),
       };
@@ -311,6 +361,11 @@ export class ArtistService {
     // 清除相關藝人的個別快取
     for (const update of updates) {
       cache.delete(`artist:${update.artistId}`);
+    }
+
+    // 審核通過時寄送通知信（非同步，不阻塞回應）
+    if (approvedArtistsData.length > 0) {
+      this.sendApprovalEmailAsync(approvedArtistsData);
     }
 
     // 返回更新的結果

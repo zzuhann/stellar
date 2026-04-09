@@ -69,6 +69,7 @@ export class ArtistController {
     try {
       const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
       const userId = req.user.uid;
+      const userEmail = req.user.email;
 
       if (!stageName) {
         res.status(400).json({ error: 'Stage name is required' });
@@ -84,7 +85,8 @@ export class ArtistController {
           birthday,
           profileImage,
         },
-        userId
+        userId,
+        userEmail
       );
 
       res.status(201).json(artist);

@@ -15,6 +15,7 @@ import {
 import { UserService } from './userService';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
+import { sendEventApprovalEmails } from './emailService';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
@@ -539,7 +540,11 @@ export class EventService {
     return event;
   }
 
-  async createEvent(eventData: CreateEventData, userId: string): Promise<CoffeeEvent> {
+  async createEvent(
+    eventData: CreateEventData,
+    userId: string,
+    userEmail: string
+  ): Promise<CoffeeEvent> {
     this.checkFirebaseConfig();
 
     if (!db) {
@@ -585,6 +590,7 @@ export class EventService {
       detailImage: eventData.detailImage || [],
       status: 'pending' as const,
       createdBy: userId,
+      createdByEmail: userEmail || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -733,6 +739,11 @@ export class EventService {
       ...updatedDoc.data(),
     } as CoffeeEvent;
 
+    // 審核通過時寄送通知信（非同步，不阻塞回應）
+    if (status === 'approved' && existingData.createdByEmail) {
+      this.sendApprovalEmailAsync([{ ...existingData, id: eventId }]);
+    }
+
     return updatedEvent;
   }
 
@@ -771,6 +782,7 @@ export class EventService {
     // 使用 Firestore 的 batch 操作批次更新 events
     const eventBatch = db.batch();
     const approvedEvents: Array<{ eventId: string; artistIds: string[] }> = [];
+    const approvedEventsForEmail: CoffeeEvent[] = [];
 
     // 為每個活動建立個別的更新資料
     for (let i = 0; i < updates.length; i++) {
@@ -799,6 +811,9 @@ export class EventService {
             artistIds: existingData.artists.map((a: { id: string }) => a.id),
           });
         }
+
+        // 收集用於寄信的 event 資料
+        approvedEventsForEmail.push({ ...existingData, id: update.eventId });
       }
 
       eventBatch.update(docRef, updateData);
@@ -821,6 +836,11 @@ export class EventService {
     // 清除相關活動的個別快取
     for (const update of updates) {
       cache.delete(`event:${update.eventId}`);
+    }
+
+    // 審核通過時寄送通知信（非同步，不阻塞回應）
+    if (approvedEventsForEmail.length > 0) {
+      this.sendApprovalEmailAsync(approvedEventsForEmail);
     }
 
     // 返回更新的結果
@@ -894,6 +914,18 @@ export class EventService {
     } catch (error) {
       console.error('Error batch updating artists activeEventIds:', error);
     }
+  }
+
+  // 非同步寄送審核通過通知信（不阻塞主流程）
+  private sendApprovalEmailAsync(events: CoffeeEvent[]): void {
+    const getUserDisplayName = async (userId: string): Promise<string | undefined> => {
+      const user = await this.userService.getUserById(userId);
+      return user?.displayName;
+    };
+
+    sendEventApprovalEmails(events, getUserDisplayName).catch(err => {
+      console.error('Failed to send event approval emails:', err);
+    });
   }
 
   // 重新送審功能
@@ -1134,8 +1166,7 @@ export class EventService {
     const approved = sorted.filter(e => e.status === 'approved').length;
     const total = sorted.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
-    const clampedPage =
-      total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
+    const clampedPage = total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
     const skipClamped = (clampedPage - 1) * safeLimit;
     const pageItems = sorted.slice(skipClamped, skipClamped + safeLimit);
 

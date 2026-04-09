@@ -12,6 +12,7 @@ export interface Artist {
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   activeEventIds?: string[]; // 進行中的活動 ID 列表
   createdBy: string;
+  createdByEmail?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -48,6 +49,7 @@ export interface CoffeeEvent {
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   createdBy: string;
+  createdByEmail?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

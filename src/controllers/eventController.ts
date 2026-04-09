@@ -88,6 +88,7 @@ export class EventController {
     try {
       const eventData = req.body;
       const userId = req.user?.uid;
+      const userEmail = req.user?.email;
 
       // 驗證必填欄位
       const requiredFields = ['artistIds', 'title', 'location', 'datetime'];
@@ -104,7 +105,7 @@ export class EventController {
         return;
       }
 
-      const event = await this.eventService.createEvent(eventData, userId);
+      const event = await this.eventService.createEvent(eventData, userId, userEmail);
       res.status(201).json(event);
     } catch (error) {
       console.error('Error creating event:', error);
