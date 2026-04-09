@@ -30,7 +30,9 @@ STELLAR <noreply@stellar-zone.com>
 
 ### 藝人投稿
 
-- **觸發時機**：`POST /artists`
+- **觸發時機**：
+  - 新投稿 `POST /artists`
+  - 重新送審 `PATCH /artists/:id/resubmit`
 - **收件人**：`ADMIN_NOTIFY_EMAIL`
 - **主旨**：`[STELLAR] 有人投稿藝人～`
 - **內文**：
@@ -42,7 +44,9 @@ STELLAR <noreply@stellar-zone.com>
 
 ### 活動投稿
 
-- **觸發時機**：`POST /events`
+- **觸發時機**：
+  - 新投稿 `POST /events`
+  - 重新送審 `PATCH /events/:id/resubmit`
 - **收件人**：`ADMIN_NOTIFY_EMAIL`
 - **主旨**：`[STELLAR] 有人新增生咖活動～`
 - **內文**：

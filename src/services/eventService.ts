@@ -968,6 +968,13 @@ export class EventService {
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
 
+    // 通知管理員有重新送審（非同步，不阻塞回應）
+    if (existingData.createdByEmail) {
+      sendEventSubmissionNotification(existingData.createdByEmail, existingData.title).catch(
+        () => {}
+      );
+    }
+
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     return {
       id: updatedDoc.id,

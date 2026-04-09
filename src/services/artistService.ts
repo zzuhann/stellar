@@ -427,6 +427,13 @@ export class ArtistService {
     cache.clearPattern('artists:status:');
     // 注意：resubmit 不會影響已審核藝人的統計，所以不需要清除統計快取
 
+    // 通知管理員有重新送審（非同步，不阻塞回應）
+    if (existingData?.createdByEmail) {
+      sendArtistSubmissionNotification(existingData.createdByEmail, existingData.stageName).catch(
+        () => {}
+      );
+    }
+
     return {
       id: artistId,
       ...existingData,
