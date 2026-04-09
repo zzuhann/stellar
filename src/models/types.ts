@@ -48,6 +48,7 @@ export interface CoffeeEvent {
   detailImage?: string[]; // 新增：詳細圖片 URL 陣列
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
+  viewCount?: number;
   createdBy: string;
   createdByEmail?: string;
   createdAt: Timestamp;

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { EventService } from '../services/eventService';
 import { EventFilterParams, MapDataParams, UpdateEventData } from '../models/types';
+import { cache } from '../utils/cache';
 
 export class EventController {
   private eventService: EventService;
@@ -275,6 +276,47 @@ export class EventController {
     } catch (error) {
       console.error('Error searching events:', error);
       res.status(500).json({ error: 'Failed to search events' });
+    }
+  };
+
+  // 記錄活動瀏覽量
+  recordView = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const forwarded = req.headers['x-forwarded-for'];
+      const ip =
+        (typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined) ??
+        req.ip ??
+        'unknown';
+
+      const dedupKey = `view_dedup:${ip}:${id}`;
+      if (cache.get(dedupKey) !== null) {
+        res.status(204).send();
+        return;
+      }
+
+      await this.eventService.incrementViewCount(id);
+      cache.set(dedupKey, true, 60);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No document to update')) {
+        res.status(404).json({ error: 'Event not found' });
+        return;
+      }
+      console.error('Error recording view:', error);
+      res.status(500).json({ error: 'Failed to record view' });
+    }
+  };
+
+  // 取得熱門活動排行
+  getTrendingEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 20) : 10;
+      const events = await this.eventService.getTrendingEvents(limit);
+      res.json({ events, total: events.length });
+    } catch (error) {
+      console.error('Error fetching trending events:', error);
+      res.status(500).json({ error: 'Failed to fetch trending events' });
     }
   };
 

@@ -13,7 +13,7 @@ import {
   UserSubmissionsEventsListResponse,
 } from '../models/types';
 import { UserService } from './userService';
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 
@@ -1219,6 +1219,29 @@ export class EventService {
     });
 
     await batch.commit();
+  }
+
+  async incrementViewCount(eventId: string): Promise<void> {
+    this.checkFirebaseConfig();
+    await this.collection!.doc(eventId).update({
+      viewCount: FieldValue.increment(1),
+    });
+  }
+
+  async getTrendingEvents(limit: number = 10): Promise<CoffeeEvent[]> {
+    this.checkFirebaseConfig();
+    const clampedLimit = Math.min(limit, 20);
+
+    return cache.getWithLock(
+      `events:trending:${clampedLimit}`,
+      async () => {
+        const activeEvents = await this.getApprovedActiveEventsBase();
+        return [...activeEvents]
+          .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
+          .slice(0, clampedLimit);
+      },
+      360 // 6 小時 TTL
+    );
   }
 
   // 輔助函數：將 Firestore Timestamp 轉為毫秒

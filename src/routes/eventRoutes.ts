@@ -10,6 +10,7 @@ const eventController = new EventController();
 router.get('/', optionalAuthenticate, (req, res) => void eventController.getActiveEvents(req, res));
 router.get('/map-data', (req, res) => void eventController.getMapData(req, res));
 router.get('/search', (req, res) => void eventController.searchEvents(req, res));
+router.get('/trending', (req, res) => void eventController.getTrendingEvents(req, res));
 
 // 需要登入的路由 (必須在 /:id 之前)
 // Deprecated: 改用 GET /users/me/submissions/events 與 /users/me/submissions/artists
@@ -24,6 +25,7 @@ router.get('/me', authenticateToken, (_req, res) => {
 // 公開路由 (動態參數路由放最後)
 // 使用 optionalAuthenticate 來取得收藏狀態（如果已登入）
 router.get('/:id', optionalAuthenticate, (req, res) => void eventController.getEventById(req, res));
+router.post('/:id/view', (req, res) => void eventController.recordView(req, res));
 
 // 其他需要登入的路由
 router.post(
