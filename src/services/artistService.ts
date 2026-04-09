@@ -9,7 +9,7 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
-import { sendArtistApprovalEmails } from './emailService';
+import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
 import { UserService } from './userService';
 
 export class ArtistService {
@@ -153,6 +153,11 @@ export class ArtistService {
     // 清除相關快取（新增 pending 藝人會影響 pending 列表）
     cache.clearPattern('artists:status:pending');
     cache.clearPattern('artists:filters:');
+
+    // 通知管理員有新投稿（非同步，不阻塞回應）
+    if (userEmail) {
+      sendArtistSubmissionNotification(userEmail, artistData.stageName).catch(() => {});
+    }
 
     return {
       id: docRef.id,

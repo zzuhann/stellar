@@ -15,7 +15,7 @@ import {
 import { UserService } from './userService';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
-import { sendEventApprovalEmails } from './emailService';
+import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
@@ -608,6 +608,11 @@ export class EventService {
 
     // 清除 artists 統計快取（因為新增事件會影響藝人的活動數量）
     cache.clearPattern('artists:stats:');
+
+    // 通知管理員有新投稿（非同步，不阻塞回應）
+    if (userEmail) {
+      sendEventSubmissionNotification(userEmail, eventData.title).catch(() => {});
+    }
 
     return {
       id: docRef.id,

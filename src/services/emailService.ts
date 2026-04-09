@@ -10,6 +10,9 @@ const emailWhitelist = new Set(
     .filter(Boolean)
 );
 
+// 管理員通知信箱：新投稿時通知此信箱
+const adminNotifyEmail = process.env.ADMIN_NOTIFY_EMAIL || '';
+
 /**
  * 檢查 email 是否在白名單中（不需要寄信）
  */
@@ -319,5 +322,91 @@ export async function sendEventApprovalEmails(
       displayName,
       events: eventList,
     });
+  }
+}
+
+/**
+ * 通知管理員有新的藝人投稿
+ * 如果投稿者在白名單中，則不寄送通知
+ */
+export async function sendArtistSubmissionNotification(
+  submitterEmail: string,
+  artistName: string
+): Promise<void> {
+  if (!resend || !adminNotifyEmail) {
+    return;
+  }
+
+  // 白名單的人投稿不通知管理員
+  if (isWhitelisted(submitterEmail)) return;
+
+  const subject = '[STELLAR] 有人投稿藝人～';
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <p>有人投稿了新的藝人：<strong>${artistName}</strong></p>
+  <p>可以去審核囉！</p>
+  <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
+</body>
+</html>
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: adminNotifyEmail,
+      subject,
+      html,
+    });
+  } catch {
+    // 不拋出錯誤，避免影響投稿流程
+  }
+}
+
+/**
+ * 通知管理員有新的活動投稿
+ * 如果投稿者在白名單中，則不寄送通知
+ */
+export async function sendEventSubmissionNotification(
+  submitterEmail: string,
+  eventTitle: string
+): Promise<void> {
+  if (!resend || !adminNotifyEmail) {
+    return;
+  }
+
+  // 白名單的人投稿不通知管理員
+  if (isWhitelisted(submitterEmail)) {
+    return;
+  }
+
+  const subject = '[STELLAR] 有人新增生咖活動～';
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <p>有人投稿了新的活動：<strong>${eventTitle}</strong></p>
+  <p>可以去審核囉！</p>
+  <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
+</body>
+</html>
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: adminNotifyEmail,
+      subject,
+      html,
+    });
+  } catch {
+    // 不拋出錯誤，避免影響投稿流程
   }
 }
