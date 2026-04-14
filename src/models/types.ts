@@ -1,5 +1,12 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
+export interface VerifiedOrganizer {
+  userId: string;
+  platform: 'threads' | 'instagram';
+  username: string;
+  verifiedAt: Timestamp;
+}
+
 export interface Artist {
   id: string;
   stageName: string; // 英文藝名（主要顯示）
@@ -49,6 +56,7 @@ export interface CoffeeEvent {
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   viewCount?: number;
+  verifiedOrganizers?: VerifiedOrganizer[];
   createdBy: string;
   createdByEmail?: string;
   createdAt: Timestamp;

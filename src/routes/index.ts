@@ -5,6 +5,7 @@ import placesRoutes from './placesRoutes';
 import imageRoutes from './imageRoutes';
 import userRoutes from './userRoutes';
 import cacheRoutes from './cacheRoutes';
+import authRoutes from './authRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -27,46 +28,6 @@ router.get('/health', (_req, res) => {
   });
 });
 
-// 簡單測試端點
-router.get('/test', async (_req, res) => {
-  if (!hasFirebaseConfig) {
-    res.status(503).json({ error: 'Firebase 問題，請檢查環境變數' });
-    return;
-  }
-
-  try {
-    const { db } = await import('../config/firebase');
-
-    if (!db) {
-      res.status(503).json({ error: 'Firebase database not available' });
-      return;
-    }
-
-    // 測試 1：讀取所有 artists（不用複合查詢）
-    const allArtists = await db.collection('artists').limit(5).get();
-    const artistsData = allArtists.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // 測試 2：單純 status 查詢
-    const approvedArtists = await db.collection('artists').where('status', '==', 'approved').get();
-    const approvedData = approvedArtists.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    res.json({
-      success: true,
-      allArtists: artistsData,
-      approvedArtists: approvedData,
-      counts: {
-        total: allArtists.size,
-        approved: approvedArtists.size,
-      },
-    });
-  } catch (error: unknown) {
-    res.status(500).json({
-      error: 'Firebase test failed',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
 // Google Places API 路由（不需要 Firebase）
 router.use('/places', placesRoutes);
 
@@ -79,6 +40,7 @@ if (hasFirebaseConfig) {
   router.use('/events', eventRoutes);
   router.use('/users', userRoutes);
   router.use('/cache', cacheRoutes);
+  router.use('/auth', authRoutes);
 } else {
   // Firebase 未配置時的提示端點
   router.use('/artists', (_req, res) => {

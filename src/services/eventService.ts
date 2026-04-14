@@ -11,6 +11,7 @@ import {
   MapDataParams,
   MapDataResponse,
   UserSubmissionsEventsListResponse,
+  VerifiedOrganizer,
 } from '../models/types';
 import { UserService } from './userService';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
@@ -1223,7 +1224,7 @@ export class EventService {
 
   async incrementViewCount(eventId: string): Promise<void> {
     this.checkFirebaseConfig();
-    await this.collection!.doc(eventId).update({
+    await this.collection.doc(eventId).update({
       viewCount: FieldValue.increment(1),
     });
   }
@@ -1285,5 +1286,27 @@ export class EventService {
 
       return sortOrder === 'desc' ? -comparison : comparison;
     });
+  }
+
+  async addVerifiedOrganizer(eventId: string, organizer: VerifiedOrganizer): Promise<void> {
+    this.checkFirebaseConfig();
+
+    const eventRef = this.collection.doc(eventId);
+
+    await eventRef.update({
+      verifiedOrganizers: FieldValue.arrayUnion(organizer),
+      updatedAt: Timestamp.now(),
+    });
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.delete(`event:${eventId}`);
+  }
+
+  async hasUserClaimedEvent(eventId: string, userId: string): Promise<boolean> {
+    const event = (await this.getEventById(eventId)) as CoffeeEvent | null;
+    if (!event) return false;
+
+    return event.verifiedOrganizers?.some(o => o.userId === userId) ?? false;
   }
 }

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx web-push:*)"
+      "Bash(npx web-push:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }
