@@ -74,14 +74,17 @@ interface CoffeeEvent {
 ## 環境變數
 
 ```env
-# Meta (Threads) OAuth
-META_APP_ID=998708252604701
-META_APP_SECRET=xxxxxxxxxx
+# Threads OAuth
+THREADS_APP_ID=xxxxxxxxxx
+THREADS_APP_SECRET=xxxxxxxxxx
 
 # OAuth 設定
 OAUTH_CALLBACK_BASE_URL=https://stellar.zeabur.app/api
 FRONTEND_URL=https://www.stellar-zone.com
 ```
+
+> **注意**：`THREADS_APP_ID` 是 Threads API 專屬的 App ID，不是 Meta App 的主要 App ID。
+> 取得方式：Meta Developer Console → 你的 App → Threads API → 使用案例頁面顯示的 App ID。
 
 ---
 
@@ -107,7 +110,7 @@ FRONTEND_URL=https://www.stellar-zone.com
 **Threads OAuth URL**：
 ```
 https://threads.net/oauth/authorize
-  ?client_id={META_APP_ID}
+  ?client_id={THREADS_APP_ID}
   &redirect_uri={OAUTH_CALLBACK_BASE_URL}/auth/threads/callback
   &scope=threads_basic
   &response_type=code
@@ -145,8 +148,8 @@ https://threads.net/oauth/authorize
 POST https://graph.threads.net/oauth/access_token
 Content-Type: application/x-www-form-urlencoded
 
-client_id={META_APP_ID}
-&client_secret={META_APP_SECRET}
+client_id={THREADS_APP_ID}
+&client_secret={THREADS_APP_SECRET}
 &grant_type=authorization_code
 &redirect_uri={OAUTH_CALLBACK_BASE_URL}/auth/threads/callback
 &code={code}

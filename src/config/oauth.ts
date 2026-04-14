@@ -1,10 +1,10 @@
 export const oauthConfig = {
   threads: {
     get clientId() {
-      return process.env.META_APP_ID || '';
+      return process.env.THREADS_APP_ID || '';
     },
     get clientSecret() {
-      return process.env.META_APP_SECRET || '';
+      return process.env.THREADS_APP_SECRET || '';
     },
     authorizationUrl: 'https://threads.net/oauth/authorize',
     tokenUrl: 'https://graph.threads.net/oauth/access_token',
