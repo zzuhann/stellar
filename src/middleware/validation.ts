@@ -145,7 +145,6 @@ export const eventSchemas = {
         lng: z.number(),
       }),
     }),
-    viewCount: z.number().optional(),
     datetime: z.object({
       start: z.object({
         _seconds: z.number(),
@@ -196,7 +195,6 @@ export const eventSchemas = {
         }),
       })
       .optional(),
-    viewCount: z.number().optional(),
     datetime: z
       .object({
         start: z.object({
