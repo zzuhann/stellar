@@ -5,11 +5,13 @@ description: 活動認領功能 - Threads OAuth 驗證主辦方身份
 
 # 活動認領功能 - 後端
 
-> **重要**：新增、修改實作時，請同步更新 [docs/implementation.md](./docs/implementation.md)
+> **重要**：新增、修改實作時，請同步更新：
+> - [docs/implementation.md](./docs/implementation.md) - 實作狀態
+> - [/docs/event-specification.md](/docs/event-specification.md) - Event 通用規格
 
 ## 功能概述
 
-讓活動主辦方透過 Threads OAuth 驗證身份，認領由他人投稿的活動，並獲得「已認證主辦」標章。
+讓活動主辦方透過 Threads OAuth 驗證身份，認領由他人投稿的活動，認領成功後可取得編輯、刪除權限。
 
 ---
 

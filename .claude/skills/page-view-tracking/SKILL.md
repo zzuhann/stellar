@@ -5,7 +5,8 @@ description: 活動瀏覽量追蹤 - 後端實作規格
 
 # 活動瀏覽量追蹤 - 後端
 
-> **重要**：新增、修改 API 時，請同步更新 [docs/api.md](./docs/api.md)
+> **重要**：新增、修改實作時，請同步更新：
+> - [docs/api.md](./docs/api.md)
 
 ## 設計原則
 
