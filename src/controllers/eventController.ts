@@ -56,7 +56,7 @@ export class EventController {
 
   // 取得單一活動詳情
   getEventById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     // 如果用戶已登入，則傳遞 userId 以取得收藏狀態
     const userId = req.user?.uid;
     const event = await this.eventService.getEventById(id, userId);
@@ -97,7 +97,7 @@ export class EventController {
   // 編輯活動
   updateEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const updateData: UpdateEventData = req.body;
       const userId = req.user?.uid;
       const userRole = req.user?.role;
@@ -132,7 +132,7 @@ export class EventController {
 
   // 審核活動（僅管理員）
   reviewEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { status, reason } = req.body; // 加入 reason 參數
 
     if (!['approved', 'rejected'].includes(status)) {
@@ -146,14 +146,14 @@ export class EventController {
 
   // 審核通過活動（僅管理員）
   approveEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const event = await this.eventService.updateEventStatus(id, 'approved');
     res.json(event);
   };
 
   // 拒絕活動（僅管理員）
   rejectEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { reason } = req.body; // 從 request body 取得拒絕原因
     const event = await this.eventService.updateEventStatus(id, 'rejected', reason);
     res.json(event);
@@ -200,7 +200,7 @@ export class EventController {
 
   // 刪除活動（僅管理員或活動創建者）
   deleteEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = req.user?.uid;
     const userRole = req.user?.role;
 
@@ -211,7 +211,7 @@ export class EventController {
   // 重新送審活動
   resubmitEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const userId = req.user?.uid;
 
       const event = await this.eventService.resubmitEvent(id, userId);
@@ -237,7 +237,7 @@ export class EventController {
   // 記錄活動瀏覽量
   recordView = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const forwarded = req.headers['x-forwarded-for'];
       const ip =
         (typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined) ??

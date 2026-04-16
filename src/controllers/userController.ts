@@ -132,7 +132,7 @@ export class UserController {
   removeFavorite = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const userId = req.user?.uid;
-      const { eventId } = req.params;
+      const eventId = req.params.eventId as string;
 
       await this.userService.removeFavorite(userId, eventId);
       res.json({ message: 'Favorite removed successfully' });
@@ -146,7 +146,7 @@ export class UserController {
   // 檢查是否已收藏
   checkFavorite = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user?.uid;
-    const { eventId } = req.params;
+    const eventId = req.params.eventId as string;
 
     const isFavorited = await this.userService.isFavorited(userId, eventId);
     res.json({ isFavorited });

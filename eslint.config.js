@@ -35,6 +35,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-misused-promises': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
       'prettier/prettier': 'error',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },

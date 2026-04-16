@@ -83,7 +83,7 @@ export class ArtistController {
 
   // 審核藝人（僅管理員）
   reviewArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { status, reason, adminUpdate } = req.body;
 
     if (!['approved', 'rejected', 'exists'].includes(status)) {
@@ -97,7 +97,7 @@ export class ArtistController {
 
   // 審核通過藝人（僅管理員）
   approveArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { adminUpdate } = req.body; // 支援管理員更新團名
     const artist = await this.artistService.updateArtistStatus(
       id,
@@ -136,7 +136,7 @@ export class ArtistController {
 
   // 拒絕藝人（僅管理員）
   rejectArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { reason } = req.body; // 從 request body 取得拒絕原因
     const artist = await this.artistService.updateArtistStatus(id, 'rejected', reason);
     res.json(artist);
@@ -144,7 +144,7 @@ export class ArtistController {
 
   // 取得單一藝人詳情
   getArtistById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const artist = await this.artistService.getArtistById(id);
 
     if (!artist) {
@@ -158,7 +158,7 @@ export class ArtistController {
   // 編輯藝人
   updateArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
       const userId = req.user.uid;
       const userRole = req.user.role;
@@ -188,7 +188,7 @@ export class ArtistController {
   // 重新送審藝人
   resubmitArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const userId = req.user.uid;
 
       const artist = await this.artistService.resubmitArtist(id, userId);
@@ -202,7 +202,7 @@ export class ArtistController {
 
   // 刪除藝人（僅管理員）
   deleteArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     await this.artistService.deleteArtist(id);
     res.json({ message: 'Artist deleted successfully' });
   };
