@@ -18,20 +18,15 @@ export class UserController {
 
   // 取得用戶資料
   getUserProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const user = await this.userService.getUserById(userId);
+    const userId = req.user?.uid;
+    const user = await this.userService.getUserById(userId);
 
-      if (!user) {
-        res.status(404).json({ error: 'User not found' });
-        return;
-      }
-
-      res.json(user);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      res.status(500).json({ error: 'Failed to fetch user profile' });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
+
+    res.json(user);
   };
 
   // 更新用戶資料
@@ -60,72 +55,57 @@ export class UserController {
   // ==================== 我的投稿（分頁） ====================
 
   getMySubmittedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-
-      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-
-      const result = await this.eventService.getUserSubmittedEventsPaginated(
-        userId,
-        Number.isFinite(page) ? page : 1,
-        Number.isFinite(limit) ? limit : 20
-      );
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user submitted events:', error);
-      res.status(500).json({ error: 'Failed to fetch submitted events' });
+    const userId = req.user?.uid;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
     }
+
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    const result = await this.eventService.getUserSubmittedEventsPaginated(
+      userId,
+      Number.isFinite(page) ? page : 1,
+      Number.isFinite(limit) ? limit : 20
+    );
+    res.json(result);
   };
 
   getMySubmittedArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-
-      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-
-      const result = await this.artistService.getUserSubmittedArtistsPaginated(
-        userId,
-        Number.isFinite(page) ? page : 1,
-        Number.isFinite(limit) ? limit : 20
-      );
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user submitted artists:', error);
-      res.status(500).json({ error: 'Failed to fetch submitted artists' });
+    const userId = req.user?.uid;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
     }
+
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    const result = await this.artistService.getUserSubmittedArtistsPaginated(
+      userId,
+      Number.isFinite(page) ? page : 1,
+      Number.isFinite(limit) ? limit : 20
+    );
+    res.json(result);
   };
 
   // ==================== 收藏相關 ====================
 
   // 取得收藏列表
   getFavorites = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const filters: FavoriteFilterParams = {
-        sort: req.query.sort as 'favoritedAt' | 'startTime',
-        sortOrder: req.query.sortOrder as 'asc' | 'desc',
-        status: req.query.status as 'notEnded' | 'active' | 'upcoming' | 'ended' | 'all',
-        artistIds: req.query.artistIds ? (req.query.artistIds as string).split(',') : undefined,
-        page: req.query.page ? parseInt(req.query.page as string) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-      };
+    const userId = req.user?.uid;
+    const filters: FavoriteFilterParams = {
+      sort: req.query.sort as 'favoritedAt' | 'startTime',
+      sortOrder: req.query.sortOrder as 'asc' | 'desc',
+      status: req.query.status as 'notEnded' | 'active' | 'upcoming' | 'ended' | 'all',
+      artistIds: req.query.artistIds ? (req.query.artistIds as string).split(',') : undefined,
+      page: req.query.page ? parseInt(req.query.page as string) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+    };
 
-      const result = await this.userService.getFavorites(userId, filters);
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching favorites:', error);
-      res.status(500).json({ error: 'Failed to fetch favorites' });
-    }
+    const result = await this.userService.getFavorites(userId, filters);
+    res.json(result);
   };
 
   // 新增收藏
@@ -165,40 +145,30 @@ export class UserController {
 
   // 檢查是否已收藏
   checkFavorite = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const { eventId } = req.params;
+    const userId = req.user?.uid;
+    const { eventId } = req.params;
 
-      const isFavorited = await this.userService.isFavorited(userId, eventId);
-      res.json({ isFavorited });
-    } catch (error) {
-      console.error('Error checking favorite:', error);
-      res.status(500).json({ error: 'Failed to check favorite status' });
-    }
+    const isFavorited = await this.userService.isFavorited(userId, eventId);
+    res.json({ isFavorited });
   };
 
   // ==================== 已認領活動（分頁） ====================
 
   getMyClaimedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-
-      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-
-      const result = await this.eventService.getUserClaimedEventsPaginated(
-        userId,
-        Number.isFinite(page) ? page : 1,
-        Number.isFinite(limit) ? limit : 20
-      );
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching user claimed events:', error);
-      res.status(500).json({ error: 'Failed to fetch claimed events' });
+    const userId = req.user?.uid;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
     }
+
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    const result = await this.eventService.getUserClaimedEventsPaginated(
+      userId,
+      Number.isFinite(page) ? page : 1,
+      Number.isFinite(limit) ? limit : 20
+    );
+    res.json(result);
   };
 }

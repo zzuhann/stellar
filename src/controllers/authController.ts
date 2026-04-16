@@ -25,63 +25,58 @@ function buildRedirectUrl(baseUrl: string, params: Record<string, string>): stri
 
 export class AuthController {
   async initiateThreadsOAuth(req: Request, res: Response): Promise<void> {
-    try {
-      const { eventId, redirectUrl, token } = req.query;
+    const { eventId, redirectUrl, token } = req.query;
 
-      // 從 query string 取得並驗證 token
-      if (!token || typeof token !== 'string') {
-        res.status(401).json({ error: 'Access token required' });
-        return;
-      }
-
-      let userId: string;
-      try {
-        const decodedToken = await auth.verifyIdToken(token);
-        userId = decodedToken.uid;
-      } catch {
-        res.status(403).json({ error: 'Invalid token' });
-        return;
-      }
-
-      if (!eventId || typeof eventId !== 'string') {
-        res.status(400).json({ error: 'eventId is required' });
-        return;
-      }
-
-      // 驗證活動存在
-      const event = (await eventService.getEventById(eventId)) as CoffeeEvent | null;
-      if (!event) {
-        res.status(404).json({ error: 'Event not found' });
-        return;
-      }
-
-      // 檢查是否已認領
-      const hasClaimed = await eventService.hasUserClaimedEvent(eventId, userId);
-      if (hasClaimed) {
-        res.status(400).json({ error: 'Already claimed' });
-        return;
-      }
-
-      // 決定完成後要跳轉的頁面
-      const finalRedirectUrl =
-        typeof redirectUrl === 'string'
-          ? redirectUrl
-          : `${oauthConfig.frontendUrl}/events/${eventId}`;
-
-      // 編碼 state
-      const state = encodeState({
-        eventId,
-        userId,
-        redirectUrl: finalRedirectUrl,
-      });
-
-      // 建立 OAuth URL 並重導向
-      const oauthUrl = buildThreadsOAuthUrl(state);
-      res.redirect(oauthUrl);
-    } catch (error) {
-      console.error('initiateThreadsOAuth error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+    // 從 query string 取得並驗證 token
+    if (!token || typeof token !== 'string') {
+      res.status(401).json({ error: 'Access token required' });
+      return;
     }
+
+    let userId: string;
+    try {
+      const decodedToken = await auth.verifyIdToken(token);
+      userId = decodedToken.uid;
+    } catch {
+      res.status(403).json({ error: 'Invalid token' });
+      return;
+    }
+
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    // 驗證活動存在
+    const event = (await eventService.getEventById(eventId)) as CoffeeEvent | null;
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    // 檢查是否已認領
+    const hasClaimed = await eventService.hasUserClaimedEvent(eventId, userId);
+    if (hasClaimed) {
+      res.status(400).json({ error: 'Already claimed' });
+      return;
+    }
+
+    // 決定完成後要跳轉的頁面
+    const finalRedirectUrl =
+      typeof redirectUrl === 'string'
+        ? redirectUrl
+        : `${oauthConfig.frontendUrl}/events/${eventId}`;
+
+    // 編碼 state
+    const state = encodeState({
+      eventId,
+      userId,
+      redirectUrl: finalRedirectUrl,
+    });
+
+    // 建立 OAuth URL 並重導向
+    const oauthUrl = buildThreadsOAuthUrl(state);
+    res.redirect(oauthUrl);
   }
 
   async handleThreadsCallback(req: Request, res: Response): Promise<void> {

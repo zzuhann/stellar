@@ -152,7 +152,7 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
 });
 
 // 404 處理
-app.use('*', (_req, res) => {
+app.use('/{*splat}', (_req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
