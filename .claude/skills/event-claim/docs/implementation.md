@@ -1,6 +1,7 @@
 # Event Claim - 後端實作清單
 
 > 實作完成於 2026-04-15
+> 權限擴充於 2026-04-16
 
 ---
 
@@ -29,24 +30,27 @@
 
 ## API 端點
 
-| Method | Endpoint                     | 說明           | 需登入 |
-| ------ | ---------------------------- | -------------- | ------ |
-| GET    | `/api/auth/threads`          | 發起 OAuth     | ✓      |
-| GET    | `/api/auth/threads/callback` | OAuth callback | ✗      |
+| Method | Endpoint                       | 說明               | 需登入 |
+| ------ | ------------------------------ | ------------------ | ------ |
+| GET    | `/api/auth/threads`            | 發起 OAuth         | ✓      |
+| GET    | `/api/auth/threads/callback`   | OAuth callback     | ✗      |
+| GET    | `/api/users/me/claimed-events` | 查詢已認領活動列表 | ✓      |
 
 ---
 
 ## 檔案總覽
 
-| 檔案                                | 類型 |
-| ----------------------------------- | ---- |
-| `src/config/oauth.ts`               | 新增 |
-| `src/routes/authRoutes.ts`          | 新增 |
-| `src/routes/index.ts`               | 修改 |
-| `src/controllers/authController.ts` | 新增 |
-| `src/services/oauthService.ts`      | 新增 |
-| `src/services/eventService.ts`      | 修改 |
-| `src/models/types.ts`               | 修改 |
+| 檔案                                 | 類型 |
+| ------------------------------------ | ---- |
+| `src/config/oauth.ts`                | 新增 |
+| `src/routes/authRoutes.ts`           | 新增 |
+| `src/routes/index.ts`                | 修改 |
+| `src/routes/userRoutes.ts`           | 修改 |
+| `src/controllers/authController.ts`  | 新增 |
+| `src/controllers/userController.ts`  | 修改 |
+| `src/services/oauthService.ts`       | 新增 |
+| `src/services/eventService.ts`       | 修改 |
+| `src/models/types.ts`                | 修改 |
 
 ---
 
@@ -62,3 +66,24 @@
 | State 過期（超過 10 分鐘） | redirect 到前端帶 state_expired    |
 | 重複認領同一活動           | redirect 到前端帶 already_claimed  |
 | 活動不存在                 | redirect 到前端帶 event_not_found  |
+
+---
+
+## 主辦方權限
+
+已認領主辦（`verifiedOrganizers` 包含該用戶）享有與投稿者相同的權限：
+
+| 操作 | 管理員 | 投稿者 | 已認領主辦 |
+| ---- | ------ | ------ | ---------- |
+| 編輯 | ✓      | ✓      | ✓          |
+| 刪除 | ✓      | ✓      | ✓          |
+
+權限檢查邏輯（`eventService.ts`）：
+```typescript
+const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(
+  o => o.userId === userId
+);
+if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
+  throw new Error('權限不足');
+}
+```

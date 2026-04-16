@@ -11,6 +11,7 @@ import {
   MapDataParams,
   MapDataResponse,
   UserSubmissionsEventsListResponse,
+  UserClaimedEventsListResponse,
   VerifiedOrganizer,
 } from '../models/types';
 import { UserService } from './userService';
@@ -635,10 +636,11 @@ export class EventService {
       throw new Error('活動不存在');
     }
 
-    const eventData = doc.data();
+    const eventData = doc.data() as CoffeeEvent;
 
-    // 檢查權限：管理員可以編輯任何活動，一般用戶只能編輯自己的活動
-    if (userRole !== 'admin' && eventData?.createdBy !== userId) {
+    // 檢查權限：管理員、投稿者、已認領主辦可以編輯
+    const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
+    if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
       throw new Error('權限不足');
     }
 
@@ -1022,10 +1024,11 @@ export class EventService {
       throw new Error('活動不存在');
     }
 
-    const eventData = doc.data();
+    const eventData = doc.data() as CoffeeEvent;
 
-    // 檢查權限：管理員可以刪除任何活動，一般用戶只能刪除自己的活動
-    if (userRole !== 'admin' && eventData?.createdBy !== userId) {
+    // 檢查權限：管理員、投稿者、已認領主辦可以刪除
+    const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
+    if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
       throw new Error('權限不足');
     }
 
@@ -1308,5 +1311,56 @@ export class EventService {
     if (!event) return false;
 
     return event.verifiedOrganizers?.some(o => o.userId === userId) ?? false;
+  }
+
+  async getUserClaimedEventsPaginated(
+    userId: string,
+    page = 1,
+    limit = 20
+  ): Promise<UserClaimedEventsListResponse> {
+    this.checkFirebaseConfig();
+
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection.where('status', '==', 'approved').get()
+    );
+
+    const allApprovedEvents = snapshot.docs.map(
+      doc =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as CoffeeEvent
+    );
+
+    const claimedEvents = allApprovedEvents.filter(
+      event => event.verifiedOrganizers?.some(o => o.userId === userId) ?? false
+    );
+
+    const sorted = [...claimedEvents].sort((a, b) => {
+      const aVerified = a.verifiedOrganizers?.find(o => o.userId === userId);
+      const bVerified = b.verifiedOrganizers?.find(o => o.userId === userId);
+      const aTime = aVerified?.verifiedAt?.toMillis() ?? 0;
+      const bTime = bVerified?.verifiedAt?.toMillis() ?? 0;
+      return bTime - aTime;
+    });
+
+    const total = sorted.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
+    const clampedPage = total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
+    const skip = (clampedPage - 1) * safeLimit;
+    const pageItems = sorted.slice(skip, skip + safeLimit);
+
+    return {
+      events: pageItems,
+      pagination: {
+        page: clampedPage,
+        limit: safeLimit,
+        total,
+        totalPages,
+      },
+    };
   }
 }

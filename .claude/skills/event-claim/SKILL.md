@@ -268,12 +268,24 @@ Meta App 未發佈前，需要先在 Meta Developer 後台新增測試人員：
 
 ---
 
+## 主辦方權限
+
+已認領主辦享有與投稿者相同的權限：
+
+| 操作 | 管理員 | 投稿者 | 已認領主辦 |
+|------|--------|--------|------------|
+| 編輯 | ✓ | ✓ | ✓ |
+| 刪除 | ✓ | ✓ | ✓ |
+
+---
+
 ## 相關檔案
 
 - `docs/implementation.md` - 實作狀態與檔案清單
+- `docs/api.md` - 用戶已認領活動 API 規格
 - `src/routes/authRoutes.ts` - OAuth 路由
 - `src/controllers/authController.ts` - OAuth 控制器
 - `src/services/oauthService.ts` - OAuth 服務（token 交換、取得 username）
-- `src/services/eventService.ts` - 新增 `addVerifiedOrganizer` 方法
+- `src/services/eventService.ts` - 新增 `addVerifiedOrganizer`、`getUserClaimedEventsPaginated` 方法
 - `src/config/oauth.ts` - OAuth 設定
-- `src/models/types.ts` - 新增 `VerifiedOrganizer` interface
+- `src/models/types.ts` - 新增 `VerifiedOrganizer`、`UserClaimedEventsListResponse` interface

@@ -314,3 +314,14 @@ export interface EventsResponseWithFavorite {
     region?: string;
   };
 }
+
+// 用戶已認領活動列表
+export interface UserClaimedEventsListResponse {
+  events: CoffeeEvent[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}

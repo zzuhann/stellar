@@ -176,4 +176,29 @@ export class UserController {
       res.status(500).json({ error: 'Failed to check favorite status' });
     }
   };
+
+  // ==================== 已認領活動（分頁） ====================
+
+  getMyClaimedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.uid;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+      const result = await this.eventService.getUserClaimedEventsPaginated(
+        userId,
+        Number.isFinite(page) ? page : 1,
+        Number.isFinite(limit) ? limit : 20
+      );
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching user claimed events:', error);
+      res.status(500).json({ error: 'Failed to fetch claimed events' });
+    }
+  };
 }

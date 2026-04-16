@@ -16,6 +16,9 @@ router.put('/profile', userController.updateUserProfile);
 router.get('/me/submissions/events', userController.getMySubmittedEvents);
 router.get('/me/submissions/artists', userController.getMySubmittedArtists);
 
+// 已認領活動
+router.get('/me/claimed-events', userController.getMyClaimedEvents);
+
 // 收藏相關
 router.get('/favorites', userController.getFavorites);
 router.post('/favorites', userController.addFavorite);
