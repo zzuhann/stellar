@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Taipei"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "zzuhann"
+    labels:
+      - "dependencies"
+    groups:
+      # Patch 更新自動合併成一個 PR
+      patch-updates:
+        update-types:
+          - "patch"
+      # Minor 更新合併成一個 PR
+      minor-updates:
+        update-types:
+          - "minor"
+    ignore:
+      # TypeScript 6.x 有 breaking changes，暫時忽略 major 升級
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
