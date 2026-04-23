@@ -7,6 +7,8 @@ description: Helps write Git commit messages following the Conventional Commits 
 
 When writing commit messages, follow these rules:
 
+only this folder: stellar, not include stellar-web
+
 ## Format
 
 <type>(<scope>): <subject>
