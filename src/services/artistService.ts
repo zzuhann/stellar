@@ -6,6 +6,7 @@ import {
   ArtistFilterParams,
   AdminArtistUpdate,
   UserSubmissionsArtistsListResponse,
+  CoffeeEvent,
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
@@ -786,5 +787,83 @@ export class ArtistService {
         totalPages,
       },
     };
+  }
+
+  /**
+   * 取得擁有最多即將到來活動的藝人（不包含已結束的活動）
+   * @param limit 返回的藝人數量，預設 10
+   */
+  async getTopArtistsByUpcomingEvents(
+    limit = 10
+  ): Promise<Array<Artist & { upcomingEventCount: number }>> {
+    this.checkFirebaseConfig();
+
+    const safeLimit = Math.min(Math.max(1, limit), 50);
+    const cacheKey = `artists:top:${safeLimit}`;
+
+    const cachedResult = cache.get<Array<Artist & { upcomingEventCount: number }>>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    // 取得所有已審核且未結束的活動
+    const eventsCollection = db!.collection('coffeeEvents');
+    const eventsSnapshot = await withTimeoutAndRetry(() =>
+      eventsCollection.where('status', '==', 'approved').get()
+    );
+
+    const now = Date.now();
+    const upcomingEvents = eventsSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
+      .filter(event => event.datetime.end.toMillis() >= now);
+
+    // 計算每個藝人的即將到來活動數量
+    const artistEventCount = new Map<string, number>();
+    for (const event of upcomingEvents) {
+      if (event.artists && Array.isArray(event.artists)) {
+        for (const artist of event.artists) {
+          const currentCount = artistEventCount.get(artist.id) || 0;
+          artistEventCount.set(artist.id, currentCount + 1);
+        }
+      }
+    }
+
+    // 取得所有有活動的藝人 ID，並按數量排序
+    const sortedArtistIds = Array.from(artistEventCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, safeLimit)
+      .map(([id]) => id);
+
+    if (sortedArtistIds.length === 0) {
+      cache.set(cacheKey, [], 360); // 6 小時快取
+      return [];
+    }
+
+    // 批次取得藝人詳細資料
+    const artistDocs = await Promise.all(
+      sortedArtistIds.map(id => withTimeoutAndRetry(() => this.collection.doc(id).get()))
+    );
+
+    const result: Array<Artist & { upcomingEventCount: number }> = [];
+    for (const doc of artistDocs) {
+      if (doc.exists) {
+        const artist = { id: doc.id, ...doc.data() } as Artist;
+        // 只返回 approved 狀態的藝人
+        if (artist.status === 'approved') {
+          result.push({
+            ...artist,
+            upcomingEventCount: artistEventCount.get(doc.id) || 0,
+          });
+        }
+      }
+    }
+
+    // 依照活動數量重新排序（因為過濾掉非 approved 藝人可能影響順序）
+    result.sort((a, b) => b.upcomingEventCount - a.upcomingEventCount);
+
+    // 設定 6 小時快取
+    cache.set(cacheKey, result, 360);
+
+    return result;
   }
 }

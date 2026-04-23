@@ -740,6 +740,8 @@ export class EventService {
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
+    // 清除熱門藝人快取，因為活動數量改變會影響排名
+    cache.clearPattern('artists:top:');
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedEvent = {
@@ -840,6 +842,8 @@ export class EventService {
     cache.clearPattern('map-data:');
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
+    // 清除熱門藝人快取，因為活動數量改變會影響排名
+    cache.clearPattern('artists:top:');
 
     // 清除相關活動的個別快取
     for (const update of updates) {
@@ -1053,6 +1057,8 @@ export class EventService {
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
+    // 清除熱門藝人快取，因為活動數量改變會影響排名
+    cache.clearPattern('artists:top:');
   }
 
   // 從 artists 的 activeEventIds 中移除 eventId

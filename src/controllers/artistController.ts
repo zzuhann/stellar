@@ -206,4 +206,18 @@ export class ArtistController {
     await this.artistService.deleteArtist(id);
     res.json({ message: 'Artist deleted successfully' });
   };
+
+  // 取得擁有最多即將到來活動的藝人
+  getTopArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const limitParam = req.query.limit;
+    const limit = limitParam ? parseInt(limitParam as string, 10) : 10;
+
+    if (isNaN(limit) || limit < 1) {
+      res.status(400).json({ error: 'Invalid limit parameter' });
+      return;
+    }
+
+    const artists = await this.artistService.getTopArtistsByUpcomingEvents(limit);
+    res.json(artists);
+  };
 }
