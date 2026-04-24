@@ -601,16 +601,18 @@ export class ArtistService {
       result = this.filterByBirthdayWeek(result, filters.birthdayWeek);
     }
 
-    // 搜尋篩選
+    // 搜尋篩選（模糊搜尋：忽略特殊字符如連字符、括號等）
     if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
+      const normalizeString = (str: string) =>
+        str.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
+      const searchTerm = normalizeString(filters.search);
       result = result.filter(
         artist =>
-          artist.stageName.toLowerCase().includes(searchTerm) ||
-          (artist.stageNameZh && artist.stageNameZh.toLowerCase().includes(searchTerm)) ||
+          normalizeString(artist.stageName).includes(searchTerm) ||
+          (artist.stageNameZh && normalizeString(artist.stageNameZh).includes(searchTerm)) ||
           (artist.groupNames &&
-            artist.groupNames.some(name => name.toLowerCase().includes(searchTerm))) ||
-          (artist.realName && artist.realName.toLowerCase().includes(searchTerm))
+            artist.groupNames.some(name => normalizeString(name).includes(searchTerm))) ||
+          (artist.realName && normalizeString(artist.realName).includes(searchTerm))
       );
     }
 
