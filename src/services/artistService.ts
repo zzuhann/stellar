@@ -462,7 +462,7 @@ export class ArtistService {
     });
 
     if (hasEvents) {
-      throw new Error('不能刪除已經有生咖活動的偶像');
+      throw new Error('不能刪除已經有生咖活動的藝人');
     }
 
     await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());

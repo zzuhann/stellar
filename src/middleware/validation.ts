@@ -127,7 +127,7 @@ export const artistSchemas = {
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, '生日格式錯誤')
       .optional(),
-    profileImage: z.string().url('偶像圖片網址格式錯誤').optional(),
+    profileImage: z.string().url('藝人圖片網址格式錯誤').optional(),
   }),
 };
 

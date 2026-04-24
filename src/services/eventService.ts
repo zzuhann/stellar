@@ -561,7 +561,7 @@ export class EventService {
         db.collection('artists').doc(artistId).get()
       );
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
-        throw new Error(`此偶像不存在或未通過審核`);
+        throw new Error(`此藝人不存在或未通過審核`);
       }
 
       const artistData = artistDoc.data();
