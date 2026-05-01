@@ -75,6 +75,73 @@ describe('MemoryCache', () => {
     });
   });
 
+  describe('cache stampede prevention', () => {
+    it('should handle high concurrency without multiple fetches', async () => {
+      const fetchFn = jest.fn().mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve('data'), 50))
+      );
+
+      // 模擬 100 個同時到達的請求（如快取過期瞬間的流量尖峰）
+      const concurrentRequests = 100;
+      const requests = Array(concurrentRequests)
+        .fill(null)
+        .map(() => cache.getWithLock('stampede-key', fetchFn, 60));
+
+      const results = await Promise.all(requests);
+
+      // 無論多少並發請求，fetchFn 只應被呼叫一次
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      // 所有請求都應該得到相同的結果
+      results.forEach(result => expect(result).toBe('data'));
+    });
+
+    it('should share the same promise reference for concurrent requests', async () => {
+      const sharedData = { value: 'shared' };
+      const fetchFn = jest.fn().mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve(sharedData), 50))
+      );
+
+      const [r1, r2, r3] = await Promise.all([
+        cache.getWithLock('shared-key', fetchFn, 60),
+        cache.getWithLock('shared-key', fetchFn, 60),
+        cache.getWithLock('shared-key', fetchFn, 60),
+      ]);
+
+      // 驗證所有請求返回完全相同的物件引用（不是 copy）
+      expect(r1).toBe(r2);
+      expect(r2).toBe(r3);
+      expect(r1).toBe(sharedData);
+    });
+
+    it('should allow new fetch after previous fetch completes and cache expires', async () => {
+      let callCount = 0;
+      const fetchFn = jest.fn().mockImplementation(() => {
+        callCount++;
+        return Promise.resolve(`data-${callCount}`);
+      });
+
+      // 第一次請求
+      const result1 = await cache.getWithLock('expire-key', fetchFn, 0.001); // 60ms TTL
+      expect(result1).toBe('data-1');
+
+      // 等待快取過期
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // 第二波並發請求（模擬快取過期後的 stampede）
+      const [r2, r3, r4] = await Promise.all([
+        cache.getWithLock('expire-key', fetchFn, 60),
+        cache.getWithLock('expire-key', fetchFn, 60),
+        cache.getWithLock('expire-key', fetchFn, 60),
+      ]);
+
+      // 過期後的並發請求也只應觸發一次 fetch
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+      expect(r2).toBe('data-2');
+      expect(r3).toBe('data-2');
+      expect(r4).toBe('data-2');
+    });
+  });
+
   describe('basic cache operations', () => {
     it('should set and get values correctly', () => {
       cache.set('test-key', { value: 123 }, 60);
