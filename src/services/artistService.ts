@@ -124,6 +124,29 @@ export class ArtistService {
     return result;
   }
 
+  private generateSlugFromName(stageName: string): string {
+    return stageName
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  private async generateUniqueSlug(stageName: string, docId: string): Promise<string> {
+    const baseSlug = this.generateSlugFromName(stageName);
+
+    const existing = await withTimeoutAndRetry(() =>
+      this.collection.where('slug', '==', baseSlug).limit(1).get()
+    );
+    if (existing.empty) {
+      return baseSlug;
+    }
+
+    // 衝突時用 doc ID 前 6 碼作為 suffix
+    return `${baseSlug}-${docId.substring(0, 6).toLowerCase()}`;
+  }
+
   async createArtist(
     artistData: CreateArtistData,
     userId: string,
@@ -131,8 +154,12 @@ export class ArtistService {
   ): Promise<Artist> {
     this.checkFirebaseConfig();
 
+    // 先預先生成 doc ref 以取得 ID，供衝突時用 ID 前 6 碼作為 slug suffix
+    const docRef = this.collection.doc();
+    const slug = await this.generateUniqueSlug(artistData.stageName, docRef.id);
     const now = Timestamp.now();
     const newArtist = {
+      slug,
       stageName: artistData.stageName,
       stageNameZh: artistData.stageNameZh || undefined,
       groupNames:
@@ -149,7 +176,7 @@ export class ArtistService {
       updatedAt: now,
     };
 
-    const docRef = await withTimeoutAndRetry(() => this.collection.add(newArtist));
+    await withTimeoutAndRetry(() => docRef.set(newArtist));
 
     // 清除相關快取（新增 pending 藝人會影響 pending 列表）
     cache.clearPattern('artists:status:pending');
@@ -468,30 +495,53 @@ export class ArtistService {
     await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());
   }
 
-  async getArtistById(artistId: string): Promise<Artist | null> {
+  async getArtistById(slugOrId: string): Promise<Artist | null> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `artist:${artistId}`;
-    const cachedResult = cache.get<Artist | null>(cacheKey);
-    if (cachedResult !== null) {
-      return cachedResult;
+    // Firestore 自動產生的 ID 為 20 碼英數字
+    const isFirestoreId = /^[a-zA-Z0-9]{20}$/.test(slugOrId);
+
+    if (isFirestoreId) {
+      const cacheKey = `artist:${slugOrId}`;
+      const cachedResult = cache.get<Artist | null>(cacheKey);
+      if (cachedResult !== null) {
+        return cachedResult;
+      }
+
+      const doc = await withTimeoutAndRetry(() => this.collection.doc(slugOrId).get());
+
+      if (!doc.exists) {
+        cache.set(cacheKey, null, 15);
+        return null;
+      }
+
+      const artist = { id: doc.id, ...doc.data() } as Artist;
+      cache.set(cacheKey, artist, 360);
+      return artist;
     }
 
-    const doc = await withTimeoutAndRetry(() => this.collection.doc(artistId).get());
+    // slug-based lookup
+    const slugCacheKey = `artist:slug:${slugOrId}`;
+    const cachedBySlug = cache.get<Artist | null>(slugCacheKey);
+    if (cachedBySlug !== null) {
+      return cachedBySlug;
+    }
 
-    if (!doc.exists) {
-      // 快取 null 結果
-      cache.set(cacheKey, null, 15);
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection.where('slug', '==', slugOrId).limit(1).get()
+    );
+
+    if (snapshot.empty) {
+      cache.set(slugCacheKey, null, 15);
       return null;
     }
 
-    const artist = {
-      id: doc.id,
-      ...doc.data(),
-    } as Artist;
+    const doc = snapshot.docs[0];
+    const artist = { id: doc.id, ...doc.data() } as Artist;
 
-    // 設定 6 小時快取
-    cache.set(cacheKey, artist, 360);
+    // 同時以 slug 和 ID 快取
+    cache.set(slugCacheKey, artist, 360);
+    cache.set(`artist:${doc.id}`, artist, 360);
 
     return artist;
   }

@@ -9,6 +9,7 @@ export interface VerifiedOrganizer {
 
 export interface Artist {
   id: string;
+  slug?: string; // URL-friendly 唯一識別符，一旦設定不隨 stageName 更新
   stageName: string; // 英文藝名（主要顯示）
   stageNameZh?: string; // 中文藝名（可選）
   groupNames?: string[]; // 團名列表（可選，最多5個）
