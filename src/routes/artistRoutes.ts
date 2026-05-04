@@ -9,6 +9,10 @@ const artistController = new ArtistController();
 // 公開路由
 router.get('/', artistController.getAllArtists);
 router.get('/top', artistController.getTopArtists);
+
+// 管理員專用路由（須在 /:id 之前定義，避免被 dynamic segment 攔截）
+router.get('/pending', authenticateToken, requireAdmin, artistController.getPendingArtists);
+
 router.get('/:id', artistController.getArtistById);
 
 // 需要登入的路由
@@ -25,9 +29,6 @@ router.put(
   artistController.updateArtist
 );
 router.patch('/:id/resubmit', authenticateToken, artistController.resubmitArtist);
-
-// 管理員專用路由
-router.get('/pending', authenticateToken, requireAdmin, artistController.getPendingArtists);
 router.patch('/:id/review', authenticateToken, requireAdmin, artistController.reviewArtist);
 router.put('/:id/approve', authenticateToken, requireAdmin, artistController.approveArtist);
 router.put('/:id/reject', authenticateToken, requireAdmin, artistController.rejectArtist);
