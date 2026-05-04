@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { oauthConfig } from '../config/oauth';
 
 interface OAuthState {
@@ -7,19 +8,46 @@ interface OAuthState {
   timestamp: number;
 }
 
+function getStateSecret(): string {
+  const secret = process.env.OAUTH_STATE_SECRET;
+  if (!secret) {
+    throw new Error('OAUTH_STATE_SECRET environment variable is required');
+  }
+  return secret;
+}
+
+function signPayload(payload: string, secret: string): string {
+  return createHmac('sha256', secret).update(payload).digest('base64url');
+}
+
 export function encodeState(data: Omit<OAuthState, 'timestamp'>): string {
-  return Buffer.from(
-    JSON.stringify({
-      ...data,
-      timestamp: Date.now(),
-    })
-  ).toString('base64url');
+  const secret = getStateSecret();
+  const payload = JSON.stringify({ ...data, timestamp: Date.now() });
+  const encoded = Buffer.from(payload).toString('base64url');
+  const sig = signPayload(encoded, secret);
+  return `${encoded}.${sig}`;
 }
 
 export function decodeState(state: string): OAuthState {
-  const decoded = JSON.parse(Buffer.from(state, 'base64url').toString()) as OAuthState;
+  const secret = getStateSecret();
+  const dotIndex = state.lastIndexOf('.');
+  if (dotIndex === -1) {
+    throw new Error('Invalid state format');
+  }
 
-  // 驗證 10 分鐘內有效
+  const encoded = state.slice(0, dotIndex);
+  const sig = state.slice(dotIndex + 1);
+
+  const expectedSig = signPayload(encoded, secret);
+  const sigBuffer = Buffer.from(sig);
+  const expectedBuffer = Buffer.from(expectedSig);
+
+  if (sigBuffer.length !== expectedBuffer.length || !timingSafeEqual(sigBuffer, expectedBuffer)) {
+    throw new Error('Invalid state signature');
+  }
+
+  const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as OAuthState;
+
   if (Date.now() - decoded.timestamp > 10 * 60 * 1000) {
     throw new Error('State expired');
   }
