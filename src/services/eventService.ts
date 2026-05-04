@@ -561,14 +561,20 @@ export class EventService {
       throw new Error('Firebase 問題，請檢查環境變數');
     }
 
-    // 驗證所有藝人是否存在且已審核
+    // 驗證所有藝人是否存在且已審核（並行查詢）
+    const artistDocs = await Promise.all(
+      eventData.artistIds.map((artistId: string) =>
+        withTimeoutAndRetry(() => db.collection('artists').doc(artistId).get())
+      )
+    );
+
     const artists: Array<{ id: string; name: string; profileImage?: string }> = [];
     const artistSlugsOrFallbacks: string[] = [];
 
-    for (const artistId of eventData.artistIds) {
-      const artistDoc = await withTimeoutAndRetry(() =>
-        db.collection('artists').doc(artistId).get()
-      );
+    for (let i = 0; i < artistDocs.length; i++) {
+      const artistDoc = artistDocs[i];
+      const artistId = eventData.artistIds[i];
+
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
         throw new Error(`此藝人不存在或未通過審核`);
       }
