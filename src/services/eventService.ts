@@ -17,6 +17,7 @@ import {
 import { UserService } from './userService';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
+import { generateEventSlug } from '../utils/eventSlug';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 
 export class EventService {
@@ -476,6 +477,7 @@ export class EventService {
       .map(event => {
         return {
           id: event.id,
+          slug: event.slug ?? null,
           title: event.title,
           mainImage: event.mainImage,
           location: event.location, // 完整的 location 物件
@@ -505,40 +507,46 @@ export class EventService {
     const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
 
     if (cachedResult) {
-      // 如果有快取且需要檢查收藏狀態
       if (userId) {
-        const isFavorited = await this.userService.isFavorited(userId, eventId);
-        return {
-          ...cachedResult,
-          isFavorited,
-        };
+        const isFavorited = await this.userService.isFavorited(userId, cachedResult.id);
+        return { ...cachedResult, isFavorited };
       }
       return cachedResult;
     }
 
+    // 先嘗試直接用 Firestore ID 查詢
     const doc = await withTimeoutAndRetry(() => this.collection.doc(eventId).get());
 
-    if (!doc.exists) {
+    if (doc.exists) {
+      const event = { id: doc.id, ...doc.data() } as CoffeeEvent;
+      cache.set(cacheKey, event, 1440);
+      if (userId) {
+        const isFavorited = await this.userService.isFavorited(userId, event.id);
+        return { ...event, isFavorited };
+      }
+      return event;
+    }
+
+    // Firestore ID 找不到時，改用 slug 查詢
+    const slugSnapshot = await withTimeoutAndRetry(() =>
+      this.collection.where('slug', '==', eventId).limit(1).get()
+    );
+
+    if (slugSnapshot.empty) {
       return null;
     }
 
-    const event = {
-      id: doc.id,
-      ...doc.data(),
-    } as CoffeeEvent;
+    const slugDoc = slugSnapshot.docs[0];
+    const event = { id: slugDoc.id, ...slugDoc.data() } as CoffeeEvent;
 
-    // 設定 24 小時快取
+    // 同時以 slug 和實際 ID 快取
+    cache.set(`event:${event.id}`, event, 1440);
     cache.set(cacheKey, event, 1440);
 
-    // 如果需要檢查收藏狀態
     if (userId) {
-      const isFavorited = await this.userService.isFavorited(userId, eventId);
-      return {
-        ...event,
-        isFavorited,
-      };
+      const isFavorited = await this.userService.isFavorited(userId, event.id);
+      return { ...event, isFavorited };
     }
-
     return event;
   }
 
@@ -555,6 +563,7 @@ export class EventService {
 
     // 驗證所有藝人是否存在且已審核
     const artists: Array<{ id: string; name: string; profileImage?: string }> = [];
+    const artistSlugsOrFallbacks: string[] = [];
 
     for (const artistId of eventData.artistIds) {
       const artistDoc = await withTimeoutAndRetry(() =>
@@ -570,6 +579,9 @@ export class EventService {
         name: artistData?.stageName || '',
         profileImage: artistData?.profileImage || undefined,
       });
+      artistSlugsOrFallbacks.push(
+        (artistData?.slug as string | undefined) || artistId.substring(0, 6).toLowerCase()
+      );
     }
 
     // 驗證座標資料
@@ -578,13 +590,20 @@ export class EventService {
     }
 
     const now = Timestamp.now();
+    const startTimestamp = this.parseDateTime(eventData.datetime.start);
+
+    // 先預先生成 docRef 以取得 ID，供生成 slug 使用
+    const docRef = this.collection.doc();
+    const slug = generateEventSlug(artistSlugsOrFallbacks, startTimestamp, docRef.id);
+
     const newEvent = {
+      slug,
       artists: artists,
       title: eventData.title,
       description: eventData.description,
       location: eventData.location,
       datetime: {
-        start: this.parseDateTime(eventData.datetime.start),
+        start: startTimestamp,
         end: this.parseDateTime(eventData.datetime.end),
       },
       socialMedia: eventData.socialMedia || {},
@@ -597,7 +616,7 @@ export class EventService {
       updatedAt: now,
     };
 
-    const docRef = await withTimeoutAndRetry(() => this.collection.add(newEvent));
+    await withTimeoutAndRetry(() => docRef.set(newEvent));
 
     // 清除相關快取（新增事件會影響藝人的活動統計）
     cache.clearPattern('events:');

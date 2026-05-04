@@ -27,6 +27,7 @@ export interface Artist {
 
 export interface CoffeeEvent {
   id: string;
+  slug?: string | null;
   artists: Array<{
     id: string;
     name: string;
@@ -220,6 +221,7 @@ export interface MapDataParams {
 export interface MapDataResponse {
   events: {
     id: string;
+    slug?: string | null;
     title: string;
     mainImage?: string;
     location: {
