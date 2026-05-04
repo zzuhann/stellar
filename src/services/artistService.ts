@@ -472,23 +472,17 @@ export class ArtistService {
   async deleteArtist(artistId: string): Promise<void> {
     this.checkFirebaseConfig();
 
-    // 檢查是否有活動使用此藝人（搜尋 artists 陣列中的 id）
-    if (!db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+    // 檢查是否有活動使用此藝人，直接讀 artist 的 activeEventIds 陣列
+    const artistDoc = await withTimeoutAndRetry(() => this.collection.doc(artistId).get());
+
+    if (!artistDoc.exists) {
+      throw new Error('藝人不存在');
     }
-    const eventsSnapshot = await withTimeoutAndRetry(() => db.collection('coffeeEvents').get());
 
-    // 在記憶體中搜尋使用此藝人的活動
-    const hasEvents = eventsSnapshot.docs.some(doc => {
-      const data = doc.data();
-      return (
-        data.artists &&
-        Array.isArray(data.artists) &&
-        data.artists.some((artist: any) => artist.id === artistId)
-      );
-    });
+    const artistData = artistDoc.data();
+    const hasActiveEvents = (artistData?.activeEventIds?.length ?? 0) > 0;
 
-    if (hasEvents) {
+    if (hasActiveEvents) {
       throw new Error('不能刪除已經有生咖活動的藝人');
     }
 
