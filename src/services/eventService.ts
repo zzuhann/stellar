@@ -1353,17 +1353,8 @@ export class EventService {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
 
-    const snapshot = await withTimeoutAndRetry(() =>
-      this.collection.where('status', '==', 'approved').get()
-    );
-
-    const allApprovedEvents = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
+    // 使用已快取的 approved 活動（24 小時 TTL），避免重複讀取 Firestore
+    const allApprovedEvents = await this.getApprovedActiveEventsBase();
 
     const claimedEvents = allApprovedEvents.filter(
       event => event.verifiedOrganizers?.some(o => o.userId === userId) ?? false
