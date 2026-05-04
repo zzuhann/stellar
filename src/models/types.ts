@@ -59,6 +59,7 @@ export interface CoffeeEvent {
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   viewCount?: number;
   verifiedOrganizers?: VerifiedOrganizer[];
+  claimedByUserIds?: string[];
   createdBy: string;
   createdByEmail?: string;
   createdAt: Timestamp;

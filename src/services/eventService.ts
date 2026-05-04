@@ -1328,6 +1328,7 @@ export class EventService {
 
     await eventRef.update({
       verifiedOrganizers: FieldValue.arrayUnion(organizer),
+      claimedByUserIds: FieldValue.arrayUnion(organizer.userId),
       updatedAt: Timestamp.now(),
     });
 
@@ -1353,11 +1354,16 @@ export class EventService {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
 
-    // 使用已快取的 approved 活動（24 小時 TTL），避免重複讀取 Firestore
-    const allApprovedEvents = await this.getApprovedActiveEventsBase();
+    // 直接用 claimedByUserIds 陣列欄位查詢，涵蓋所有狀態（包含已結束活動）
+    const snapshot = await withTimeoutAndRetry(() =>
+      this.collection
+        .where('claimedByUserIds', 'array-contains', userId)
+        .where('status', '==', 'approved')
+        .get()
+    );
 
-    const claimedEvents = allApprovedEvents.filter(
-      event => event.verifiedOrganizers?.some(o => o.userId === userId) ?? false
+    const claimedEvents = snapshot.docs.map(
+      doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent
     );
 
     const sorted = [...claimedEvents].sort((a, b) => {
