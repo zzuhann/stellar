@@ -48,12 +48,13 @@ export class PlacesController {
       return;
     }
 
+    const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
     const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': this.apiKey,
-        Referer: 'http://localhost:3000/',
+        Referer: referer,
       },
       body: JSON.stringify({
         input,
@@ -100,6 +101,7 @@ export class PlacesController {
       return;
     }
 
+    const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
     const response = await fetch(
       `https://places.googleapis.com/v1/places/${placeId}?languageCode=zh-TW`,
       {
@@ -107,7 +109,7 @@ export class PlacesController {
         headers: {
           'X-Goog-Api-Key': this.apiKey,
           'X-Goog-FieldMask': 'location,formattedAddress,displayName,addressComponents',
-          Referer: 'http://localhost:3000/',
+          Referer: referer,
         },
       }
     );
