@@ -40,7 +40,9 @@ describe('encodeState / decodeState', () => {
   });
 
   it('rejects forged state with no signature', () => {
-    const forged = Buffer.from(JSON.stringify({ ...validData, timestamp: Date.now() })).toString('base64url');
+    const forged = Buffer.from(JSON.stringify({ ...validData, timestamp: Date.now() })).toString(
+      'base64url'
+    );
     expect(() => decodeState(forged)).toThrow('Invalid state format');
   });
 
@@ -57,7 +59,9 @@ describe('encodeState / decodeState', () => {
 
   it('throws when OAUTH_STATE_SECRET is missing', () => {
     delete process.env.OAUTH_STATE_SECRET;
-    expect(() => encodeState(validData)).toThrow('OAUTH_STATE_SECRET environment variable is required');
+    expect(() => encodeState(validData)).toThrow(
+      'OAUTH_STATE_SECRET environment variable is required'
+    );
   });
 
   it('rejects state signed with a different secret', () => {

@@ -103,7 +103,7 @@ export class PlacesController {
 
     const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
     const response = await fetch(
-      `https://places.googleapis.com/v1/places/${placeId}?languageCode=zh-TW`,
+      `https://places.googleapis.com/v1/places/${placeId as string}?languageCode=zh-TW`,
       {
         method: 'GET',
         headers: {

@@ -77,9 +77,9 @@ describe('MemoryCache', () => {
 
   describe('cache stampede prevention', () => {
     it('should handle high concurrency without multiple fetches', async () => {
-      const fetchFn = jest.fn().mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve('data'), 50))
-      );
+      const fetchFn = jest
+        .fn()
+        .mockImplementation(() => new Promise(resolve => setTimeout(() => resolve('data'), 50)));
 
       // 模擬 100 個同時到達的請求（如快取過期瞬間的流量尖峰）
       const concurrentRequests = 100;
@@ -97,9 +97,11 @@ describe('MemoryCache', () => {
 
     it('should share the same promise reference for concurrent requests', async () => {
       const sharedData = { value: 'shared' };
-      const fetchFn = jest.fn().mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve(sharedData), 50))
-      );
+      const fetchFn = jest
+        .fn()
+        .mockImplementation(
+          () => new Promise(resolve => setTimeout(() => resolve(sharedData), 50))
+        );
 
       const [r1, r2, r3] = await Promise.all([
         cache.getWithLock('shared-key', fetchFn, 60),

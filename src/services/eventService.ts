@@ -1362,9 +1362,7 @@ export class EventService {
         .get()
     );
 
-    const claimedEvents = snapshot.docs.map(
-      doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent
-    );
+    const claimedEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
 
     const sorted = [...claimedEvents].sort((a, b) => {
       const aVerified = a.verifiedOrganizers?.find(o => o.userId === userId);
