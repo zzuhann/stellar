@@ -35,8 +35,6 @@ export const authenticateToken = async (
       role: userData?.role || 'user',
     };
 
-    console.log('User authenticated:', { uid: req.user.uid, role: req.user.role }); // 調試用
-
     next();
   } catch (error) {
     console.error('Token verification failed:', error);
