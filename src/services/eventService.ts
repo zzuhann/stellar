@@ -1282,12 +1282,8 @@ export class EventService {
     );
   }
 
-  // 輔助函數：將 Firestore Timestamp 轉為毫秒
   private timestampToMillis(timestamp: Timestamp): number {
-    return (
-      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._seconds * 1000 +
-      (timestamp as unknown as { _seconds: number; _nanoseconds: number })._nanoseconds / 1000000
-    );
+    return timestamp.toMillis();
   }
 
   // 私有方法：活動排序
