@@ -127,8 +127,9 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
       subject,
       html,
     });
-  } catch {
-    // 不拋出錯誤，避免影響審核流程
+    console.log(`[email] artist approval sent to ${email} (${artistNames.join(', ')})`);
+  } catch (err) {
+    console.error(`[email] failed to send artist approval to ${email}:`, err);
   }
 }
 
@@ -271,8 +272,9 @@ export async function sendEventApprovalEmail(data: EventApprovalEmailData): Prom
       subject,
       html,
     });
-  } catch {
-    // 不拋出錯誤，避免影響審核流程
+    console.log(`[email] event approval sent to ${email} (${events.map(e => e.title).join(', ')})`);
+  } catch (err) {
+    console.error(`[email] failed to send event approval to ${email}:`, err);
   }
 }
 
@@ -362,8 +364,14 @@ export async function sendArtistSubmissionNotification(
       subject,
       html,
     });
-  } catch {
-    // 不拋出錯誤，避免影響投稿流程
+    console.log(
+      `[email] artist submission notification sent (artist: ${artistName}, submitter: ${submitterEmail})`
+    );
+  } catch (err) {
+    console.error(
+      `[email] failed to send artist submission notification (artist: ${artistName}):`,
+      err
+    );
   }
 }
 
@@ -406,7 +414,13 @@ export async function sendEventSubmissionNotification(
       subject,
       html,
     });
-  } catch {
-    // 不拋出錯誤，避免影響投稿流程
+    console.log(
+      `[email] event submission notification sent (event: ${eventTitle}, submitter: ${submitterEmail})`
+    );
+  } catch (err) {
+    console.error(
+      `[email] failed to send event submission notification (event: ${eventTitle}):`,
+      err
+    );
   }
 }

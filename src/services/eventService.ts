@@ -638,7 +638,9 @@ export class EventService {
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
     if (userEmail) {
-      sendEventSubmissionNotification(userEmail, eventData.title).catch(() => {});
+      sendEventSubmissionNotification(userEmail, eventData.title).catch(err => {
+        console.error('[email] event submission notification error:', err);
+      });
     }
 
     return {
@@ -1003,7 +1005,9 @@ export class EventService {
     // 通知管理員有重新送審（非同步，不阻塞回應）
     if (existingData.createdByEmail) {
       sendEventSubmissionNotification(existingData.createdByEmail, existingData.title).catch(
-        () => {}
+        err => {
+          console.error('[email] event resubmit notification error:', err);
+        }
       );
     }
 

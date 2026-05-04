@@ -184,7 +184,9 @@ export class ArtistService {
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
     if (userEmail) {
-      sendArtistSubmissionNotification(userEmail, artistData.stageName).catch(() => {});
+      sendArtistSubmissionNotification(userEmail, artistData.stageName).catch(err => {
+        console.error('[email] artist submission notification error:', err);
+      });
     }
 
     return {
@@ -458,7 +460,9 @@ export class ArtistService {
     // 通知管理員有重新送審（非同步，不阻塞回應）
     if (existingData?.createdByEmail) {
       sendArtistSubmissionNotification(existingData.createdByEmail, existingData.stageName).catch(
-        () => {}
+        err => {
+          console.error('[email] artist resubmit notification error:', err);
+        }
       );
     }
 
