@@ -1019,22 +1019,24 @@ export class EventService {
     if (!db) return;
 
     try {
+      const artistRefs = artistIds.map(artistId => db.collection('artists').doc(artistId));
+      const artistDocs = await Promise.all(
+        artistRefs.map(ref => withTimeoutAndRetry(() => ref.get()))
+      );
+
       const batch = db.batch();
 
-      for (const artistId of artistIds) {
-        const artistRef = db.collection('artists').doc(artistId);
-        const artistDoc = await withTimeoutAndRetry(() => artistRef.get());
-
+      for (let i = 0; i < artistDocs.length; i++) {
+        const artistDoc = artistDocs[i];
         if (artistDoc.exists) {
           const artistData = artistDoc.data();
           const activeEventIds = artistData?.activeEventIds || [];
 
-          // 只有 approved 時才加入 eventId
           if (!activeEventIds.includes(eventId)) {
             activeEventIds.push(eventId);
           }
 
-          batch.update(artistRef, { activeEventIds });
+          batch.update(artistRefs[i], { activeEventIds });
         }
       }
 
@@ -1091,20 +1093,21 @@ export class EventService {
     if (!db) return;
 
     try {
+      const artistRefs = artistIds.map(artistId => db.collection('artists').doc(artistId));
+      const artistDocs = await Promise.all(
+        artistRefs.map(ref => withTimeoutAndRetry(() => ref.get()))
+      );
+
       const batch = db.batch();
 
-      for (const artistId of artistIds) {
-        const artistRef = db.collection('artists').doc(artistId);
-        const artistDoc = await withTimeoutAndRetry(() => artistRef.get());
-
+      for (let i = 0; i < artistDocs.length; i++) {
+        const artistDoc = artistDocs[i];
         if (artistDoc.exists) {
           const artistData = artistDoc.data();
-          let activeEventIds = artistData?.activeEventIds || [];
-
-          // 移除 eventId
-          activeEventIds = activeEventIds.filter((id: string) => id !== eventId);
-
-          batch.update(artistRef, { activeEventIds });
+          const activeEventIds = (artistData?.activeEventIds || []).filter(
+            (id: string) => id !== eventId
+          );
+          batch.update(artistRefs[i], { activeEventIds });
         }
       }
 
