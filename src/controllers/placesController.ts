@@ -83,6 +83,11 @@ export class PlacesController {
 
       res.json({ predictions });
     } else {
+      console.error('Google Places autocomplete error:', {
+        status: response.status,
+        referer,
+        data,
+      });
       res.status(response.status).json(data || { error: 'Failed to fetch predictions' });
     }
   };

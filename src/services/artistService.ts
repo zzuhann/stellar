@@ -8,7 +8,9 @@ import {
   UserSubmissionsArtistsListResponse,
   CoffeeEvent,
 } from '../models/types';
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, Query } from 'firebase-admin/firestore';
+
+type ArtistWithEventCount = Artist & { coffeeEventCount: number };
 import { cache } from '../utils/cache';
 import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
 import { UserService } from './userService';
@@ -86,16 +88,14 @@ export class ArtistService {
       }
     }
 
-    let query = this.collection;
+    let query: Query = this.collection;
 
-    // 如果有指定狀態，就篩選
     if (status) {
-      query = query.where('status', '==', status) as any;
+      query = query.where('status', '==', status);
     }
 
-    // 如果有指定創建者，就篩選
     if (createdBy) {
-      query = query.where('createdBy', '==', createdBy) as any;
+      query = query.where('createdBy', '==', createdBy);
     }
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
@@ -184,8 +184,8 @@ export class ArtistService {
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
     sendArtistSubmissionNotification(userEmail || undefined, artistData.stageName).catch(err => {
-        console.error('[email] artist submission notification error:', err);
-      });
+      console.error('[email] artist submission notification error:', err);
+    });
 
     return {
       id: docRef.id,
@@ -293,13 +293,15 @@ export class ArtistService {
       throw new Error('權限不足');
     }
 
-    const updateData: Record<string, any> = {
+    const updateData: UpdateArtistData & { updatedAt: Timestamp } = {
       ...artistData,
       updatedAt: Timestamp.now(),
     };
 
     // 直接更新
-    await withTimeoutAndRetry(() => docRef.update(updateData));
+    await withTimeoutAndRetry(() =>
+      docRef.update(updateData as unknown as Record<string, unknown>)
+    );
 
     // 清除相關快取
     cache.delete('artists:approved');
@@ -543,94 +545,68 @@ export class ArtistService {
   }
 
   // 新增：支援進階篩選的藝人查詢
-  async getArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
+  async getArtistsWithFilters(filters: ArtistFilterParams): Promise<ArtistWithEventCount[]> {
     this.checkFirebaseConfig();
 
-    // 如果是 approved 狀態，優先使用基礎快取
     if (filters.status === 'approved') {
       return this.getApprovedArtistsWithFilters(filters);
     }
 
-    // 非 approved 狀態或沒有指定狀態，使用原本邏輯
     const cacheKey = `artists:filters:${JSON.stringify(filters)}`;
-    const cachedResult = cache.get<Artist[]>(cacheKey);
+    const cachedResult = cache.get<ArtistWithEventCount[]>(cacheKey);
     if (cachedResult) {
       return cachedResult;
     }
 
-    let query = this.collection;
+    let query: Query = this.collection;
 
-    // 狀態篩選
     if (filters.status) {
-      query = query.where('status', '==', filters.status) as any;
+      query = query.where('status', '==', filters.status);
     }
 
-    // 創建者篩選
     if (filters.createdBy) {
-      query = query.where('createdBy', '==', filters.createdBy) as any;
+      query = query.where('createdBy', '==', filters.createdBy);
     }
 
     const snapshot = await withTimeoutAndRetry(() => query.get());
-    let artists = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-      } as Artist;
-    });
+    const artists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
 
-    // 在記憶體中篩選，並加上 coffeeEventCount
-    artists = this.filterArtistsInMemory(artists, filters).map(
-      artist =>
-        ({
-          ...artist,
-          coffeeEventCount: artist.activeEventIds?.length || 0, // 加入 coffeeEventCount 用於前端
-        }) as any
+    const withCount: ArtistWithEventCount[] = this.filterArtistsInMemory(artists, filters).map(
+      artist => ({ ...artist, coffeeEventCount: artist.activeEventIds?.length ?? 0 })
     );
 
-    // 排序處理
-    const sortedArtists = this.sortArtists(artists, filters.sortBy, filters.sortOrder);
-
-    // 設定 4 小時快取（因為非基礎資料）
+    const sortedArtists = this.sortArtists(
+      withCount,
+      filters.sortBy,
+      filters.sortOrder
+    ) as ArtistWithEventCount[];
     cache.set(cacheKey, sortedArtists, 240);
 
     return sortedArtists;
   }
 
   // 私有方法：使用基礎快取的 approved 藝人篩選
-  private async getApprovedArtistsWithFilters(filters: ArtistFilterParams): Promise<Artist[]> {
-    // 先嘗試從基礎快取取得所有 approved 藝人
+  private async getApprovedArtistsWithFilters(
+    filters: ArtistFilterParams
+  ): Promise<ArtistWithEventCount[]> {
     let approvedArtists = cache.get<Artist[]>('artists:approved');
 
     if (!approvedArtists) {
-      // 沒有快取才查詢 Firestore
       const snapshot = await withTimeoutAndRetry(() =>
         this.collection.where('status', '==', 'approved').orderBy('stageName', 'asc').get()
       );
 
-      approvedArtists = snapshot.docs.map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as Artist
-      );
+      approvedArtists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
 
-      // 設定 24 小時快取
       cache.set('artists:approved', approvedArtists, 1440);
     }
 
-    // 在記憶體中篩選，並加上 coffeeEventCount
-    const filteredArtists = this.filterArtistsInMemory(approvedArtists, filters).map(
-      artist =>
-        ({
-          ...artist,
-          coffeeEventCount: artist.activeEventIds?.length || 0, // 加入 coffeeEventCount 用於前端
-        }) as any
-    );
+    const withCount: ArtistWithEventCount[] = this.filterArtistsInMemory(
+      approvedArtists,
+      filters
+    ).map(artist => ({ ...artist, coffeeEventCount: artist.activeEventIds?.length ?? 0 }));
 
-    // 排序處理
-    return this.sortArtists(filteredArtists, filters.sortBy, filters.sortOrder);
+    return this.sortArtists(withCount, filters.sortBy, filters.sortOrder) as ArtistWithEventCount[];
   }
 
   // 私有方法：記憶體中篩選藝人
@@ -695,19 +671,17 @@ export class ArtistService {
     sortOrder: 'asc' | 'desc' = 'desc'
   ): Artist[] {
     if (!sortBy) {
-      // 預設按生日排序
       return this.sortByBirthday(artists, 'asc');
     }
 
-    // 特殊處理生日排序和生咖數量排序
     if (sortBy === 'birthday') {
       return this.sortByBirthday(artists, sortOrder);
     }
 
     if (sortBy === 'coffeeEventCount') {
       return [...artists].sort((a, b) => {
-        const aCount = (a as any).coffeeEventCount;
-        const bCount = (b as any).coffeeEventCount;
+        const aCount = (a as unknown as ArtistWithEventCount).coffeeEventCount ?? 0;
+        const bCount = (b as unknown as ArtistWithEventCount).coffeeEventCount ?? 0;
 
         // 主要排序：生咖數量
         if (aCount !== bCount) {
