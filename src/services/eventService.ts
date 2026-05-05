@@ -637,11 +637,9 @@ export class EventService {
     cache.clearPattern('artists:stats:');
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
-    if (userEmail) {
-      sendEventSubmissionNotification(userEmail, eventData.title).catch(err => {
-        console.error('[email] event submission notification error:', err);
-      });
-    }
+    sendEventSubmissionNotification(userEmail || undefined, eventData.title).catch(err => {
+      console.error('[email] event submission notification error:', err);
+    });
 
     return {
       id: docRef.id,

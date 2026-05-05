@@ -183,11 +183,9 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
-    if (userEmail) {
-      sendArtistSubmissionNotification(userEmail, artistData.stageName).catch(err => {
+    sendArtistSubmissionNotification(userEmail || undefined, artistData.stageName).catch(err => {
         console.error('[email] artist submission notification error:', err);
       });
-    }
 
     return {
       id: docRef.id,

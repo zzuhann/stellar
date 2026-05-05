@@ -332,7 +332,7 @@ export async function sendEventApprovalEmails(
  * 如果投稿者在白名單中，則不寄送通知
  */
 export async function sendArtistSubmissionNotification(
-  submitterEmail: string,
+  submitterEmail: string | undefined,
   artistName: string
 ): Promise<void> {
   if (!resend || !adminNotifyEmail) {
@@ -340,8 +340,9 @@ export async function sendArtistSubmissionNotification(
   }
 
   // 白名單的人投稿不通知管理員
-  if (isWhitelisted(submitterEmail)) return;
+  if (submitterEmail && isWhitelisted(submitterEmail)) return;
 
+  const submitterInfo = submitterEmail || '匿名用戶';
   const subject = '[STELLAR] 有人投稿藝人～';
   const html = `
 <!DOCTYPE html>
@@ -351,6 +352,7 @@ export async function sendArtistSubmissionNotification(
 </head>
 <body>
   <p>有人投稿了新的藝人：<strong>${artistName}</strong></p>
+  <p>投稿者：${submitterInfo}</p>
   <p>可以去審核囉！</p>
   <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
 </body>
@@ -380,7 +382,7 @@ export async function sendArtistSubmissionNotification(
  * 如果投稿者在白名單中，則不寄送通知
  */
 export async function sendEventSubmissionNotification(
-  submitterEmail: string,
+  submitterEmail: string | undefined,
   eventTitle: string
 ): Promise<void> {
   if (!resend || !adminNotifyEmail) {
@@ -388,10 +390,11 @@ export async function sendEventSubmissionNotification(
   }
 
   // 白名單的人投稿不通知管理員
-  if (isWhitelisted(submitterEmail)) {
+  if (submitterEmail && isWhitelisted(submitterEmail)) {
     return;
   }
 
+  const submitterInfo = submitterEmail || '匿名用戶';
   const subject = '[STELLAR] 有人新增生咖活動～';
   const html = `
 <!DOCTYPE html>
@@ -401,6 +404,7 @@ export async function sendEventSubmissionNotification(
 </head>
 <body>
   <p>有人投稿了新的活動：<strong>${eventTitle}</strong></p>
+  <p>投稿者：${submitterInfo}</p>
   <p>可以去審核囉！</p>
   <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
 </body>
