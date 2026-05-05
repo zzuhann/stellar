@@ -56,9 +56,10 @@ export class ArtistController {
 
   // 新增藝人
   createArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
+    const { stageName, stageNameZh, groupNames, realName, birthday, profileImage, submitterEmail } =
+      req.body;
     const userId = req.user.uid;
-    const userEmail = req.user.email;
+    const userEmail = req.user.email || submitterEmail || '';
 
     if (!stageName) {
       res.status(400).json({ error: 'Stage name is required' });

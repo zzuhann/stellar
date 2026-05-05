@@ -71,9 +71,9 @@ export class EventController {
 
   // 新增活動
   createEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const eventData = req.body;
+    const { submitterEmail, ...eventData } = req.body;
     const userId = req.user?.uid;
-    const userEmail = req.user?.email;
+    const userEmail = req.user?.email || submitterEmail || '';
 
     // 驗證必填欄位
     const requiredFields = ['artistIds', 'title', 'location', 'datetime'];
