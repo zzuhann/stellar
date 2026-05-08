@@ -377,6 +377,120 @@ export async function sendArtistSubmissionNotification(
   }
 }
 
+const CONTACT_RECEIVER = 'stellar.taiwan.2025@gmail.com';
+
+/**
+ * 聯絡表單送出後：
+ * 1. 寄確認信給使用者
+ * 2. 寄表單內容給 STELLAR 信箱
+ */
+export async function sendContactNotification(data: {
+  name: string;
+  email: string;
+  message: string;
+}): Promise<void> {
+  if (!resend) {
+    console.warn('[email] contact notification skipped: RESEND_API_KEY not configured');
+    return;
+  }
+
+  const { name, email, message } = data;
+
+  const confirmationHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .content {
+      background: #f9f9f9;
+      padding: 24px;
+      border-radius: 8px;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+      color: #666;
+    }
+    a { color: #7c3aed; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <p>${name} 你好～</p>
+    <p>感謝你聯絡 STELLAR！</p>
+    <p>我們已經收到你的訊息，將會盡快回覆你。</p>
+  </div>
+  <div class="footer">
+    <p>
+      Threads: <a href="https://www.threads.net/@_stellar.tw">@_stellar.tw</a><br>
+      Instagram: <a href="https://www.instagram.com/_stellar.tw">@_stellar.tw</a><br>
+      Email: <a href="mailto:stellar.taiwan.2025@gmail.com">stellar.taiwan.2025@gmail.com</a>
+    </p>
+    <p>STELLAR 生咖地圖平台團隊</p>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const notificationHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <p><strong>暱稱：</strong>${name}</p>
+  <p><strong>Email：</strong>${email}</p>
+  <p><strong>訊息內容：</strong></p>
+  <p style="white-space: pre-wrap">${message}</p>
+</body>
+</html>
+  `.trim();
+
+  const results = await Promise.allSettled([
+    resend.emails.send({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: email,
+      subject: '[STELLAR] 已收到你的訊息！',
+      html: confirmationHtml,
+    }),
+    resend.emails.send({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: CONTACT_RECEIVER,
+      subject: `[STELLAR] 新的聯絡表單訊息 - ${name}`,
+      html: notificationHtml,
+    }),
+  ]);
+
+  const [confirmResult, notifyResult] = results;
+  if (confirmResult.status === 'rejected') {
+    console.error(`[email] failed to send contact confirmation to ${email}:`, confirmResult.reason);
+  } else {
+    console.log(`[email] contact confirmation sent to ${email}`);
+  }
+  if (notifyResult.status === 'rejected') {
+    console.error(`[email] failed to send contact notification to ${CONTACT_RECEIVER}:`, notifyResult.reason);
+  } else {
+    console.log(`[email] contact notification sent to ${CONTACT_RECEIVER} (from: ${email})`);
+  }
+
+  if (confirmResult.status === 'rejected' && notifyResult.status === 'rejected') {
+    throw new Error('Failed to send both contact emails');
+  }
+}
+
 /**
  * 通知管理員有新的活動投稿
  * 如果投稿者在白名單中，則不寄送通知

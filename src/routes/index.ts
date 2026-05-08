@@ -6,6 +6,7 @@ import imageRoutes from './imageRoutes';
 import userRoutes from './userRoutes';
 import cacheRoutes from './cacheRoutes';
 import authRoutes from './authRoutes';
+import contactRoutes from './contactRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -27,6 +28,9 @@ router.get('/health', (_req, res) => {
     },
   });
 });
+
+// 聯絡表單（不需要 Firebase）
+router.use('/contact', contactRoutes);
 
 // Google Places API 路由（不需要 Firebase）
 router.use('/places', placesRoutes);
