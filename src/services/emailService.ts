@@ -52,8 +52,8 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
 
   // 主旨
   const subject = isSingle
-    ? `[STELLAR] 您投稿的藝人「${artistNames[0]}」 已通過審核 ✨🧚🏻`
-    : `[STELLAR] 您投稿的藝人已通過審核 ✨🧚🏻`;
+    ? `[STELLAR] 你投稿的藝人「${artistNames[0]}」 已通過審核 ✨🧚🏻`
+    : `[STELLAR] 你投稿的藝人已通過審核 ✨🧚🏻`;
 
   // 內文中的藝人名稱
   const artistNamesText = artistNames.join('、');

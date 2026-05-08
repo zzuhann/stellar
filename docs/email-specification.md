@@ -68,8 +68,8 @@ STELLAR <noreply@stellar-zone.com>
 
 | 條件 | 主旨 |
 |------|------|
-| 同一 email 只有 1 個藝人通過 | `[STELLAR] 您投稿的藝人「{{artist_name}}」 已通過審核 ✨🧚🏻` |
-| 同一 email 有多個藝人通過 | `[STELLAR] 您投稿的藝人已通過審核 ✨🧚🏻` |
+| 同一 email 只有 1 個藝人通過 | `[STELLAR] 你投稿的藝人「{{artist_name}}」 已通過審核 ✨🧚🏻` |
+| 同一 email 有多個藝人通過 | `[STELLAR] 你投稿的藝人已通過審核 ✨🧚🏻` |
 
 ### 內文
 
