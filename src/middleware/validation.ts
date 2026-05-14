@@ -190,6 +190,7 @@ export const eventSchemas = {
         lat: z.number(),
         lng: z.number(),
       }),
+      placeId: z.string().optional(),
     }),
     datetime: z.object({
       start: z.object({
@@ -239,6 +240,7 @@ export const eventSchemas = {
           lat: z.number(),
           lng: z.number(),
         }),
+        placeId: z.string().optional(),
       })
       .optional(),
     datetime: z
