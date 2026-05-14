@@ -1,4 +1,5 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
 import { VenueFilterParams } from '../models/types';
 
@@ -9,13 +10,13 @@ export class VenueController {
     this.venueService = new VenueService();
   }
 
-  getVenues = async (req: Request, res: Response): Promise<void> => {
+  getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { region, capacity_min, capacity_max, sort } = req.query;
 
     const params: VenueFilterParams = {};
 
     if (region) {
-      params.region = region as string;
+      params.region = Array.isArray(region) ? (region as string[]) : [region as string];
     }
 
     if (capacity_min !== undefined) {
@@ -57,9 +58,21 @@ export class VenueController {
     res.json({ venues });
   };
 
-  getVenueById = async (req: Request, res: Response): Promise<void> => {
+  getVenueById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const venue = await this.venueService.getVenueById(id as string);
+
+    if (!venue) {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+
+    res.json(venue);
+  };
+
+  updateVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const venue = await this.venueService.updateVenue(id as string, req.body);
 
     if (!venue) {
       res.status(404).json({ error: 'Venue not found' });

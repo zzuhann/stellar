@@ -1,9 +1,16 @@
 import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
-import { Venue, VenueDetail, VenueEventCard, VenueFilterParams } from '../models/types';
+import {
+  UpdateVenueData,
+  Venue,
+  VenueDetail,
+  VenueEventCard,
+  VenueFilterParams,
+} from '../models/types';
 import { cache } from '../utils/cache';
 import {
   DocumentData,
   DocumentReference,
+  FieldValue,
   QueryDocumentSnapshot,
   Timestamp,
 } from 'firebase-admin/firestore';
@@ -103,6 +110,7 @@ export class VenueService {
       decoration_allowed: d.decoration_allowed ?? [],
       custom_items: d.custom_items ?? [],
       price_model: d.price_model ?? '',
+      price_note: d.price_note ?? '',
       cancel_policy: d.cancel_policy ?? '',
       noise_ok: d.noise_ok ?? null,
       venue_visit_ok: d.venue_visit_ok ?? null,
@@ -114,13 +122,57 @@ export class VenueService {
     return detail;
   }
 
+  async updateVenue(id: string, data: UpdateVenueData): Promise<VenueDetail | null> {
+    this.checkFirebaseConfig();
+
+    const docRef = this.collection!.doc(id);
+    const existing = await withTimeoutAndRetry(() => docRef.get());
+    if (!existing.exists) return null;
+
+    const updatableFields: (keyof UpdateVenueData)[] = [
+      'name',
+      'address',
+      'region',
+      'nearest_mrt',
+      'mrt_walk_minutes',
+      'capacity_max',
+      'equipment',
+      'decoration_allowed',
+      'custom_items',
+      'price_model',
+      'price_note',
+      'venue_visit_ok',
+      'cancel_policy',
+      'noise_ok',
+      'host_tags',
+      'coverPhoto',
+    ];
+
+    const updateData: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    for (const field of updatableFields) {
+      if (data[field] !== undefined) {
+        updateData[field] = data[field];
+      }
+    }
+
+    await withTimeoutAndRetry(() => docRef.update(updateData));
+
+    cache.delete('venues:all');
+    cache.delete(`venue:detail:${id}`);
+
+    return this.getVenueById(id);
+  }
+
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {
     const { region, capacity_min, capacity_max, sort } = params;
 
     let venues = await this.fetchAll();
 
-    if (region) {
-      venues = venues.filter(v => v.region === region);
+    if (region && region.length > 0) {
+      venues = venues.filter(v => region.includes(v.region));
     }
 
     if (capacity_min !== undefined) {
