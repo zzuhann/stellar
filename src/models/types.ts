@@ -104,6 +104,28 @@ export interface AdminArtistUpdate {
   groupNames?: string[]; // 管理員可以在審核通過時設定團名列表
 }
 
+// 場地卡片（列表頁回傳，不含 eventRefs）
+export interface Venue {
+  id: string;
+  name: string;
+  address: string;
+  region: string;
+  lat: number;
+  lng: number;
+  nearest_mrt: string;
+  mrt_walk_minutes: number | null;
+  capacity_max: number | null;
+  eventCount: number;
+  coverPhoto: string;
+}
+
+export interface VenueFilterParams {
+  region?: string;
+  capacity_min?: number;
+  capacity_max?: number;
+  sort?: 'eventCount' | 'name';
+}
+
 // 藝人篩選參數
 export interface ArtistFilterParams {
   status?: 'approved' | 'pending' | 'rejected'; // 狀態篩選

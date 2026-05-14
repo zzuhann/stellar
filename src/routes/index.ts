@@ -7,6 +7,7 @@ import userRoutes from './userRoutes';
 import cacheRoutes from './cacheRoutes';
 import authRoutes from './authRoutes';
 import contactRoutes from './contactRoutes';
+import venueRoutes from './venueRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -45,6 +46,7 @@ if (hasFirebaseConfig) {
   router.use('/users', userRoutes);
   router.use('/cache', cacheRoutes);
   router.use('/auth', authRoutes);
+  router.use('/venues', venueRoutes);
 } else {
   // Firebase 未配置時的提示端點
   router.use('/artists', (_req, res) => {
@@ -58,6 +60,11 @@ if (hasFirebaseConfig) {
       .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   });
   router.use('/users', (_req, res) => {
+    res
+      .status(503)
+      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
+  });
+  router.use('/venues', (_req, res) => {
     res
       .status(503)
       .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
