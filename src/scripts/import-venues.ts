@@ -107,31 +107,40 @@ async function main(): Promise<void> {
 
     const docRef = venuesRef.doc(row.cluster_id);
 
-    batch.set(docRef, {
-      coverPhoto: '',
-      name: row.venueName ?? '',
-      address: row.address ?? '',
-      region: row.city ? detectRegion(row.city) : detectRegion(row.address ?? ''),
-      lat: parseFloat(row.lat) || 0,
-      lng: parseFloat(row.lng) || 0,
-      place_id: row.place_id ?? '',
-      nearest_mrt: '',
-      mrt_walk_minutes: null,
-      capacity_max: null,
-      equipment: [],
-      decoration_allowed: [],
-      custom_items: [],
-      price_model: '',
-      price_note: '',
-      venue_visit_ok: null,
-      cancel_policy: '',
-      noise_ok: null,
-      host_tags: [],
-      eventCount: parseInt(row.event_count) || 0,
-      eventRefs,
-      createdAt: now,
-      updatedAt: now,
-    });
+    batch.set(
+      docRef,
+      {
+        status: 'active',
+        coverPhoto: '',
+        name: row.venueName ?? '',
+        address: row.address ?? '',
+        region: row.city ? detectRegion(row.city) : detectRegion(row.address ?? ''),
+        lat: parseFloat(row.lat) || 0,
+        lng: parseFloat(row.lng) || 0,
+        place_id: row.place_id ?? '',
+        nearest_mrt: '',
+        mrt_walk_minutes: null,
+        capacity_max: null,
+        equipment: [],
+        decoration_allowed: [],
+        custom_items: [],
+        price_model: '',
+        price_note: '',
+        venue_visit_ok: null,
+        cancel_policy: '',
+        noise_ok: null,
+        host_tags: [],
+        socialMedia: {
+          threads: '',
+          instagram: '',
+        },
+        eventCount: parseInt(row.event_count) || 0,
+        eventRefs,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
 
     console.log(`  ✅ ${row.venueName} (${row.event_count} 場, ${row.confidence})`);
   }

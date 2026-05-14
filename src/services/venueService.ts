@@ -38,6 +38,8 @@ export class VenueService {
       capacity_max: d.capacity_max ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
+      status: (d.status as 'active' | 'inactive') ?? 'active',
+      socialMedia: d.socialMedia ?? undefined,
     };
   }
 
@@ -49,7 +51,9 @@ export class VenueService {
         const snapshot = await withTimeoutAndRetry(() =>
           this.collection!.orderBy('eventCount', 'desc').get()
         );
-        return snapshot.docs.map(doc => this.mapDocToVenue(doc));
+        return snapshot.docs
+          .filter(doc => doc.data().status !== 'inactive')
+          .map(doc => this.mapDocToVenue(doc));
       },
       1440
     );
@@ -66,6 +70,8 @@ export class VenueService {
     if (!doc.exists) return null;
 
     const d = doc.data()!;
+    if (d.status === 'inactive') return null;
+
     const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
 
     let events: VenueEventCard[] = [];
@@ -106,6 +112,7 @@ export class VenueService {
       capacity_max: d.capacity_max ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
+      status: (d.status as 'active' | 'inactive' | undefined) ?? 'active',
       equipment: d.equipment ?? [],
       decoration_allowed: d.decoration_allowed ?? [],
       custom_items: d.custom_items ?? [],
@@ -115,6 +122,7 @@ export class VenueService {
       noise_ok: d.noise_ok ?? null,
       venue_visit_ok: d.venue_visit_ok ?? null,
       host_tags: d.host_tags ?? [],
+      socialMedia: d.socialMedia ?? undefined,
       events,
     };
 
@@ -133,6 +141,7 @@ export class VenueService {
       'name',
       'address',
       'region',
+      'status',
       'nearest_mrt',
       'mrt_walk_minutes',
       'capacity_max',
@@ -146,6 +155,7 @@ export class VenueService {
       'noise_ok',
       'host_tags',
       'coverPhoto',
+      'socialMedia',
     ];
 
     const updateData: Record<string, unknown> = {
@@ -164,6 +174,26 @@ export class VenueService {
     cache.delete(`venue:detail:${id}`);
 
     return this.getVenueById(id);
+  }
+
+  async deactivateVenue(id: string): Promise<boolean> {
+    this.checkFirebaseConfig();
+
+    const docRef = this.collection!.doc(id);
+    const existing = await withTimeoutAndRetry(() => docRef.get());
+    if (!existing.exists || existing.data()?.status === 'inactive') return false;
+
+    await withTimeoutAndRetry(() =>
+      docRef.update({
+        status: 'inactive',
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    );
+
+    cache.delete('venues:all');
+    cache.delete(`venue:detail:${id}`);
+
+    return true;
   }
 
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {

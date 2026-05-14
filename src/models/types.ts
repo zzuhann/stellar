@@ -43,6 +43,8 @@ export interface CoffeeEvent {
       lat: number;
       lng: number;
     };
+    placeId?: string;
+    venueId?: string; // approve 後由後端自動回填，前端不傳
   };
   datetime: {
     start: Timestamp;
@@ -117,6 +119,11 @@ export interface Venue {
   capacity_max: number | null;
   eventCount: number;
   coverPhoto: string;
+  status: 'active' | 'inactive';
+  socialMedia?: {
+    threads?: string;
+    instagram?: string;
+  };
 }
 
 export interface VenueFilterParams {
@@ -149,6 +156,7 @@ export interface VenueDetail {
   capacity_max: number | null;
   eventCount: number;
   coverPhoto: string;
+  status: 'active' | 'inactive';
   equipment: string[];
   decoration_allowed: string[];
   custom_items: string[];
@@ -158,6 +166,10 @@ export interface VenueDetail {
   noise_ok: boolean | null;
   venue_visit_ok: boolean | null;
   host_tags: string[];
+  socialMedia?: {
+    threads?: string;
+    instagram?: string;
+  };
   events: VenueEventCard[];
 }
 
@@ -165,6 +177,7 @@ export interface UpdateVenueData {
   name?: string;
   address?: string;
   region?: string;
+  status?: 'active' | 'inactive';
   nearest_mrt?: string;
   mrt_walk_minutes?: number | null;
   capacity_max?: number | null;
@@ -178,6 +191,10 @@ export interface UpdateVenueData {
   noise_ok?: boolean | null;
   host_tags?: string[];
   coverPhoto?: string;
+  socialMedia?: {
+    threads?: string;
+    instagram?: string;
+  };
 }
 
 // 藝人篩選參數
@@ -205,6 +222,7 @@ export interface CreateEventData {
       lat: number;
       lng: number;
     };
+    placeId?: string;
   };
   datetime: {
     start: Date | string; // 支援 Date 物件或 ISO 字串
@@ -231,6 +249,7 @@ export interface UpdateEventData {
       lat: number;
       lng: number;
     };
+    placeId?: string;
   };
   datetime?: {
     start: Date | string;

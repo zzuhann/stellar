@@ -173,6 +173,7 @@ export const venueSchemas = {
     noise_ok: z.boolean().nullable().optional(),
     host_tags: z.array(z.string().min(1).max(50)).optional(),
     coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
+    status: z.enum(['active', 'inactive']).optional(),
   }),
 };
 

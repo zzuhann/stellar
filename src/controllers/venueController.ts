@@ -81,4 +81,16 @@ export class VenueController {
 
     res.json(venue);
   };
+
+  deleteVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const found = await this.venueService.deactivateVenue(id as string);
+
+    if (!found) {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+
+    res.status(200).json({ message: 'Venue deactivated' });
+  };
 }

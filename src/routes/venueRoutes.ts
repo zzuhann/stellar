@@ -15,5 +15,6 @@ router.patch(
   validateRequest({ body: venueSchemas.update }),
   venueController.updateVenue
 );
+router.delete('/:id', authenticateToken, requireAdmin, venueController.deleteVenue);
 
 export default router;
