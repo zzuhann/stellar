@@ -1,7 +1,12 @@
 import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
-import { Venue, VenueFilterParams } from '../models/types';
+import { Venue, VenueDetail, VenueEventCard, VenueFilterParams } from '../models/types';
 import { cache } from '../utils/cache';
-import { DocumentData, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import {
+  DocumentData,
+  DocumentReference,
+  QueryDocumentSnapshot,
+  Timestamp,
+} from 'firebase-admin/firestore';
 
 export class VenueService {
   private collection = hasFirebaseConfig && db ? db.collection('venues') : null;
@@ -41,6 +46,72 @@ export class VenueService {
       },
       1440
     );
+  }
+
+  async getVenueById(id: string): Promise<VenueDetail | null> {
+    this.checkFirebaseConfig();
+
+    const cacheKey = `venue:detail:${id}`;
+    const cached = cache.get<VenueDetail>(cacheKey);
+    if (cached) return cached;
+
+    const doc = await withTimeoutAndRetry(() => this.collection!.doc(id).get());
+    if (!doc.exists) return null;
+
+    const d = doc.data()!;
+    const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
+
+    let events: VenueEventCard[] = [];
+
+    if (eventRefs.length > 0) {
+      const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
+
+      events = eventDocs
+        .filter(ev => ev.exists && ev.data()?.status === 'approved')
+        .map(ev => {
+          const e = ev.data()!;
+          const artists = (e.artists ?? []) as Array<{ name: string }>;
+          const start = e.datetime?.start as Timestamp | undefined;
+          const end = e.datetime?.end as Timestamp | undefined;
+          return {
+            id: ev.id,
+            title: e.title ?? '',
+            artistName: artists.map(a => a.name).join(' x '),
+            startDate: start?.toDate().toISOString() ?? '',
+            endDate: end?.toDate().toISOString() ?? '',
+            coverImage: e.mainImage ?? '',
+            slug: (e.slug as string | null | undefined) ?? null,
+          };
+        })
+        .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
+    }
+
+    const detail: VenueDetail = {
+      id: doc.id,
+      name: d.name ?? '',
+      address: d.address ?? '',
+      region: d.region ?? '',
+      lat: d.lat ?? 0,
+      lng: d.lng ?? 0,
+      place_id: d.place_id ?? '',
+      nearest_mrt: d.nearest_mrt ?? '',
+      mrt_walk_minutes: d.mrt_walk_minutes ?? null,
+      capacity_max: d.capacity_max ?? null,
+      eventCount: d.eventCount ?? 0,
+      coverPhoto: d.coverPhoto ?? '',
+      equipment: d.equipment ?? [],
+      decoration_allowed: d.decoration_allowed ?? [],
+      custom_items: d.custom_items ?? [],
+      price_model: d.price_model ?? '',
+      cancel_policy: d.cancel_policy ?? '',
+      noise_ok: d.noise_ok ?? null,
+      venue_visit_ok: d.venue_visit_ok ?? null,
+      host_tags: d.host_tags ?? [],
+      events,
+    };
+
+    cache.set(cacheKey, detail, 1440);
+    return detail;
   }
 
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {

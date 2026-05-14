@@ -56,4 +56,16 @@ export class VenueController {
     const venues = await this.venueService.getVenues(params);
     res.json({ venues });
   };
+
+  getVenueById = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const venue = await this.venueService.getVenueById(id as string);
+
+    if (!venue) {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+
+    res.json(venue);
+  };
 }

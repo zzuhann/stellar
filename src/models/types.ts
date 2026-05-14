@@ -126,6 +126,40 @@ export interface VenueFilterParams {
   sort?: 'eventCount' | 'name';
 }
 
+export interface VenueEventCard {
+  id: string;
+  title: string;
+  artistName: string;
+  startDate: string;
+  endDate: string;
+  coverImage: string;
+  slug: string | null;
+}
+
+export interface VenueDetail {
+  id: string;
+  name: string;
+  address: string;
+  region: string;
+  lat: number;
+  lng: number;
+  place_id: string;
+  nearest_mrt: string;
+  mrt_walk_minutes: number | null;
+  capacity_max: number | null;
+  eventCount: number;
+  coverPhoto: string;
+  equipment: string[];
+  decoration_allowed: string[];
+  custom_items: string[];
+  price_model: string;
+  cancel_policy: string;
+  noise_ok: boolean | null;
+  venue_visit_ok: boolean | null;
+  host_tags: string[];
+  events: VenueEventCard[];
+}
+
 // 藝人篩選參數
 export interface ArtistFilterParams {
   status?: 'approved' | 'pending' | 'rejected'; // 狀態篩選
