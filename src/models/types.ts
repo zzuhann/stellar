@@ -119,6 +119,8 @@ export interface Venue {
   capacity_max: number | null;
   eventCount: number;
   coverPhoto: string;
+  otherPhotos: string[];
+  description: string;
   status: 'active' | 'inactive';
   socialMedia?: {
     threads?: string;

@@ -39,6 +39,8 @@ export class VenueService {
       capacity_max: d.capacity_max ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
+      otherPhotos: d.otherPhotos ?? [],
+      description: d.description ?? '',
       status: (d.status as 'active' | 'inactive') ?? 'active',
       socialMedia: d.socialMedia ?? undefined,
     };
