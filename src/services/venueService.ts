@@ -63,8 +63,8 @@ export class VenueService {
   async createVenue(data: CreateVenueData): Promise<VenueDetail> {
     this.checkFirebaseConfig();
 
+    const docRef = this.collection.doc();
     const now = FieldValue.serverTimestamp();
-    const docRef = this.collection!.doc();
 
     await withTimeoutAndRetry(() =>
       docRef.set({
@@ -81,7 +81,7 @@ export class VenueService {
         host_tags: data.host_tags ?? [],
         coverPhoto: data.coverPhoto ?? '',
         otherPhotos: data.otherPhotos ?? [],
-        socialMedia: data.socialMedia ?? { threads: '', instagram: '' },
+        ...(data.socialMedia !== undefined ? { socialMedia: data.socialMedia } : {}),
         status: 'active',
         eventCount: 0,
         eventRefs: [],
@@ -92,8 +92,26 @@ export class VenueService {
 
     cache.delete('venues:all');
 
-    const detail = await this.getVenueById(docRef.id);
-    return detail!;
+    return {
+      id: docRef.id,
+      name: data.name,
+      address: data.address,
+      region: data.region,
+      lat: data.lat ?? 0,
+      lng: data.lng ?? 0,
+      place_id: data.place_id ?? '',
+      nearest_mrt: data.nearest_mrt ?? '',
+      mrt_walk_minutes: data.mrt_walk_minutes ?? null,
+      capacity_max: data.capacity_max ?? null,
+      description: data.description ?? '',
+      host_tags: data.host_tags ?? [],
+      coverPhoto: data.coverPhoto ?? '',
+      otherPhotos: data.otherPhotos ?? [],
+      socialMedia: data.socialMedia,
+      status: 'active',
+      eventCount: 0,
+      events: [],
+    };
   }
 
   async getVenueById(id: string): Promise<VenueDetail | null> {
