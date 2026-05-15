@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
-import { VenueFilterParams } from '../models/types';
+import { CreateVenueData, VenueFilterParams } from '../models/types';
 
 export class VenueController {
   private venueService: VenueService;
@@ -10,8 +10,14 @@ export class VenueController {
     this.venueService = new VenueService();
   }
 
+  createVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const data = req.body as CreateVenueData;
+    const venue = await this.venueService.createVenue(data);
+    res.status(201).json(venue);
+  };
+
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { region, capacity_min, capacity_max, sort } = req.query;
+    const { region, capacity_min, capacity_max, sort, status } = req.query;
 
     const params: VenueFilterParams = {};
 
@@ -43,6 +49,14 @@ export class VenueController {
         return;
       }
       params.sort = sort;
+    }
+
+    if (status !== undefined) {
+      if (status !== 'active' && status !== 'inactive') {
+        res.status(400).json({ error: 'status must be "active" or "inactive"' });
+        return;
+      }
+      params.status = status;
     }
 
     if (

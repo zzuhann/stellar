@@ -132,48 +132,69 @@ export const artistSchemas = {
 };
 
 // Venue 相關的 schema
+const venueRegionEnum = z.enum([
+  '台北',
+  '新北',
+  '桃園',
+  '台中',
+  '台南',
+  '高雄',
+  '基隆',
+  '新竹',
+  '嘉義',
+  '宜蘭',
+  '苗栗',
+  '彰化',
+  '南投',
+  '雲林',
+  '屏東',
+  '花蓮',
+  '台東',
+  '澎湖',
+  '金門',
+  '連江',
+]);
+
 export const venueSchemas = {
-  update: z.object({
-    name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
-    address: z.string().min(1, '地址不能為空').max(500).trim().optional(),
-    region: z
-      .enum([
-        '台北',
-        '新北',
-        '桃園',
-        '台中',
-        '台南',
-        '高雄',
-        '基隆',
-        '新竹',
-        '嘉義',
-        '宜蘭',
-        '苗栗',
-        '彰化',
-        '南投',
-        '雲林',
-        '屏東',
-        '花蓮',
-        '台東',
-        '澎湖',
-        '金門',
-        '連江',
-      ])
-      .optional(),
+  create: z.object({
+    name: z.string().min(1, '場地名稱不能為空').max(200).trim(),
+    address: z.string().min(1, '地址不能為空').max(500).trim(),
+    region: venueRegionEnum,
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    place_id: z.string().max(500).trim().optional(),
     nearest_mrt: z.string().max(100).trim().optional(),
     mrt_walk_minutes: z.number().int().min(0).nullable().optional(),
     capacity_max: z.number().int().min(1).nullable().optional(),
-    equipment: z.array(z.string().min(1).max(100)).optional(),
-    decoration_allowed: z.array(z.string().min(1).max(100)).optional(),
-    custom_items: z.array(z.string().min(1).max(100)).optional(),
-    price_model: z.string().max(500).trim().optional(),
-    price_note: z.string().max(500).trim().optional(),
-    venue_visit_ok: z.boolean().nullable().optional(),
-    cancel_policy: z.string().max(1000).trim().optional(),
-    noise_ok: z.boolean().nullable().optional(),
+    description: z.string().max(3000).trim().optional(),
     host_tags: z.array(z.string().min(1).max(50)).optional(),
     coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
+    otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
+    socialMedia: z
+      .object({
+        threads: z.string().max(200).trim().optional(),
+        instagram: z.string().max(200).trim().optional(),
+      })
+      .optional(),
+  }),
+  update: z.object({
+    name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
+    address: z.string().min(1, '地址不能為空').max(500).trim().optional(),
+    region: venueRegionEnum.optional(),
+    nearest_mrt: z.string().max(100).trim().optional(),
+    mrt_walk_minutes: z.number().int().min(0).nullable().optional(),
+    capacity_max: z.number().int().min(1).nullable().optional(),
+    description: z.string().max(3000).trim().optional(),
+    host_tags: z.array(z.string().min(1).max(50)).optional(),
+    coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
+    otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
     status: z.enum(['active', 'inactive']).optional(),
+    socialMedia: z
+      .object({
+        threads: z.string().max(200).trim().optional(),
+        instagram: z.string().max(200).trim().optional(),
+      })
+      .optional(),
   }),
 };
 

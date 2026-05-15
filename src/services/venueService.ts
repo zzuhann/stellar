@@ -1,5 +1,6 @@
 import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
 import {
+  CreateVenueData,
   UpdateVenueData,
   Venue,
   VenueDetail,
@@ -59,6 +60,42 @@ export class VenueService {
     );
   }
 
+  async createVenue(data: CreateVenueData): Promise<VenueDetail> {
+    this.checkFirebaseConfig();
+
+    const now = FieldValue.serverTimestamp();
+    const docRef = this.collection!.doc();
+
+    await withTimeoutAndRetry(() =>
+      docRef.set({
+        name: data.name,
+        address: data.address,
+        region: data.region,
+        lat: data.lat ?? 0,
+        lng: data.lng ?? 0,
+        place_id: data.place_id ?? '',
+        nearest_mrt: data.nearest_mrt ?? '',
+        mrt_walk_minutes: data.mrt_walk_minutes ?? null,
+        capacity_max: data.capacity_max ?? null,
+        description: data.description ?? '',
+        host_tags: data.host_tags ?? [],
+        coverPhoto: data.coverPhoto ?? '',
+        otherPhotos: data.otherPhotos ?? [],
+        socialMedia: data.socialMedia ?? { threads: '', instagram: '' },
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+
+    cache.delete('venues:all');
+
+    const detail = await this.getVenueById(docRef.id);
+    return detail!;
+  }
+
   async getVenueById(id: string): Promise<VenueDetail | null> {
     this.checkFirebaseConfig();
 
@@ -112,15 +149,9 @@ export class VenueService {
       capacity_max: d.capacity_max ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
+      otherPhotos: d.otherPhotos ?? [],
       status: (d.status as 'active' | 'inactive' | undefined) ?? 'active',
-      equipment: d.equipment ?? [],
-      decoration_allowed: d.decoration_allowed ?? [],
-      custom_items: d.custom_items ?? [],
-      price_model: d.price_model ?? '',
-      price_note: d.price_note ?? '',
-      cancel_policy: d.cancel_policy ?? '',
-      noise_ok: d.noise_ok ?? null,
-      venue_visit_ok: d.venue_visit_ok ?? null,
+      description: d.description ?? '',
       host_tags: d.host_tags ?? [],
       socialMedia: d.socialMedia ?? undefined,
       events,
@@ -145,16 +176,10 @@ export class VenueService {
       'nearest_mrt',
       'mrt_walk_minutes',
       'capacity_max',
-      'equipment',
-      'decoration_allowed',
-      'custom_items',
-      'price_model',
-      'price_note',
-      'venue_visit_ok',
-      'cancel_policy',
-      'noise_ok',
+      'description',
       'host_tags',
       'coverPhoto',
+      'otherPhotos',
       'socialMedia',
     ];
 
@@ -197,9 +222,13 @@ export class VenueService {
   }
 
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {
-    const { region, capacity_min, capacity_max, sort } = params;
+    const { region, capacity_min, capacity_max, sort, status } = params;
 
     let venues = await this.fetchAll();
+
+    if (status) {
+      venues = venues.filter(v => v.status === status);
+    }
 
     if (region && region.length > 0) {
       venues = venues.filter(v => region.includes(v.region));

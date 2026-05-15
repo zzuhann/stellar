@@ -6,6 +6,13 @@ import { validateRequest, venueSchemas } from '../middleware/validation';
 const router = Router();
 const venueController = new VenueController();
 
+router.post(
+  '/',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: venueSchemas.create }),
+  venueController.createVenue
+);
 router.get('/', venueController.getVenues);
 router.get('/:id', venueController.getVenueById);
 router.patch(
