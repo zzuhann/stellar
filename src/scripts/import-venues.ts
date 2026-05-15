@@ -89,13 +89,13 @@ async function main(): Promise<void> {
   }
 
   const rows = await readCsv(inputPath);
-  console.log(`📋 讀取 CSV：${rows.length} 筆`);
+  console.warn(`📋 讀取 CSV：${rows.length} 筆`);
 
   const toImport = rows.filter(r => r.confidence === 'high' || r.confidence === 'low');
   const skipped = rows.length - toImport.length;
 
-  console.log(`✅ 準備寫入：${toImport.length} 筆`);
-  console.log(`⏭️  略過（confidence=none）：${skipped} 筆\n`);
+  console.warn(`✅ 準備寫入：${toImport.length} 筆`);
+  console.warn(`⏭️  略過（confidence=none）：${skipped} 筆\n`);
 
   const venuesRef = db.collection('venues');
   const batch = db.batch();
@@ -112,6 +112,7 @@ async function main(): Promise<void> {
       {
         status: 'active',
         coverPhoto: '',
+        otherPhotos: [],
         name: row.venueName ?? '',
         address: row.address ?? '',
         region: row.city ? detectRegion(row.city) : detectRegion(row.address ?? ''),
@@ -121,14 +122,7 @@ async function main(): Promise<void> {
         nearest_mrt: '',
         mrt_walk_minutes: null,
         capacity_max: null,
-        equipment: [],
-        decoration_allowed: [],
-        custom_items: [],
-        price_model: '',
-        price_note: '',
-        venue_visit_ok: null,
-        cancel_policy: '',
-        noise_ok: null,
+        description: '',
         host_tags: [],
         socialMedia: {
           threads: '',
@@ -142,17 +136,19 @@ async function main(): Promise<void> {
       { merge: true }
     );
 
-    console.log(`  ✅ ${row.venueName} (${row.event_count} 場, ${row.confidence})`);
+    console.warn(`  ✅ ${row.venueName} (${row.event_count} 場, ${row.confidence})`);
+
+    await new Promise<void>(r => setTimeout(r, 200));
   }
 
-  console.log(`\n📤 寫入 Firestore...`);
+  console.warn(`\n📤 寫入 Firestore...`);
   await batch.commit();
 
-  console.log(`\n🎉 完成！成功寫入 ${toImport.length} 筆場地資料到 venues collection`);
-  console.log(`\n👉 下一步：`);
-  console.log(`   1. 到 Firebase Console 確認 venues collection 資料正確`);
-  console.log(`   2. 建立 Firestore Index（region, eventCount, capacity_max）`);
-  console.log(`   3. 開始開發 GET /api/venues API`);
+  console.warn(`\n🎉 完成！成功寫入 ${toImport.length} 筆場地資料到 venues collection`);
+  console.warn(`\n👉 下一步：`);
+  console.warn(`   1. 到 Firebase Console 確認 venues collection 資料正確`);
+  console.warn(`   2. 建立 Firestore Index（region, eventCount, capacity_max）`);
+  console.warn(`   3. 開始開發 GET /api/venues API`);
 }
 
 main()
