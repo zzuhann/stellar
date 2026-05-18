@@ -14,7 +14,14 @@ router.post(
   venueController.createVenue
 );
 router.get('/', venueController.getVenues);
+router.get('/admin/:id', authenticateToken, requireAdmin, venueController.getAdminVenueById);
 router.get('/:id', venueController.getVenueById);
+router.delete(
+  '/admin/:id/permanent',
+  authenticateToken,
+  requireAdmin,
+  venueController.permanentDeleteVenue
+);
 router.patch(
   '/:id',
   authenticateToken,

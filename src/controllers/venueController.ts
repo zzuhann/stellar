@@ -107,4 +107,35 @@ export class VenueController {
 
     res.status(200).json({ message: 'Venue deactivated' });
   };
+
+  getAdminVenueById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const venue = await this.venueService.getAdminVenueById(id as string);
+
+    if (!venue) {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+
+    res.json(venue);
+  };
+
+  permanentDeleteVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const result = await this.venueService.permanentDeleteVenue(id as string);
+
+    if (result === 'not_found') {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+
+    if (result === 'has_events') {
+      res.status(400).json({
+        error: 'Cannot permanently delete a venue that has associated events. Remove event associations first.',
+      });
+      return;
+    }
+
+    res.status(200).json({ message: 'Venue permanently deleted' });
+  };
 }
