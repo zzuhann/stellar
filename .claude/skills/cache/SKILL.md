@@ -250,6 +250,29 @@ async deleteEvent(id: string): Promise<void> {
 }
 ```
 
+## 新增 Cache Key 檢查清單
+
+實作新的 cache key 時，必須同步確認**所有會使該資料變動的寫入路徑**都有對應的清除邏輯。
+
+**步驟：**
+1. 列出新 key 儲存的是什麼資料
+2. 找出所有會改變這份資料的操作（create、update、delete、關聯變動）
+3. 在每個操作的末尾補上 `cache.delete(newKey)`
+
+**範例：新增 `resource:admin:detail:{id}` key**
+
+```
+需要清除的操作：
+- updateResource()     ← 資料改變
+- deactivateResource() ← status 改變
+- permanentDelete()    ← 資料消失
+- linkRelatedData()    ← 關聯改變
+```
+
+如果只在 `permanentDelete` 清了新 key，而 `updateResource` 沒清，admin 編輯後會讀到舊的快取。
+
+---
+
 ## 注意事項
 
 1. **不要快取 pending 狀態的資料** - 這類資料變動頻繁
