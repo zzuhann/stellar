@@ -119,3 +119,4 @@ NODE_ENV=development
 
 - `~/.claude/skills/backend-patterns/` — Express Routes/Controllers/Services 分層、Zod validation、ApiError 模式
 - `.claude/skills/cache/` — 本專案的 in-memory cache 使用規範
+- `.claude/skills/testing/` — 單元測試規範（Jest + ts-jest）：檔案位置、Firestore mock 模式、Zod schema 測試
