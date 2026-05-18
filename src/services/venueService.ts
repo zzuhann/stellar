@@ -218,6 +218,7 @@ export class VenueService {
 
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
+    cache.delete(`venue:admin:detail:${id}`);
 
     return true;
   }
@@ -322,6 +323,7 @@ export class VenueService {
 
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
+    cache.delete(`venue:admin:detail:${id}`);
 
     return true;
   }
