@@ -132,28 +132,32 @@ export const artistSchemas = {
 };
 
 // Venue 相關的 schema
-const venueRegionEnum = z.enum([
-  '台北',
-  '新北',
-  '桃園',
-  '台中',
-  '台南',
-  '高雄',
-  '基隆',
-  '新竹',
-  '嘉義',
-  '宜蘭',
-  '苗栗',
-  '彰化',
-  '南投',
-  '雲林',
-  '屏東',
-  '花蓮',
-  '台東',
-  '澎湖',
-  '金門',
-  '連江',
-]);
+
+const venueRegionEnum = z.preprocess(
+  val => (typeof val === 'string' ? val.replace(/臺/g, '台') : val),
+  z.enum([
+    '台北',
+    '新北',
+    '桃園',
+    '台中',
+    '台南',
+    '高雄',
+    '基隆',
+    '新竹',
+    '嘉義',
+    '宜蘭',
+    '苗栗',
+    '彰化',
+    '南投',
+    '雲林',
+    '屏東',
+    '花蓮',
+    '台東',
+    '澎湖',
+    '金門',
+    '連江',
+  ])
+);
 
 export const venueSchemas = {
   create: z.object({

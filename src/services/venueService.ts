@@ -16,6 +16,9 @@ import {
   Timestamp,
 } from 'firebase-admin/firestore';
 
+// Normalize region: replace 臺 with 台 for consistency with Zod schema
+const normalizeRegion = (region: string): string => region.replace(/臺/g, '台');
+
 export class VenueService {
   private collection = hasFirebaseConfig && db ? db.collection('venues') : null;
 
@@ -31,7 +34,7 @@ export class VenueService {
       id: doc.id,
       name: d.name ?? '',
       address: d.address ?? '',
-      region: d.region ?? '',
+      region: normalizeRegion(d.region ?? ''),
       lat: d.lat ?? 0,
       lng: d.lng ?? 0,
       nearest_mrt: d.nearest_mrt ?? '',
@@ -72,7 +75,7 @@ export class VenueService {
       docRef.set({
         name: data.name,
         address: data.address,
-        region: data.region,
+        region: normalizeRegion(data.region),
         lat: data.lat ?? 0,
         lng: data.lng ?? 0,
         place_id: data.place_id ?? '',
@@ -98,7 +101,7 @@ export class VenueService {
       id: docRef.id,
       name: data.name,
       address: data.address,
-      region: data.region,
+      region: normalizeRegion(data.region),
       lat: data.lat ?? 0,
       lng: data.lng ?? 0,
       place_id: data.place_id ?? '',
@@ -160,7 +163,7 @@ export class VenueService {
       id: doc.id,
       name: d.name ?? '',
       address: d.address ?? '',
-      region: d.region ?? '',
+      region: normalizeRegion(d.region ?? ''),
       lat: d.lat ?? 0,
       lng: d.lng ?? 0,
       place_id: d.place_id ?? '',
@@ -209,7 +212,7 @@ export class VenueService {
 
     for (const field of updatableFields) {
       if (data[field] !== undefined) {
-        updateData[field] = data[field];
+        updateData[field] = field === 'region' ? normalizeRegion(data[field] as string) : data[field];
       }
     }
 
@@ -251,7 +254,8 @@ export class VenueService {
     }
 
     if (region && region.length > 0) {
-      venues = venues.filter(v => region.includes(v.region));
+      const normalizedRegions = region.map(normalizeRegion);
+      venues = venues.filter(v => normalizedRegions.includes(v.region));
     }
 
     if (capacity_min !== undefined) {
