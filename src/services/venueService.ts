@@ -222,6 +222,90 @@ export class VenueService {
     return true;
   }
 
+  async getAdminVenueById(id: string): Promise<VenueDetail | null> {
+    this.checkFirebaseConfig();
+
+    const cacheKey = `venue:admin:detail:${id}`;
+    const cached = cache.get<VenueDetail>(cacheKey);
+    if (cached) return cached;
+
+    const doc = await withTimeoutAndRetry(() => this.collection!.doc(id).get());
+    if (!doc.exists) return null;
+
+    const d = doc.data()!;
+
+    const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
+
+    let events: VenueEventCard[] = [];
+
+    if (eventRefs.length > 0) {
+      const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
+
+      events = eventDocs
+        .filter(ev => ev.exists && ev.data()?.status === 'approved')
+        .map(ev => {
+          const e = ev.data()!;
+          const artists = (e.artists ?? []) as Array<{ name: string }>;
+          const start = e.datetime?.start as Timestamp | undefined;
+          const end = e.datetime?.end as Timestamp | undefined;
+          return {
+            id: ev.id,
+            title: e.title ?? '',
+            artistName: artists.map(a => a.name).join(' x '),
+            startDate: start?.toDate().toISOString() ?? '',
+            endDate: end?.toDate().toISOString() ?? '',
+            coverImage: e.mainImage ?? '',
+            slug: (e.slug as string | null | undefined) ?? null,
+          };
+        })
+        .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
+    }
+
+    const detail: VenueDetail = {
+      id: doc.id,
+      name: d.name ?? '',
+      address: d.address ?? '',
+      region: normalizeRegion(d.region ?? ''),
+      lat: d.lat ?? 0,
+      lng: d.lng ?? 0,
+      place_id: d.place_id ?? '',
+      nearest_mrt: d.nearest_mrt ?? '',
+      mrt_walk_minutes: d.mrt_walk_minutes ?? null,
+      capacity_max: d.capacity_max ?? null,
+      eventCount: d.eventCount ?? 0,
+      coverPhoto: d.coverPhoto ?? '',
+      otherPhotos: d.otherPhotos ?? [],
+      status: (d.status as 'active' | 'inactive' | undefined) ?? 'active',
+      description: d.description ?? '',
+      host_tags: d.host_tags ?? [],
+      socialMedia: d.socialMedia ?? undefined,
+      events,
+    };
+
+    cache.set(cacheKey, detail, 1440);
+    return detail;
+  }
+
+  async permanentDeleteVenue(id: string): Promise<'not_found' | 'has_events' | 'deleted'> {
+    this.checkFirebaseConfig();
+
+    const docRef = this.collection!.doc(id);
+    const doc = await withTimeoutAndRetry(() => docRef.get());
+    if (!doc.exists) return 'not_found';
+
+    const d = doc.data()!;
+    const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
+    if (eventRefs.length > 0) return 'has_events';
+
+    await withTimeoutAndRetry(() => docRef.delete());
+
+    cache.delete('venues:all');
+    cache.delete(`venue:detail:${id}`);
+    cache.delete(`venue:admin:detail:${id}`);
+
+    return 'deleted';
+  }
+
   async deactivateVenue(id: string): Promise<boolean> {
     this.checkFirebaseConfig();
 
