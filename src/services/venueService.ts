@@ -57,9 +57,7 @@ export class VenueService {
         const snapshot = await withTimeoutAndRetry(() =>
           this.collection!.orderBy('eventCount', 'desc').get()
         );
-        return snapshot.docs
-          .filter(doc => doc.data().status !== 'inactive')
-          .map(doc => this.mapDocToVenue(doc));
+        return snapshot.docs.map(doc => this.mapDocToVenue(doc));
       },
       1440
     );
@@ -184,12 +182,12 @@ export class VenueService {
     return detail;
   }
 
-  async updateVenue(id: string, data: UpdateVenueData): Promise<VenueDetail | null> {
+  async updateVenue(id: string, data: UpdateVenueData): Promise<boolean> {
     this.checkFirebaseConfig();
 
     const docRef = this.collection!.doc(id);
     const existing = await withTimeoutAndRetry(() => docRef.get());
-    if (!existing.exists) return null;
+    if (!existing.exists) return false;
 
     const updatableFields: (keyof UpdateVenueData)[] = [
       'name',
@@ -221,7 +219,7 @@ export class VenueService {
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
 
-    return this.getVenueById(id);
+    return true;
   }
 
   async deactivateVenue(id: string): Promise<boolean> {
@@ -249,9 +247,7 @@ export class VenueService {
 
     let venues = await this.fetchAll();
 
-    if (status) {
-      venues = venues.filter(v => v.status === status);
-    }
+    venues = venues.filter(v => v.status === (status ?? 'active'));
 
     if (region && region.length > 0) {
       const normalizedRegions = region.map(normalizeRegion);

@@ -86,14 +86,14 @@ export class VenueController {
 
   updateVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const venue = await this.venueService.updateVenue(id as string, req.body);
+    const updated = await this.venueService.updateVenue(id as string, req.body);
 
-    if (!venue) {
+    if (!updated) {
       res.status(404).json({ error: 'Venue not found' });
       return;
     }
 
-    res.json(venue);
+    res.json({ message: 'Venue updated' });
   };
 
   deleteVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
