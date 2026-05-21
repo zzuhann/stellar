@@ -362,7 +362,7 @@ export class EventService {
   }
 
   // 新增：地圖資料 API
-  async getMapData(params: MapDataParams): Promise<MapDataResponse> {
+  async getMapData(params: MapDataParams, userId?: string): Promise<MapDataResponse> {
     this.checkFirebaseConfig();
 
     const status = params.status || 'active';
@@ -465,7 +465,7 @@ export class EventService {
     }
 
     // 轉換為地圖格式並按開始時間排序
-    const mapEvents = events
+    const filteredEvents = events
       .filter(event => {
         // 確保活動有完整的座標資料
         return event.location?.coordinates?.lat && event.location?.coordinates?.lng;
@@ -473,20 +473,29 @@ export class EventService {
       .sort((a, b) => {
         // 按開始時間排序 (時間早的在前)
         return a.datetime.start.toMillis() - b.datetime.start.toMillis();
-      })
-      .map(event => {
-        return {
-          id: event.id,
-          slug: event.slug ?? null,
-          title: event.title,
-          mainImage: event.mainImage,
-          location: event.location, // 完整的 location 物件
-          datetime: {
-            start: event.datetime.start.toDate().toISOString(),
-            end: event.datetime.end.toDate().toISOString(),
-          },
-        };
       });
+
+    // 批量查詢收藏狀態
+    let favoritedEventIds = new Set<string>();
+    if (userId) {
+      const eventIds = filteredEvents.map(e => e.id);
+      favoritedEventIds = await this.userService.checkFavoritesBatch(userId, eventIds);
+    }
+
+    const mapEvents = filteredEvents.map(event => {
+      return {
+        id: event.id,
+        slug: event.slug ?? null,
+        title: event.title,
+        mainImage: event.mainImage,
+        location: event.location, // 完整的 location 物件
+        datetime: {
+          start: event.datetime.start.toDate().toISOString(),
+          end: event.datetime.end.toDate().toISOString(),
+        },
+        isFavorited: favoritedEventIds.has(event.id),
+      };
+    });
 
     const result = {
       events: mapEvents,
@@ -495,6 +504,38 @@ export class EventService {
 
     // 不需要額外快取，因為基礎資料已經使用 getWithLock 快取
     return result;
+  }
+
+  // Backfill artist slugs for events that predate slug storage
+  private async backfillArtistSlugs(
+    event: CoffeeEvent
+  ): Promise<CoffeeEvent> {
+    if (!db) return event;
+
+    const needsBackfill = event.artists.some(a => !a.slug);
+    if (!needsBackfill) return event;
+
+    const artistIds = event.artists.filter(a => !a.slug).map(a => a.id);
+    const artistDocs = await Promise.all(
+      artistIds.map(id => withTimeoutAndRetry(() => db!.collection('artists').doc(id).get()))
+    );
+
+    const slugMap = new Map<string, string>();
+    artistDocs.forEach(doc => {
+      if (doc.exists) {
+        const slug = doc.data()?.slug as string | undefined;
+        if (slug) slugMap.set(doc.id, slug);
+      }
+    });
+
+    if (slugMap.size === 0) return event;
+
+    return {
+      ...event,
+      artists: event.artists.map(a =>
+        a.slug || !slugMap.has(a.id) ? a : { ...a, slug: slugMap.get(a.id) }
+      ),
+    };
   }
 
   async getEventById(
@@ -507,19 +548,21 @@ export class EventService {
     const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
 
     if (cachedResult) {
+      const event = await this.backfillArtistSlugs(cachedResult);
       if (userId) {
-        const isFavorited = await this.userService.isFavorited(userId, cachedResult.id);
-        return { ...cachedResult, isFavorited };
+        const isFavorited = await this.userService.isFavorited(userId, event.id);
+        return { ...event, isFavorited };
       }
-      return cachedResult;
+      return event;
     }
 
     // 先嘗試直接用 Firestore ID 查詢
     const doc = await withTimeoutAndRetry(() => this.collection.doc(eventId).get());
 
     if (doc.exists) {
-      const event = { id: doc.id, ...doc.data() } as CoffeeEvent;
-      cache.set(cacheKey, event, 1440);
+      const rawEvent = { id: doc.id, ...doc.data() } as CoffeeEvent;
+      cache.set(cacheKey, rawEvent, 1440);
+      const event = await this.backfillArtistSlugs(rawEvent);
       if (userId) {
         const isFavorited = await this.userService.isFavorited(userId, event.id);
         return { ...event, isFavorited };
@@ -537,12 +580,13 @@ export class EventService {
     }
 
     const slugDoc = slugSnapshot.docs[0];
-    const event = { id: slugDoc.id, ...slugDoc.data() } as CoffeeEvent;
+    const rawEvent = { id: slugDoc.id, ...slugDoc.data() } as CoffeeEvent;
 
     // 同時以 slug 和實際 ID 快取
-    cache.set(`event:${event.id}`, event, 1440);
-    cache.set(cacheKey, event, 1440);
+    cache.set(`event:${rawEvent.id}`, rawEvent, 1440);
+    cache.set(cacheKey, rawEvent, 1440);
 
+    const event = await this.backfillArtistSlugs(rawEvent);
     if (userId) {
       const isFavorited = await this.userService.isFavorited(userId, event.id);
       return { ...event, isFavorited };
@@ -568,7 +612,7 @@ export class EventService {
       )
     );
 
-    const artists: Array<{ id: string; name: string; profileImage?: string }> = [];
+    const artists: Array<{ id: string; name: string; slug?: string; profileImage?: string }> = [];
     const artistSlugsOrFallbacks: string[] = [];
 
     for (let i = 0; i < artistDocs.length; i++) {
@@ -580,13 +624,15 @@ export class EventService {
       }
 
       const artistData = artistDoc.data();
+      const artistSlug = artistData?.slug as string | undefined;
       artists.push({
         id: artistId,
         name: artistData?.stageName || '',
+        ...(artistSlug && { slug: artistSlug }),
         profileImage: artistData?.profileImage || undefined,
       });
       artistSlugsOrFallbacks.push(
-        (artistData?.slug as string | undefined) || artistId.substring(0, 6).toLowerCase()
+        artistSlug || artistId.substring(0, 6).toLowerCase()
       );
     }
 

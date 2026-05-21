@@ -243,7 +243,10 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
-    // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
+    // 審核通過時清除熱門藝人快取，因為 getTopArtistsByUpcomingEvents 會過濾 approved 狀態的藝人
+    if (status === 'approved') {
+      cache.clearPattern('artists:top:');
+    }
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
     if (status === 'approved' && artistData?.createdByEmail) {

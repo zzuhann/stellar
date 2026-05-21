@@ -282,7 +282,8 @@ export class EventController {
       region: req.query.region as string,
     };
 
-    const result = await this.eventService.getMapData(params);
+    const userId = req.user?.uid;
+    const result = await this.eventService.getMapData(params, userId);
     res.json(result);
   };
 }

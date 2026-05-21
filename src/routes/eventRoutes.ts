@@ -8,7 +8,7 @@ const eventController = new EventController();
 
 // 公開路由（使用 optionalAuthenticate 來支援 checkFavorite 參數）
 router.get('/', optionalAuthenticate, (req, res) => eventController.getActiveEvents(req, res));
-router.get('/map-data', (req, res) => eventController.getMapData(req, res));
+router.get('/map-data', optionalAuthenticate, (req, res) => eventController.getMapData(req, res));
 router.get('/search', (req, res) => eventController.searchEvents(req, res));
 router.get('/trending', (req, res) => eventController.getTrendingEvents(req, res));
 

@@ -31,7 +31,8 @@ export interface CoffeeEvent {
   artists: Array<{
     id: string;
     name: string;
-    profileImage?: string; // 🆕 新增藝人頭像
+    slug?: string; // artist slug for navigation
+    profileImage?: string; // 新增藝人頭像
   }>; // 改為陣列，支援聯合應援
   title: string;
   description: string;
@@ -341,6 +342,7 @@ export interface MapDataResponse {
       start: string; // ISO timestamp
       end: string; // ISO timestamp
     };
+    isFavorited: boolean;
   }[];
   total: number;
 }
