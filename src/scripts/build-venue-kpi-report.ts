@@ -59,6 +59,11 @@ interface DailyKpiRow {
   contactConversionRate: number;
 }
 
+interface VenueDetailViewRank {
+  venueId: string;
+  detailServedCount: number;
+}
+
 type VenueDailyAccumulator = Omit<
   DailyKpiRow,
   'date' | 'venueId' | 'ctr' | 'detailViewRate' | 'contactConversionRate'
@@ -287,6 +292,22 @@ function buildDailyRows(bucket: Map<string, VenueDailyAccumulator>): DailyKpiRow
   return rows.sort((a, b) => a.date.localeCompare(b.date) || a.venueId.localeCompare(b.venueId));
 }
 
+function buildTopDetailViews(rows: DailyKpiRow[], limit: number = 10): VenueDetailViewRank[] {
+  const totalsByVenue = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.venueId || row.venueId === 'all') continue;
+    if (!row.detailServedCount) continue;
+
+    totalsByVenue.set(row.venueId, (totalsByVenue.get(row.venueId) ?? 0) + row.detailServedCount);
+  }
+
+  return Array.from(totalsByVenue.entries())
+    .map(([venueId, detailServedCount]) => ({ venueId, detailServedCount }))
+    .sort((a, b) => b.detailServedCount - a.detailServedCount)
+    .slice(0, limit);
+}
+
 function buildSummaryMarkdown(rows: DailyKpiRow[], start: string, end: string): string {
   const totals = rows.reduce(
     (acc, row) => {
@@ -309,6 +330,16 @@ function buildSummaryMarkdown(rows: DailyKpiRow[], start: string, end: string): 
   const ctr = toPercent(totals.detailClickCount, totals.listImpressionCount);
   const contactCvr = toPercent(totals.contactClickCount, totals.detailPageViewCount);
   const mapRate = toPercent(totals.mapClickCount, totals.detailPageViewCount);
+  const topDetailViews = buildTopDetailViews(rows, 10);
+  const topDetailViewsMd =
+    topDetailViews.length === 0
+      ? '- 無資料（請確認 analyticsVenueEventsRaw 是否有 `venue_detail_served`）'
+      : topDetailViews
+          .map(
+            (item, index) =>
+              `${index + 1}. venueId=${item.venueId}｜detail view times=${item.detailServedCount}`
+          )
+          .join('\n');
 
   return `# Venues KPI Summary (${start} ~ ${end})
 
@@ -320,6 +351,9 @@ function buildSummaryMarkdown(rows: DailyKpiRow[], start: string, end: string): 
 - 聯絡 CTA（click_venue_contact）：${totals.contactClickCount}
 - 聯絡轉換率：${contactCvr}%
 - 地圖導流率：${mapRate}%
+
+## 詳情頁 View Times Top 10（server-side）
+${topDetailViewsMd}
 
 ## 下一步（給 /analytics）
 1. 比對本週與上週 CTR、contact 轉換率，找異常區段（region/capacity）。
