@@ -160,24 +160,49 @@ const venueRegionEnum = z.preprocess(
 );
 
 export const venueSchemas = {
+  batchReview: z.object({
+    updates: z
+      .array(
+        z.object({
+          venueId: z.string().min(1, 'venueId 不能為空'),
+          status: z.enum(['active', 'rejected']),
+        })
+      )
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
+  }),
+  batchStatus: z.object({
+    updates: z
+      .array(
+        z.object({
+          venueId: z.string().min(1, 'venueId 不能為空'),
+          status: z.enum(['active', 'inactive']),
+        })
+      )
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
+  }),
   create: z.object({
     name: z.string().min(1, '場地名稱不能為空').max(200).trim(),
     address: z.string().min(1, '地址不能為空').max(500).trim(),
     region: venueRegionEnum,
     lat: z.number().optional(),
     lng: z.number().optional(),
-    place_id: z.string().max(500).trim().optional(),
-    nearest_mrt: z.string().max(100).trim().optional(),
-    mrt_walk_minutes: z.number().int().min(0).nullable().optional(),
-    capacity_max: z.number().int().min(1).nullable().optional(),
+    placeId: z.string().max(500).trim().optional(),
+    nearestMrt: z.string().max(100).trim().optional(),
+    mrtWalkMinutes: z.number().int().min(0).nullable().optional(),
+    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']).nullable().optional(),
     description: z.string().max(3000).trim().optional(),
-    host_tags: z.array(z.string().min(1).max(50)).optional(),
+    hostTags: z.array(z.string().min(1).max(50)).optional(),
+    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']).optional(),
+    contactUrl: z.string().url('聯絡網址格式不正確').max(500).optional(),
     coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
     otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
     socialMedia: z
       .object({
-        threads: z.string().max(200).trim().optional(),
-        instagram: z.string().max(200).trim().optional(),
+        threads: z.string().max(500).trim().optional(),
+        instagram: z.string().max(500).trim().optional(),
+        line: z.string().max(500).trim().optional(),
       })
       .optional(),
   }),
@@ -185,18 +210,21 @@ export const venueSchemas = {
     name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
     address: z.string().min(1, '地址不能為空').max(500).trim().optional(),
     region: venueRegionEnum.optional(),
-    nearest_mrt: z.string().max(100).trim().optional(),
-    mrt_walk_minutes: z.number().int().min(0).nullable().optional(),
-    capacity_max: z.number().int().min(1).nullable().optional(),
+    nearestMrt: z.string().max(100).trim().optional(),
+    mrtWalkMinutes: z.number().int().min(0).nullable().optional(),
+    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']).nullable().optional(),
     description: z.string().max(3000).trim().optional(),
-    host_tags: z.array(z.string().min(1).max(50)).optional(),
+    hostTags: z.array(z.string().min(1).max(50)).optional(),
+    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']).optional(),
+    contactUrl: z.string().url('聯絡網址格式不正確').max(500).optional(),
     coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
     otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
     status: z.enum(['active', 'inactive']).optional(),
     socialMedia: z
       .object({
-        threads: z.string().max(200).trim().optional(),
-        instagram: z.string().max(200).trim().optional(),
+        threads: z.string().max(500).trim().optional(),
+        instagram: z.string().max(500).trim().optional(),
+        line: z.string().max(500).trim().optional(),
       })
       .optional(),
   }),
