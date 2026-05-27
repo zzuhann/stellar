@@ -88,7 +88,7 @@ describe('VenueService.batchReview', () => {
   it('非 pending 的場地跳過，processed = 0', async () => {
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ status: 'active', place_id: 'place-1' }),
+      data: () => ({ status: 'active', placeId: 'place-1' }),
     });
 
     const result = await service.batchReview([{ venueId: 'v1', status: 'active' }]);
@@ -107,7 +107,7 @@ describe('VenueService.batchReview', () => {
   it('pending → rejected，不觸發 onVenueApproved，processed = 1', async () => {
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ status: 'pending', place_id: 'place-1' }),
+      data: () => ({ status: 'pending', placeId: 'place-1' }),
     });
     mockUpdate.mockResolvedValue(undefined);
     // onVenueApproved should NOT be triggered; mockCollectionGet should not be called
@@ -122,7 +122,7 @@ describe('VenueService.batchReview', () => {
   it('pending → active，觸發 onVenueApproved，processed = 1', async () => {
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ status: 'pending', place_id: 'place-1' }),
+      data: () => ({ status: 'pending', placeId: 'place-1' }),
     });
     mockUpdate.mockResolvedValue(undefined);
     // onVenueApproved queries coffeeEvents
@@ -134,10 +134,10 @@ describe('VenueService.batchReview', () => {
     expect(mockCollectionGet).toHaveBeenCalledTimes(1);
   });
 
-  it('pending → active 但 place_id 為空，不呼叫 coffeeEvents 查詢', async () => {
+  it('pending → active 但 placeId 為空，不呼叫 coffeeEvents 查詢', async () => {
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ status: 'pending', place_id: '' }),
+      data: () => ({ status: 'pending', placeId: '' }),
     });
     mockUpdate.mockResolvedValue(undefined);
 
@@ -150,15 +150,15 @@ describe('VenueService.batchReview', () => {
     mockGet
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ status: 'pending', place_id: '' }),
+        data: () => ({ status: 'pending', placeId: '' }),
       })
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ status: 'active', place_id: 'place-2' }),
+        data: () => ({ status: 'active', placeId: 'place-2' }),
       })
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ status: 'pending', place_id: '' }),
+        data: () => ({ status: 'pending', placeId: '' }),
       });
     mockUpdate.mockResolvedValue(undefined);
 

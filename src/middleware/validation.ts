@@ -168,7 +168,8 @@ export const venueSchemas = {
           status: z.enum(['active', 'rejected']),
         })
       )
-      .min(1, 'updates 不能為空'),
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
   }),
   batchStatus: z.object({
     updates: z
@@ -178,7 +179,8 @@ export const venueSchemas = {
           status: z.enum(['active', 'inactive']),
         })
       )
-      .min(1, 'updates 不能為空'),
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
   }),
   create: z.object({
     name: z.string().min(1, '場地名稱不能為空').max(200).trim(),
