@@ -48,6 +48,7 @@ export class VenueService {
       otherPhotos: d.otherPhotos ?? [],
       description: d.description ?? '',
       status: (d.status as VenueStatus) ?? 'pending',
+      createdAt: d.createdAt ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
     };
   }
@@ -471,6 +472,12 @@ export class VenueService {
 
     if (sort === 'name') {
       venues = [...venues].sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
+    } else if (sort === 'newest') {
+      venues = [...venues].sort((a, b) => {
+        const aMs = a.createdAt?.toMillis() ?? 0;
+        const bMs = b.createdAt?.toMillis() ?? 0;
+        return bMs - aMs;
+      });
     }
 
     return venues;

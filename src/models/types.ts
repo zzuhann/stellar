@@ -128,6 +128,7 @@ export interface Venue {
   otherPhotos: string[];
   description: string;
   status: VenueStatus;
+  createdAt?: Timestamp;
   socialMedia?: {
     threads?: string;
     instagram?: string;
@@ -138,7 +139,7 @@ export interface Venue {
 export interface VenueFilterParams {
   region?: string[];
   capacityRange?: CapacityRange;
-  sort?: 'eventCount' | 'name';
+  sort?: 'eventCount' | 'name' | 'newest';
   status?: VenueStatus | 'all';
 }
 

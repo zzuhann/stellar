@@ -44,8 +44,8 @@ export class VenueController {
     }
 
     if (sort !== undefined) {
-      if (sort !== 'eventCount' && sort !== 'name') {
-        res.status(400).json({ error: 'sort must be "eventCount" or "name"' });
+      if (sort !== 'eventCount' && sort !== 'name' && sort !== 'newest') {
+        res.status(400).json({ error: 'sort must be "eventCount", "name", or "newest"' });
         return;
       }
       params.sort = sort;
