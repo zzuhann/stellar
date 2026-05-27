@@ -3,9 +3,12 @@ import {
   CreateVenueData,
   UpdateVenueData,
   Venue,
+  VenueBatchReviewItem,
+  VenueBatchStatusItem,
   VenueDetail,
   VenueEventCard,
   VenueFilterParams,
+  VenueStatus,
 } from '../models/types';
 import { cache } from '../utils/cache';
 import {
@@ -37,14 +40,14 @@ export class VenueService {
       region: normalizeRegion(d.region ?? ''),
       lat: d.lat ?? 0,
       lng: d.lng ?? 0,
-      nearest_mrt: d.nearest_mrt ?? '',
-      mrt_walk_minutes: d.mrt_walk_minutes ?? null,
-      capacity_max: d.capacity_max ?? null,
+      nearestMrt: d.nearestMrt ?? '',
+      mrtWalkMinutes: d.mrtWalkMinutes ?? null,
+      capacityRange: d.capacityRange ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
       otherPhotos: d.otherPhotos ?? [],
       description: d.description ?? '',
-      status: (d.status as 'active' | 'inactive') ?? 'active',
+      status: (d.status as VenueStatus) ?? 'pending',
       socialMedia: d.socialMedia ?? undefined,
     };
   }
@@ -76,24 +79,24 @@ export class VenueService {
         region: normalizeRegion(data.region),
         lat: data.lat ?? 0,
         lng: data.lng ?? 0,
-        place_id: data.place_id ?? '',
-        nearest_mrt: data.nearest_mrt ?? '',
-        mrt_walk_minutes: data.mrt_walk_minutes ?? null,
-        capacity_max: data.capacity_max ?? null,
+        placeId: data.placeId ?? '',
+        nearestMrt: data.nearestMrt ?? '',
+        mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+        capacityRange: data.capacityRange ?? null,
         description: data.description ?? '',
-        host_tags: data.host_tags ?? [],
+        hostTags: data.hostTags ?? [],
+        ...(data.preferredContact !== undefined ? { preferredContact: data.preferredContact } : {}),
+        ...(data.contactUrl !== undefined ? { contactUrl: data.contactUrl } : {}),
         coverPhoto: data.coverPhoto ?? '',
         otherPhotos: data.otherPhotos ?? [],
         ...(data.socialMedia !== undefined ? { socialMedia: data.socialMedia } : {}),
-        status: 'active',
+        status: 'pending',
         eventCount: 0,
         eventRefs: [],
         createdAt: now,
         updatedAt: now,
       })
     );
-
-    cache.delete('venues:all');
 
     return {
       id: docRef.id,
@@ -102,16 +105,18 @@ export class VenueService {
       region: normalizeRegion(data.region),
       lat: data.lat ?? 0,
       lng: data.lng ?? 0,
-      place_id: data.place_id ?? '',
-      nearest_mrt: data.nearest_mrt ?? '',
-      mrt_walk_minutes: data.mrt_walk_minutes ?? null,
-      capacity_max: data.capacity_max ?? null,
+      placeId: data.placeId ?? '',
+      nearestMrt: data.nearestMrt ?? '',
+      mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+      capacityRange: data.capacityRange ?? null,
       description: data.description ?? '',
-      host_tags: data.host_tags ?? [],
+      hostTags: data.hostTags ?? [],
+      preferredContact: data.preferredContact,
+      contactUrl: data.contactUrl,
       coverPhoto: data.coverPhoto ?? '',
       otherPhotos: data.otherPhotos ?? [],
       socialMedia: data.socialMedia,
-      status: 'active',
+      status: 'pending',
       eventCount: 0,
       events: [],
     };
@@ -128,7 +133,8 @@ export class VenueService {
     if (!doc.exists) return null;
 
     const d = doc.data()!;
-    if (d.status === 'inactive') return null;
+    // Only active venues are visible to the public
+    if (d.status !== 'active') return null;
 
     const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
 
@@ -164,16 +170,18 @@ export class VenueService {
       region: normalizeRegion(d.region ?? ''),
       lat: d.lat ?? 0,
       lng: d.lng ?? 0,
-      place_id: d.place_id ?? '',
-      nearest_mrt: d.nearest_mrt ?? '',
-      mrt_walk_minutes: d.mrt_walk_minutes ?? null,
-      capacity_max: d.capacity_max ?? null,
+      placeId: d.placeId ?? '',
+      nearestMrt: d.nearestMrt ?? '',
+      mrtWalkMinutes: d.mrtWalkMinutes ?? null,
+      capacityRange: d.capacityRange ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
       otherPhotos: d.otherPhotos ?? [],
-      status: (d.status as 'active' | 'inactive' | undefined) ?? 'active',
+      status: (d.status as VenueStatus) ?? 'pending',
       description: d.description ?? '',
-      host_tags: d.host_tags ?? [],
+      hostTags: d.hostTags ?? [],
+      preferredContact: d.preferredContact ?? undefined,
+      contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
       events,
     };
@@ -194,11 +202,13 @@ export class VenueService {
       'address',
       'region',
       'status',
-      'nearest_mrt',
-      'mrt_walk_minutes',
-      'capacity_max',
+      'nearestMrt',
+      'mrtWalkMinutes',
+      'capacityRange',
       'description',
-      'host_tags',
+      'hostTags',
+      'preferredContact',
+      'contactUrl',
       'coverPhoto',
       'otherPhotos',
       'socialMedia',
@@ -269,16 +279,18 @@ export class VenueService {
       region: normalizeRegion(d.region ?? ''),
       lat: d.lat ?? 0,
       lng: d.lng ?? 0,
-      place_id: d.place_id ?? '',
-      nearest_mrt: d.nearest_mrt ?? '',
-      mrt_walk_minutes: d.mrt_walk_minutes ?? null,
-      capacity_max: d.capacity_max ?? null,
+      placeId: d.placeId ?? '',
+      nearestMrt: d.nearestMrt ?? '',
+      mrtWalkMinutes: d.mrtWalkMinutes ?? null,
+      capacityRange: d.capacityRange ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
       otherPhotos: d.otherPhotos ?? [],
-      status: (d.status as 'active' | 'inactive' | undefined) ?? 'active',
+      status: (d.status as VenueStatus) ?? 'pending',
       description: d.description ?? '',
-      host_tags: d.host_tags ?? [],
+      hostTags: d.hostTags ?? [],
+      preferredContact: d.preferredContact ?? undefined,
+      contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
       events,
     };
@@ -328,24 +340,133 @@ export class VenueService {
     return true;
   }
 
+  /**
+   * Called when a venue is approved. Backfills eventRefs on the venue
+   * and venueId on all approved coffeeEvents sharing the same place_id.
+   */
+  private async onVenueApproved(venueId: string, placeId: string): Promise<void> {
+    if (!hasFirebaseConfig || !db) return;
+
+    const snapshot = await withTimeoutAndRetry(() =>
+      db!
+        .collection('coffeeEvents')
+        .where('location.placeId', '==', placeId)
+        .get()
+    );
+
+    const approvedEvents = snapshot.docs.filter(doc => doc.data().status === 'approved');
+
+    for (const eventDoc of approvedEvents) {
+      const eventId = eventDoc.id;
+      const venueRef = db!.collection('venues').doc(venueId);
+
+      await db!.runTransaction(async tx => {
+        const venueDoc = await tx.get(venueRef);
+        if (!venueDoc.exists) return;
+
+        const existingRefs = venueDoc.data()?.eventRefs ?? [];
+        const alreadyLinked = existingRefs.some((ref: DocumentReference) => ref.id === eventId);
+        if (!alreadyLinked) {
+          tx.update(venueRef, {
+            eventRefs: FieldValue.arrayUnion(db!.collection('coffeeEvents').doc(eventId)),
+            eventCount: FieldValue.increment(1),
+          });
+        }
+        tx.update(db!.collection('coffeeEvents').doc(eventId), {
+          'location.venueId': venueId,
+        });
+      });
+
+      cache.delete(`venue:detail:${venueId}`);
+    }
+
+    cache.delete('venues:all');
+  }
+
+  /**
+   * Batch review: transitions pending venues to active or rejected.
+   * Only processes venues with status === 'pending'; others are skipped.
+   * Returns the number of venues actually processed.
+   */
+  async batchReview(updates: VenueBatchReviewItem[]): Promise<number> {
+    this.checkFirebaseConfig();
+
+    let processed = 0;
+
+    for (const { venueId, status } of updates) {
+      const docRef = this.collection!.doc(venueId);
+      const doc = await withTimeoutAndRetry(() => docRef.get());
+
+      if (!doc.exists || doc.data()?.status !== 'pending') continue;
+
+      await withTimeoutAndRetry(() =>
+        docRef.update({ status, updatedAt: FieldValue.serverTimestamp() })
+      );
+
+      if (status === 'active') {
+        const placeId: string = doc.data()?.placeId ?? '';
+        if (placeId) {
+          await this.onVenueApproved(venueId, placeId);
+        }
+        cache.delete(`venue:detail:${venueId}`);
+        cache.delete(`venue:admin:detail:${venueId}`);
+      } else {
+        cache.delete(`venue:detail:${venueId}`);
+        cache.delete(`venue:admin:detail:${venueId}`);
+      }
+
+      processed++;
+    }
+
+    cache.delete('venues:all');
+    return processed;
+  }
+
+  /**
+   * Batch status toggle: switches active venues to inactive or vice versa.
+   * Only accepts 'active' or 'inactive'; other values are rejected upstream.
+   * Returns the number of venues actually updated.
+   */
+  async batchStatus(updates: VenueBatchStatusItem[]): Promise<number> {
+    this.checkFirebaseConfig();
+
+    let processed = 0;
+
+    for (const { venueId, status } of updates) {
+      const docRef = this.collection!.doc(venueId);
+      const doc = await withTimeoutAndRetry(() => docRef.get());
+
+      if (!doc.exists) continue;
+
+      await withTimeoutAndRetry(() =>
+        docRef.update({ status, updatedAt: FieldValue.serverTimestamp() })
+      );
+
+      cache.delete(`venue:detail:${venueId}`);
+      cache.delete(`venue:admin:detail:${venueId}`);
+      processed++;
+    }
+
+    cache.delete('venues:all');
+    return processed;
+  }
+
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {
-    const { region, capacity_min, capacity_max, sort, status } = params;
+    const { region, capacityRange, sort, status } = params;
 
     let venues = await this.fetchAll();
 
-    venues = venues.filter(v => v.status === (status ?? 'active'));
+    if (status !== 'all') {
+      venues = venues.filter(v => v.status === (status ?? 'active'));
+    }
 
     if (region && region.length > 0) {
       const normalizedRegions = region.map(normalizeRegion);
       venues = venues.filter(v => normalizedRegions.includes(v.region));
     }
 
-    if (capacity_min !== undefined) {
-      venues = venues.filter(v => v.capacity_max !== null && v.capacity_max >= capacity_min);
-    }
-
-    if (capacity_max !== undefined) {
-      venues = venues.filter(v => v.capacity_max !== null && v.capacity_max <= capacity_max);
+    if (capacityRange !== undefined) {
+      venues = venues.filter(v => v.capacityRange === capacityRange);
     }
 
     if (sort === 'name') {

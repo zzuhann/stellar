@@ -14,6 +14,23 @@ router.post(
   venueController.createVenue
 );
 router.get('/', venueController.getVenues);
+
+// Batch routes must come before /:id to avoid being matched as an id param
+router.patch(
+  '/batch-review',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: venueSchemas.batchReview }),
+  venueController.batchReview
+);
+router.patch(
+  '/batch-status',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: venueSchemas.batchStatus }),
+  venueController.batchStatus
+);
+
 router.get('/admin/:id', authenticateToken, requireAdmin, venueController.getAdminVenueById);
 router.get('/:id', venueController.getVenueById);
 router.delete(

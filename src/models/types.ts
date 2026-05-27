@@ -107,6 +107,11 @@ export interface AdminArtistUpdate {
   groupNames?: string[]; // 管理員可以在審核通過時設定團名列表
 }
 
+// Venue status: pending (awaiting review) | active | inactive | rejected
+export type VenueStatus = 'pending' | 'active' | 'inactive' | 'rejected';
+
+export type CapacityRange = '20以下' | '20-40' | '40-60' | '60以上';
+
 // 場地卡片（列表頁回傳，不含 eventRefs）
 export interface Venue {
   id: string;
@@ -115,26 +120,26 @@ export interface Venue {
   region: string;
   lat: number;
   lng: number;
-  nearest_mrt: string;
-  mrt_walk_minutes: number | null;
-  capacity_max: number | null;
+  nearestMrt: string;
+  mrtWalkMinutes: number | null;
+  capacityRange: CapacityRange | null;
   eventCount: number;
   coverPhoto: string;
   otherPhotos: string[];
   description: string;
-  status: 'active' | 'inactive';
+  status: VenueStatus;
   socialMedia?: {
     threads?: string;
     instagram?: string;
+    line?: string;
   };
 }
 
 export interface VenueFilterParams {
   region?: string[];
-  capacity_min?: number;
-  capacity_max?: number;
+  capacityRange?: CapacityRange;
   sort?: 'eventCount' | 'name';
-  status?: 'active' | 'inactive';
+  status?: VenueStatus | 'all';
 }
 
 export interface VenueEventCard {
@@ -154,19 +159,22 @@ export interface VenueDetail {
   region: string;
   lat: number;
   lng: number;
-  place_id: string;
-  nearest_mrt: string;
-  mrt_walk_minutes: number | null;
-  capacity_max: number | null;
+  placeId: string;
+  nearestMrt: string;
+  mrtWalkMinutes: number | null;
+  capacityRange: CapacityRange | null;
   eventCount: number;
   coverPhoto: string;
   otherPhotos: string[];
-  status: 'active' | 'inactive';
+  status: VenueStatus;
   description: string;
-  host_tags: string[];
+  hostTags: string[];
+  preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
+  contactUrl?: string;
   socialMedia?: {
     threads?: string;
     instagram?: string;
+    line?: string;
   };
   events: VenueEventCard[];
 }
@@ -177,17 +185,20 @@ export interface CreateVenueData {
   region: string;
   lat?: number;
   lng?: number;
-  place_id?: string;
-  nearest_mrt?: string;
-  mrt_walk_minutes?: number | null;
-  capacity_max?: number | null;
+  placeId?: string;
+  nearestMrt?: string;
+  mrtWalkMinutes?: number | null;
+  capacityRange?: CapacityRange | null;
   description?: string;
-  host_tags?: string[];
+  hostTags?: string[];
+  preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
+  contactUrl?: string;
   coverPhoto?: string;
   otherPhotos?: string[];
   socialMedia?: {
     threads?: string;
     instagram?: string;
+    line?: string;
   };
 }
 
@@ -195,18 +206,33 @@ export interface UpdateVenueData {
   name?: string;
   address?: string;
   region?: string;
-  status?: 'active' | 'inactive';
-  nearest_mrt?: string;
-  mrt_walk_minutes?: number | null;
-  capacity_max?: number | null;
+  status?: VenueStatus;
+  nearestMrt?: string;
+  mrtWalkMinutes?: number | null;
+  capacityRange?: CapacityRange | null;
   description?: string;
-  host_tags?: string[];
+  hostTags?: string[];
+  preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
+  contactUrl?: string;
   coverPhoto?: string;
   otherPhotos?: string[];
   socialMedia?: {
     threads?: string;
     instagram?: string;
+    line?: string;
   };
+}
+
+// Batch review request item
+export interface VenueBatchReviewItem {
+  venueId: string;
+  status: 'active' | 'rejected';
+}
+
+// Batch status request item
+export interface VenueBatchStatusItem {
+  venueId: string;
+  status: 'active' | 'inactive';
 }
 
 // 藝人篩選參數

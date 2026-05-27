@@ -1,7 +1,12 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
-import { CreateVenueData, VenueFilterParams } from '../models/types';
+import {
+  CreateVenueData,
+  VenueBatchReviewItem,
+  VenueBatchStatusItem,
+  VenueFilterParams,
+} from '../models/types';
 
 export class VenueController {
   private venueService: VenueService;
@@ -17,7 +22,7 @@ export class VenueController {
   };
 
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { region, capacity_min, capacity_max, sort, status } = req.query;
+    const { region, capacityRange, sort, status } = req.query;
 
     const params: VenueFilterParams = {};
 
@@ -25,22 +30,15 @@ export class VenueController {
       params.region = Array.isArray(region) ? (region as string[]) : [region as string];
     }
 
-    if (capacity_min !== undefined) {
-      const min = parseInt(capacity_min as string, 10);
-      if (isNaN(min) || min < 0) {
-        res.status(400).json({ error: 'capacity_min must be a non-negative integer' });
+    if (capacityRange !== undefined) {
+      const validRanges = ['20以下', '20-40', '40-60', '60以上'];
+      if (!validRanges.includes(capacityRange as string)) {
+        res
+          .status(400)
+          .json({ error: `capacityRange must be one of: ${validRanges.join(', ')}` });
         return;
       }
-      params.capacity_min = min;
-    }
-
-    if (capacity_max !== undefined) {
-      const max = parseInt(capacity_max as string, 10);
-      if (isNaN(max) || max < 0) {
-        res.status(400).json({ error: 'capacity_max must be a non-negative integer' });
-        return;
-      }
-      params.capacity_max = max;
+      params.capacityRange = capacityRange as VenueFilterParams['capacityRange'];
     }
 
     if (sort !== undefined) {
@@ -52,20 +50,12 @@ export class VenueController {
     }
 
     if (status !== undefined) {
-      if (status !== 'active' && status !== 'inactive') {
-        res.status(400).json({ error: 'status must be "active" or "inactive"' });
+      const validStatuses = ['active', 'inactive', 'pending', 'rejected', 'all'];
+      if (!validStatuses.includes(status as string)) {
+        res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
         return;
       }
-      params.status = status;
-    }
-
-    if (
-      params.capacity_min !== undefined &&
-      params.capacity_max !== undefined &&
-      params.capacity_min > params.capacity_max
-    ) {
-      res.status(400).json({ error: 'capacity_min cannot be greater than capacity_max' });
-      return;
+      params.status = status as VenueFilterParams['status'];
     }
 
     const venues = await this.venueService.getVenues(params);
@@ -118,6 +108,18 @@ export class VenueController {
     }
 
     res.json(venue);
+  };
+
+  batchReview = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { updates } = req.body as { updates: VenueBatchReviewItem[] };
+    const processed = await this.venueService.batchReview(updates);
+    res.json({ message: 'Batch review completed', processed });
+  };
+
+  batchStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { updates } = req.body as { updates: VenueBatchStatusItem[] };
+    const processed = await this.venueService.batchStatus(updates);
+    res.json({ message: 'Batch status update completed', processed });
   };
 
   permanentDeleteVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
