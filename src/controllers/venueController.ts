@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
 import { VenueTrackingContext, VenueTrackingService } from '../services/venueTrackingService';
+import { cache } from '../utils/cache';
 import {
   CreateVenueData,
   VenueBatchReviewItem,
@@ -78,8 +79,8 @@ export class VenueController {
   };
 
   getVenueById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
-    const venue = await this.venueService.getVenueById(id as string);
+    const id = String(req.params.id ?? '');
+    const venue = await this.venueService.getVenueById(id);
 
     if (!venue) {
       res.status(404).json({ error: 'Venue not found' });
@@ -91,9 +92,16 @@ export class VenueController {
       sessionId: this.getSessionId(req),
       userId: req.user?.uid ?? '',
     };
+    const ip = this.getClientIp(req);
+    const detailViewDedupeKey = `venue_detail_served_dedup:${ip}:${id}`;
+    const shouldTrackDetailView = cache.get(detailViewDedupeKey) === null;
+
     res.json(venue);
 
-    void this.trackVenueDetailServed(trackingContext, id as string);
+    if (shouldTrackDetailView) {
+      cache.set(detailViewDedupeKey, true, 60);
+      void this.trackVenueDetailServed(trackingContext, id);
+    }
   };
 
   updateVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -176,6 +184,10 @@ export class VenueController {
     const raw = req.header('x-session-id');
     if (typeof raw !== 'string') return '';
     return raw.trim();
+  }
+
+  private getClientIp(req: AuthenticatedRequest): string {
+    return req.ip ?? 'unknown';
   }
 
   private async trackVenueListServed(

@@ -238,11 +238,7 @@ export class EventController {
   recordView = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const id = req.params.id as string;
-      const forwarded = req.headers['x-forwarded-for'];
-      const ip =
-        (typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined) ??
-        req.ip ??
-        'unknown';
+      const ip = req.ip ?? 'unknown';
 
       const dedupKey = `view_dedup:${ip}:${id}`;
       if (cache.get(dedupKey) !== null) {

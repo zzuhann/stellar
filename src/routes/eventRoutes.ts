@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EventController } from '../controllers/eventController';
 import { authenticateToken, requireAdmin, optionalAuthenticate } from '../middleware/auth';
+import { eventViewLimiter } from '../middleware/rateLimiters';
 import { validateRequest, eventSchemas } from '../middleware/validation';
 
 const router = Router();
@@ -25,7 +26,7 @@ router.get('/me', authenticateToken, (_req, res) => {
 // 公開路由 (動態參數路由放最後)
 // 使用 optionalAuthenticate 來取得收藏狀態（如果已登入）
 router.get('/:id', optionalAuthenticate, (req, res) => eventController.getEventById(req, res));
-router.post('/:id/view', (req, res) => eventController.recordView(req, res));
+router.post('/:id/view', eventViewLimiter, (req, res) => eventController.recordView(req, res));
 
 // 其他需要登入的路由
 router.post('/', authenticateToken, validateRequest({ body: eventSchemas.create }), (req, res) =>

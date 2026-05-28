@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { VenueController } from '../controllers/venueController';
 import { authenticateToken, optionalAuthenticate, requireAdmin } from '../middleware/auth';
+import { venueDetailLimiter, venuesListLimiter } from '../middleware/rateLimiters';
 import { validateRequest, venueSchemas } from '../middleware/validation';
 
 const router = Router();
@@ -13,7 +14,7 @@ router.post(
   validateRequest({ body: venueSchemas.create }),
   venueController.createVenue
 );
-router.get('/', optionalAuthenticate, venueController.getVenues);
+router.get('/', venuesListLimiter, optionalAuthenticate, venueController.getVenues);
 
 // Batch routes must come before /:id to avoid being matched as an id param
 router.patch(
@@ -32,7 +33,7 @@ router.patch(
 );
 
 router.get('/admin/:id', authenticateToken, requireAdmin, venueController.getAdminVenueById);
-router.get('/:id', optionalAuthenticate, venueController.getVenueById);
+router.get('/:id', venueDetailLimiter, optionalAuthenticate, venueController.getVenueById);
 router.delete(
   '/admin/:id/permanent',
   authenticateToken,
