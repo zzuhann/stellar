@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -113,6 +114,8 @@ app.get('/', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOS
 // API 路由
 app.use('/api', routes);
 
+Sentry.setupExpressErrorHandler(app);
+
 // 全域錯誤處理
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   // 詳細的錯誤日誌記錄，幫助識別真正的問題
@@ -130,6 +133,7 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
     isFirestoreError: err.message.includes('Firestore') || err.message.includes('GRPC'),
     isR2Error: err.message.includes('S3') || err.message.includes('AWS'),
   });
+  Sentry.captureException(err);
 
   // 確保 CORS headers 被設置，避免錯誤被誤判為 CORS 問題
   const origin = req.headers.origin;
