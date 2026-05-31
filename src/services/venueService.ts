@@ -99,6 +99,8 @@ export class VenueService {
       })
     );
 
+    cache.delete('venues:all');
+
     return {
       id: docRef.id,
       name: data.name,
