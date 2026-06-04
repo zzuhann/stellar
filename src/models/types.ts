@@ -178,6 +178,7 @@ export interface VenueDetail {
     instagram?: string;
     line?: string;
   };
+  updatedAt?: Timestamp;
   events: VenueEventCard[];
 }
 

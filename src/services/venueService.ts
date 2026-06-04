@@ -187,6 +187,7 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
+      updatedAt: d.updatedAt ?? undefined,
       events,
     };
 
@@ -296,6 +297,7 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
+      updatedAt: d.updatedAt ?? undefined,
       events,
     };
 
