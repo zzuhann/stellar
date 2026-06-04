@@ -49,6 +49,7 @@ export class VenueService {
       description: d.description ?? '',
       status: (d.status as VenueStatus) ?? 'pending',
       createdAt: d.createdAt ?? undefined,
+      updatedAt: d.updatedAt ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
     };
   }

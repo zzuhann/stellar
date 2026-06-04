@@ -129,6 +129,7 @@ export interface Venue {
   description: string;
   status: VenueStatus;
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
   socialMedia?: {
     threads?: string;
     instagram?: string;
