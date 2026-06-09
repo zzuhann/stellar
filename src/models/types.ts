@@ -127,6 +127,7 @@ export interface Venue {
   coverPhoto: string;
   otherPhotos: string[];
   description: string;
+  hostTags: string[];
   status: VenueStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

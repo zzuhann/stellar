@@ -47,6 +47,7 @@ export class VenueService {
       coverPhoto: d.coverPhoto ?? '',
       otherPhotos: d.otherPhotos ?? [],
       description: d.description ?? '',
+      hostTags: d.hostTags ?? [],
       status: (d.status as VenueStatus) ?? 'pending',
       createdAt: d.createdAt ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
@@ -225,7 +226,8 @@ export class VenueService {
 
     for (const field of updatableFields) {
       if (data[field] !== undefined) {
-        updateData[field] = field === 'region' ? normalizeRegion(data[field] as string) : data[field];
+        updateData[field] =
+          field === 'region' ? normalizeRegion(data[field] as string) : data[field];
       }
     }
 
@@ -354,10 +356,7 @@ export class VenueService {
     if (!hasFirebaseConfig || !db) return;
 
     const snapshot = await withTimeoutAndRetry(() =>
-      db!
-        .collection('coffeeEvents')
-        .where('location.placeId', '==', placeId)
-        .get()
+      db!.collection('coffeeEvents').where('location.placeId', '==', placeId).get()
     );
 
     const approvedEvents = snapshot.docs.filter(doc => doc.data().status === 'approved');
