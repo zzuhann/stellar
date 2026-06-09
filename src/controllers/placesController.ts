@@ -124,7 +124,7 @@ export class PlacesController {
 
       // 從 addressComponents 提取城市（台灣的縣市對應 administrative_area_level_1）
       const city =
-        data.addressComponents?.find(c => c.types.includes('administrative_area_level_1'))
+        data.addressComponents?.find(c => c.types?.includes('administrative_area_level_1'))
           ?.longText || '';
 
       // 轉換為前端期望的格式
