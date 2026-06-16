@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import artistRoutes from './artistRoutes';
 import eventRoutes from './eventRoutes';
 import placesRoutes from './placesRoutes';
@@ -48,7 +48,7 @@ if (hasFirebaseConfig) {
   router.use('/auth', authRoutes);
   router.use('/venues', venueRoutes);
 } else {
-  const firebaseUnavailable = (_req: any, res: any) =>
+  const firebaseUnavailable = (_req: Request, res: Response) =>
     res.status(503).json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   ['/artists', '/events', '/users', '/venues', '/cache', '/auth'].forEach(p =>
     router.use(p, firebaseUnavailable)
