@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
-import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
+import { db, hasFirebaseConfig } from '../config/firebase';
+import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 
 type VenueTrackingEventType = 'venue_list_served' | 'venue_detail_served';
 

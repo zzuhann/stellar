@@ -48,27 +48,11 @@ if (hasFirebaseConfig) {
   router.use('/auth', authRoutes);
   router.use('/venues', venueRoutes);
 } else {
-  // Firebase 未配置時的提示端點
-  router.use('/artists', (_req, res) => {
-    res
-      .status(503)
-      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  });
-  router.use('/events', (_req, res) => {
-    res
-      .status(503)
-      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  });
-  router.use('/users', (_req, res) => {
-    res
-      .status(503)
-      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  });
-  router.use('/venues', (_req, res) => {
-    res
-      .status(503)
-      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  });
+  const firebaseUnavailable = (_req: any, res: any) =>
+    res.status(503).json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
+  ['/artists', '/events', '/users', '/venues', '/cache', '/auth'].forEach(p =>
+    router.use(p, firebaseUnavailable)
+  );
 }
 
 export default router;

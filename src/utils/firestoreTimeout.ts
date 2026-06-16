@@ -23,7 +23,7 @@ export class FirestoreRetryError extends Error {
 /**
  * 為 Firestore 查詢添加超時機制
  */
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> {
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
@@ -37,7 +37,7 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 15000): 
 /**
  * 為 Firestore 查詢添加重試機制
  */
-export async function withRetry<T>(
+async function withRetry<T>(
   operation: () => Promise<T>,
   maxAttempts: number = 3,
   delayMs: number = 1000

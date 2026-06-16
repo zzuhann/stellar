@@ -1,4 +1,5 @@
-import { db, hasFirebaseConfig, withTimeoutAndRetry } from '../config/firebase';
+import { db, hasFirebaseConfig } from '../config/firebase';
+import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import {
   Artist,
   CreateArtistData,

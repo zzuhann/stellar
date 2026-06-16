@@ -66,8 +66,5 @@ if (hasFirebaseConfig) {
   auth = null;
 }
 
-// 導出包裝函數
-export { withTimeoutAndRetry } from '../utils/firestoreTimeout';
-
 export { db, auth, hasFirebaseConfig };
 export default admin;
