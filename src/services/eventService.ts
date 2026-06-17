@@ -540,14 +540,22 @@ export class EventService {
 
   async getEventById(
     eventId: string,
-    userId?: string
+    userId?: string,
+    userRole?: string
   ): Promise<CoffeeEvent | CoffeeEventWithFavorite | null> {
     this.checkFirebaseConfig();
+
+    const isAllowed = (rawEvent: CoffeeEvent): boolean => {
+      if (rawEvent.status === 'approved') return true;
+      if (!userId) return false;
+      return userRole === 'admin' || rawEvent.createdBy === userId;
+    };
 
     const cacheKey = `event:${eventId}`;
     const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
 
     if (cachedResult) {
+      if (!isAllowed(cachedResult)) return null;
       const event = await this.backfillArtistSlugs(cachedResult);
       if (userId) {
         const isFavorited = await this.userService.isFavorited(userId, event.id);
@@ -561,6 +569,7 @@ export class EventService {
 
     if (doc.exists) {
       const rawEvent = { id: doc.id, ...doc.data() } as CoffeeEvent;
+      if (!isAllowed(rawEvent)) return null;
       cache.set(cacheKey, rawEvent, 1440);
       const event = await this.backfillArtistSlugs(rawEvent);
       if (userId) {
@@ -581,6 +590,8 @@ export class EventService {
 
     const slugDoc = slugSnapshot.docs[0];
     const rawEvent = { id: slugDoc.id, ...slugDoc.data() } as CoffeeEvent;
+
+    if (!isAllowed(rawEvent)) return null;
 
     // 同時以 slug 和實際 ID 快取
     cache.set(`event:${rawEvent.id}`, rawEvent, 1440);

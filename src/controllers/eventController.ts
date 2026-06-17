@@ -59,7 +59,8 @@ export class EventController {
     const id = req.params.id as string;
     // 如果用戶已登入，則傳遞 userId 以取得收藏狀態
     const userId = req.user?.uid;
-    const event = await this.eventService.getEventById(id, userId);
+    const userRole = req.user?.role;
+    const event = await this.eventService.getEventById(id, userId, userRole);
 
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
