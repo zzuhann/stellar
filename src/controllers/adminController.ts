@@ -20,13 +20,14 @@ export class AdminController {
         slug: req.query.slug as string | undefined,
         id: req.query.id as string | undefined,
         status: req.query.status as AdminQueryParams['status'],
-        page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
+        page: req.query.page ? Number(req.query.page) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
       };
 
       const result = await this.adminService.getAdminEvents(params);
       res.json(result);
     } catch (err) {
+      console.error('[AdminController] getEvents error:', err);
       next(err);
     }
   };
@@ -42,8 +43,8 @@ export class AdminController {
         slug: req.query.slug as string | undefined,
         id: req.query.id as string | undefined,
         status: req.query.status as AdminQueryParams['status'],
-        page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
+        page: req.query.page ? Number(req.query.page) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
       };
 
       const result = await this.adminService.getAdminArtists(params);

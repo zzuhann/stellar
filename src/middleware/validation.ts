@@ -27,12 +27,12 @@ export const validateRequest = (schema: {
       // 依序驗證，遇到錯誤立即停止
       if (schema.params) {
         const parsedParams = schema.params.parse(req.params);
-        req.params = parsedParams as typeof req.params;
+        Object.assign(req.params, parsedParams);
       }
 
       if (schema.query) {
         const parsedQuery = schema.query.parse(req.query);
-        req.query = parsedQuery as typeof req.query;
+        Object.assign(req.query, parsedQuery);
       }
 
       if (schema.body) {
