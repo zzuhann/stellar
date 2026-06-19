@@ -1,6 +1,9 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import { Artist, CoffeeEvent } from '../models/types';
+import { cache } from '../utils/cache';
+
+const ADMIN_CACHE_TTL_MINUTES = 24 * 60;
 
 export interface AdminQueryParams {
   search?: string;
@@ -81,29 +84,38 @@ export class AdminService {
 
     const { page, limit, skip } = this.resolvePagination(params);
 
-    // 無論有無 search，先用 status filter 拉全部（不加 orderBy 避免 index 問題）
-    let baseQuery: FirebaseFirestore.Query = this.eventsCollection!;
-    if (params.status) {
-      baseQuery = baseQuery.where('status', '==', params.status);
+    // Fetch all events for the given status, using in-memory cache to reduce Firestore reads
+    const cacheKey = params.status ? `admin:events:status:${params.status}` : 'admin:events:all';
+    let events = cache.get<CoffeeEvent[]>(cacheKey);
+
+    if (!events) {
+      let baseQuery: FirebaseFirestore.Query = this.eventsCollection!;
+      if (params.status) {
+        baseQuery = baseQuery.where('status', '==', params.status);
+      }
+
+      const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
+      events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
+
+      events.sort((a, b) => {
+        const aMs = a.createdAt?.toMillis?.() ?? 0;
+        const bMs = b.createdAt?.toMillis?.() ?? 0;
+        return bMs - aMs;
+      });
+
+      cache.set(cacheKey, events, ADMIN_CACHE_TTL_MINUTES);
     }
 
-    const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
-    let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
-
+    // Apply search filter in memory (not cached, since search terms vary widely)
+    let filtered = events;
     if (params.search) {
       const term = params.search.toLowerCase();
-      events = events.filter(e => e.title?.toLowerCase().includes(term));
+      filtered = events.filter(e => e.title?.toLowerCase().includes(term));
     }
 
-    events.sort((a, b) => {
-      const aMs = a.createdAt?.toMillis?.() ?? 0;
-      const bMs = b.createdAt?.toMillis?.() ?? 0;
-      return bMs - aMs;
-    });
-
-    const total = events.length;
+    const total = filtered.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    return { data: events.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
+    return { data: filtered.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
   }
 
   async getAdminArtists(params: AdminQueryParams): Promise<AdminPaginatedResponse<Artist>> {
@@ -145,17 +157,33 @@ export class AdminService {
 
     const { page, limit, skip } = this.resolvePagination(params);
 
-    let baseQuery: FirebaseFirestore.Query = this.artistsCollection!;
-    if (params.status) {
-      baseQuery = baseQuery.where('status', '==', params.status);
+    // Fetch all artists for the given status, using in-memory cache to reduce Firestore reads
+    const cacheKey = params.status ? `admin:artists:status:${params.status}` : 'admin:artists:all';
+    let artists = cache.get<Artist[]>(cacheKey);
+
+    if (!artists) {
+      let baseQuery: FirebaseFirestore.Query = this.artistsCollection!;
+      if (params.status) {
+        baseQuery = baseQuery.where('status', '==', params.status);
+      }
+
+      const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
+      artists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
+
+      artists.sort((a, b) => {
+        const aMs = a.createdAt?.toMillis?.() ?? 0;
+        const bMs = b.createdAt?.toMillis?.() ?? 0;
+        return bMs - aMs;
+      });
+
+      cache.set(cacheKey, artists, ADMIN_CACHE_TTL_MINUTES);
     }
 
-    const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
-    let artists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
-
+    // Apply search filter in memory (not cached, since search terms vary widely)
+    let filtered = artists;
     if (params.search) {
       const term = params.search.toLowerCase();
-      artists = artists.filter(
+      filtered = artists.filter(
         a =>
           a.stageName?.toLowerCase().includes(term) ||
           (a.stageNameZh && a.stageNameZh.toLowerCase().includes(term)) ||
@@ -164,14 +192,8 @@ export class AdminService {
       );
     }
 
-    artists.sort((a, b) => {
-      const aMs = a.createdAt?.toMillis?.() ?? 0;
-      const bMs = b.createdAt?.toMillis?.() ?? 0;
-      return bMs - aMs;
-    });
-
-    const total = artists.length;
+    const total = filtered.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    return { data: artists.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
+    return { data: filtered.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
   }
 }

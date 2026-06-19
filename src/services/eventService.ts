@@ -684,6 +684,7 @@ export class EventService {
     // 清除相關快取（新增事件會影響藝人的活動統計）
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
+    cache.clearPattern('admin:events:');
 
     // 清除相關 artists 的 eventCount 快取
     eventData.artistIds.forEach((artistId: string) => {
@@ -759,6 +760,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    cache.clearPattern('admin:events:');
 
     // 清除相關藝人的統計快取（編輯事件可能會影響藝人的活動統計）
     if (eventData?.artists && Array.isArray(eventData.artists)) {
@@ -824,6 +826,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    cache.clearPattern('admin:events:');
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
@@ -941,6 +944,7 @@ export class EventService {
     // 清除相關快取（只清一次，大幅減少 DB 負擔）
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
+    cache.clearPattern('admin:events:');
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
     // 清除熱門藝人快取，因為活動數量改變會影響排名
@@ -1114,6 +1118,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    cache.clearPattern('admin:events:');
 
     // 通知管理員有重新送審（非同步，不阻塞回應）
     if (existingData.createdByEmail) {
@@ -1198,6 +1203,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    cache.clearPattern('admin:events:');
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');

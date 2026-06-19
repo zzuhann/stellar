@@ -182,6 +182,7 @@ export class ArtistService {
     // 清除相關快取（新增 pending 藝人會影響 pending 列表）
     cache.clearPattern('artists:status:pending');
     cache.clearPattern('artists:filters:');
+    cache.clearPattern('admin:artists:');
 
     // 通知管理員有新投稿（非同步，不阻塞回應）
     sendArtistSubmissionNotification(userEmail || undefined, artistData.stageName).catch(err => {
@@ -244,6 +245,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    cache.clearPattern('admin:artists:');
     // 審核通過時清除熱門藝人快取，因為 getTopArtistsByUpcomingEvents 會過濾 approved 狀態的藝人
     if (status === 'approved') {
       cache.clearPattern('artists:top:');
@@ -314,6 +316,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人資料改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    cache.clearPattern('admin:artists:');
     // 注意：藝人資料改變不會影響統計結果，所以不需要清除統計快取
 
     // 返回更新的欄位和 ID
@@ -395,6 +398,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    cache.clearPattern('admin:artists:');
     // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
     // 清除相關藝人的個別快取
@@ -459,6 +463,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    cache.clearPattern('admin:artists:');
     // 注意：resubmit 不會影響已審核藝人的統計，所以不需要清除統計快取
 
     // 通知管理員有重新送審（非同步，不阻塞回應）
@@ -503,6 +508,7 @@ export class ArtistService {
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人刪除會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
+    cache.clearPattern('admin:artists:');
   }
 
   async getArtistById(slugOrId: string): Promise<Artist | null> {
