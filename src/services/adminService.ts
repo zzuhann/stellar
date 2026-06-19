@@ -94,11 +94,15 @@ export class AdminService {
     // search 模糊篩選（title）
     if (params.search) {
       const term = params.search.toLowerCase();
-      events = events.filter(e => e.title.toLowerCase().includes(term));
+      events = events.filter(e => e.title?.toLowerCase().includes(term));
     }
 
     // 按 createdAt 由新到舊排序
-    events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    events.sort((a, b) => {
+      const aMs = a.createdAt?.toMillis?.() ?? 0;
+      const bMs = b.createdAt?.toMillis?.() ?? 0;
+      return bMs - aMs;
+    });
 
     const { page, limit, skip } = this.resolvePagination(params);
     const total = events.length;
@@ -162,7 +166,7 @@ export class AdminService {
       const term = params.search.toLowerCase();
       artists = artists.filter(
         a =>
-          a.stageName.toLowerCase().includes(term) ||
+          a.stageName?.toLowerCase().includes(term) ||
           (a.stageNameZh && a.stageNameZh.toLowerCase().includes(term)) ||
           (a.groupNames && a.groupNames.some(g => g.toLowerCase().includes(term))) ||
           (a.realName && a.realName.toLowerCase().includes(term))
@@ -170,7 +174,11 @@ export class AdminService {
     }
 
     // 按 createdAt 由新到舊排序
-    artists.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    artists.sort((a, b) => {
+      const aMs = a.createdAt?.toMillis?.() ?? 0;
+      const bMs = b.createdAt?.toMillis?.() ?? 0;
+      return bMs - aMs;
+    });
 
     const { page, limit, skip } = this.resolvePagination(params);
     const total = artists.length;
