@@ -495,6 +495,14 @@ export class ArtistService {
     }
 
     await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());
+
+    // 清除相關快取
+    cache.delete('artists:approved');
+    cache.delete(`artist:${artistId}`);
+    // 清除篩選快取（因為藝人刪除會影響篩選結果）
+    cache.clearPattern('artists:filters:');
+    // 清除狀態快取（因為藝人刪除會影響狀態查詢結果）
+    cache.clearPattern('artists:status:');
   }
 
   async getArtistById(slugOrId: string): Promise<Artist | null> {

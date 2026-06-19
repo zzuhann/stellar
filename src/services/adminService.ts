@@ -31,7 +31,11 @@ export class AdminService {
     }
   }
 
-  private resolvePagination(params: AdminQueryParams): { page: number; limit: number; skip: number } {
+  private resolvePagination(params: AdminQueryParams): {
+    page: number;
+    limit: number;
+    skip: number;
+  } {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(Math.max(1, params.limit ?? 20), 50);
     const skip = (page - 1) * limit;
@@ -43,14 +47,18 @@ export class AdminService {
 
     // id 精確查詢，優先處理
     if (params.id) {
-      const doc = await withTimeoutAndRetry(() =>
-        this.eventsCollection!.doc(params.id!).get()
-      );
+      const doc = await withTimeoutAndRetry(() => this.eventsCollection!.doc(params.id!).get());
       if (!doc.exists) {
-        return { data: [], pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 } };
+        return {
+          data: [],
+          pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 },
+        };
       }
       const event = { id: doc.id, ...doc.data() } as CoffeeEvent;
-      return { data: [event], pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 } };
+      return {
+        data: [event],
+        pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 },
+      };
     }
 
     // slug 精確查詢
@@ -59,10 +67,16 @@ export class AdminService {
         this.eventsCollection!.where('slug', '==', params.slug).limit(1).get()
       );
       if (snapshot.empty) {
-        return { data: [], pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 } };
+        return {
+          data: [],
+          pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 },
+        };
       }
       const event = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as CoffeeEvent;
-      return { data: [event], pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 } };
+      return {
+        data: [event],
+        pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 },
+      };
     }
 
     // 一般查詢：按狀態篩選後在記憶體中排序分頁
@@ -99,14 +113,18 @@ export class AdminService {
 
     // id 精確查詢，優先處理
     if (params.id) {
-      const doc = await withTimeoutAndRetry(() =>
-        this.artistsCollection!.doc(params.id!).get()
-      );
+      const doc = await withTimeoutAndRetry(() => this.artistsCollection!.doc(params.id!).get());
       if (!doc.exists) {
-        return { data: [], pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 } };
+        return {
+          data: [],
+          pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 },
+        };
       }
       const artist = { id: doc.id, ...doc.data() } as Artist;
-      return { data: [artist], pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 } };
+      return {
+        data: [artist],
+        pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 },
+      };
     }
 
     // slug 精確查詢
@@ -115,10 +133,16 @@ export class AdminService {
         this.artistsCollection!.where('slug', '==', params.slug).limit(1).get()
       );
       if (snapshot.empty) {
-        return { data: [], pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 } };
+        return {
+          data: [],
+          pagination: { page: 1, limit: params.limit ?? 20, total: 0, totalPages: 0 },
+        };
       }
       const artist = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Artist;
-      return { data: [artist], pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 } };
+      return {
+        data: [artist],
+        pagination: { page: 1, limit: params.limit ?? 20, total: 1, totalPages: 1 },
+      };
     }
 
     // 一般查詢
@@ -136,11 +160,12 @@ export class AdminService {
     // search 模糊篩選（stageName、stageNameZh、groupNames、realName）
     if (params.search) {
       const term = params.search.toLowerCase();
-      artists = artists.filter(a =>
-        a.stageName.toLowerCase().includes(term) ||
-        (a.stageNameZh && a.stageNameZh.toLowerCase().includes(term)) ||
-        (a.groupNames && a.groupNames.some(g => g.toLowerCase().includes(term))) ||
-        (a.realName && a.realName.toLowerCase().includes(term))
+      artists = artists.filter(
+        a =>
+          a.stageName.toLowerCase().includes(term) ||
+          (a.stageNameZh && a.stageNameZh.toLowerCase().includes(term)) ||
+          (a.groupNames && a.groupNames.some(g => g.toLowerCase().includes(term))) ||
+          (a.realName && a.realName.toLowerCase().includes(term))
       );
     }
 
