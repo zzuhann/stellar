@@ -331,3 +331,15 @@ export const eventSchemas = {
       .optional(),
   }),
 };
+
+// Admin 相關的 schema
+export const adminSchemas = {
+  listQuery: z.object({
+    search: z.string().optional(),
+    slug: z.string().optional(),
+    id: z.string().optional(),
+    status: z.enum(['pending', 'approved', 'rejected']).optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  }),
+};

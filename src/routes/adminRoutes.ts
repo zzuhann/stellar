@@ -1,11 +1,24 @@
 import { Router } from 'express';
 import { AdminController } from '../controllers/adminController';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { validateRequest, adminSchemas } from '../middleware/validation';
 
 const router = Router();
 const adminController = new AdminController();
 
-router.get('/events', authenticateToken, requireAdmin, adminController.getEvents);
-router.get('/artists', authenticateToken, requireAdmin, adminController.getArtists);
+router.get(
+  '/events',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ query: adminSchemas.listQuery }),
+  adminController.getEvents
+);
+router.get(
+  '/artists',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ query: adminSchemas.listQuery }),
+  adminController.getArtists
+);
 
 export default router;
