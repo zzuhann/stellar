@@ -1,12 +1,15 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { AdminService, AdminQueryParams } from '../services/adminService';
+import { ArtistService } from '../services/artistService';
 
 export class AdminController {
   private adminService: AdminService;
+  private artistService: ArtistService;
 
   constructor() {
     this.adminService = new AdminService();
+    this.artistService = new ArtistService();
   }
 
   getEvents = async (
@@ -48,6 +51,20 @@ export class AdminController {
       };
 
       const result = await this.adminService.getAdminArtists(params);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteArtistsBatch = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const { ids } = req.body as { ids: string[] };
+      const result = await this.artistService.deleteArtistsBatch(ids);
       res.json(result);
     } catch (err) {
       next(err);

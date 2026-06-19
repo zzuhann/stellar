@@ -20,5 +20,12 @@ router.get(
   validateRequest({ query: adminSchemas.listQuery }),
   adminController.getArtists
 );
+router.delete(
+  '/artists/batch',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: adminSchemas.batchDeleteArtists }),
+  adminController.deleteArtistsBatch
+);
 
 export default router;

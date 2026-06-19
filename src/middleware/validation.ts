@@ -342,4 +342,10 @@ export const adminSchemas = {
     page: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(50).optional(),
   }),
+  batchDeleteArtists: z.object({
+    ids: z
+      .array(z.string().min(1, 'id 不能為空'))
+      .min(1, '至少需要 1 筆')
+      .max(100, '一次最多刪除 100 筆'),
+  }),
 };

@@ -511,6 +511,47 @@ export class ArtistService {
     cache.clearPattern('admin:artists:');
   }
 
+  async deleteArtistsBatch(ids: string[]): Promise<{ deleted: number }> {
+    this.checkFirebaseConfig();
+
+    const deletedIds: string[] = [];
+    const errors: { id: string; reason: string }[] = [];
+
+    for (const artistId of ids) {
+      const artistDoc = await withTimeoutAndRetry(() => this.collection.doc(artistId).get());
+
+      if (!artistDoc.exists) {
+        errors.push({ id: artistId, reason: '藝人不存在' });
+        continue;
+      }
+
+      const artistData = artistDoc.data();
+      const hasActiveEvents = (artistData?.activeEventIds?.length ?? 0) > 0;
+
+      if (hasActiveEvents) {
+        errors.push({ id: artistId, reason: '不能刪除已經有生咖活動的藝人' });
+        continue;
+      }
+
+      await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());
+      deletedIds.push(artistId);
+    }
+
+    if (deletedIds.length > 0) {
+      // Clear per-artist cache keys
+      for (const artistId of deletedIds) {
+        cache.delete(`artist:${artistId}`);
+      }
+      // Clear shared caches once
+      cache.delete('artists:approved');
+      cache.clearPattern('artists:filters:');
+      cache.clearPattern('artists:status:');
+      cache.clearPattern('admin:artists:');
+    }
+
+    return { deleted: deletedIds.length };
+  }
+
   async getArtistById(slugOrId: string): Promise<Artist | null> {
     this.checkFirebaseConfig();
 
