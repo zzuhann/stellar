@@ -79,35 +79,39 @@ export class AdminService {
       };
     }
 
-    // 一般查詢：按狀態篩選後在記憶體中排序分頁
-    let snapshot;
-    if (params.status) {
-      snapshot = await withTimeoutAndRetry(() =>
-        this.eventsCollection!.where('status', '==', params.status).get()
-      );
-    } else {
-      snapshot = await withTimeoutAndRetry(() => this.eventsCollection!.get());
-    }
+    const { page, limit, skip } = this.resolvePagination(params);
 
-    let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
-
-    // search 模糊篩選（title）
+    // 有 search：需要 JS filter，先拉有限資料集再過濾
     if (params.search) {
+      let baseQuery: FirebaseFirestore.Query = this.eventsCollection!;
+      if (params.status) {
+        baseQuery = baseQuery.where('status', '==', params.status);
+      }
+      const snapshot = await withTimeoutAndRetry(() => baseQuery.orderBy('createdAt', 'desc').get());
+      let events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
+
       const term = params.search.toLowerCase();
       events = events.filter(e => e.title?.toLowerCase().includes(term));
+
+      const total = events.length;
+      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+      return { data: events.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
     }
 
-    // 按 createdAt 由新到舊排序
-    events.sort((a, b) => {
-      const aMs = a.createdAt?.toMillis?.() ?? 0;
-      const bMs = b.createdAt?.toMillis?.() ?? 0;
-      return bMs - aMs;
-    });
+    // 無 search：Firestore 原生分頁，只拉需要的筆數
+    let baseQuery: FirebaseFirestore.Query = this.eventsCollection!;
+    if (params.status) {
+      baseQuery = baseQuery.where('status', '==', params.status);
+    }
 
-    const { page, limit, skip } = this.resolvePagination(params);
-    const total = events.length;
+    const [countSnap, dataSnap] = await Promise.all([
+      withTimeoutAndRetry(() => baseQuery.count().get()),
+      withTimeoutAndRetry(() => baseQuery.orderBy('createdAt', 'desc').offset(skip).limit(limit).get()),
+    ]);
+
+    const total = countSnap.data().count;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    const data = events.slice(skip, skip + limit);
+    const data = dataSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
 
     return { data, pagination: { page, limit, total, totalPages } };
   }
@@ -149,20 +153,17 @@ export class AdminService {
       };
     }
 
-    // 一般查詢
-    let snapshot;
-    if (params.status) {
-      snapshot = await withTimeoutAndRetry(() =>
-        this.artistsCollection!.where('status', '==', params.status).get()
-      );
-    } else {
-      snapshot = await withTimeoutAndRetry(() => this.artistsCollection!.get());
-    }
+    const { page, limit, skip } = this.resolvePagination(params);
 
-    let artists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
-
-    // search 模糊篩選（stageName、stageNameZh、groupNames、realName）
+    // 有 search：需要 JS filter，先拉有限資料集再過濾
     if (params.search) {
+      let baseQuery: FirebaseFirestore.Query = this.artistsCollection!;
+      if (params.status) {
+        baseQuery = baseQuery.where('status', '==', params.status);
+      }
+      const snapshot = await withTimeoutAndRetry(() => baseQuery.orderBy('createdAt', 'desc').get());
+      let artists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
+
       const term = params.search.toLowerCase();
       artists = artists.filter(
         a =>
@@ -171,19 +172,26 @@ export class AdminService {
           (a.groupNames && a.groupNames.some(g => g.toLowerCase().includes(term))) ||
           (a.realName && a.realName.toLowerCase().includes(term))
       );
+
+      const total = artists.length;
+      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+      return { data: artists.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
     }
 
-    // 按 createdAt 由新到舊排序
-    artists.sort((a, b) => {
-      const aMs = a.createdAt?.toMillis?.() ?? 0;
-      const bMs = b.createdAt?.toMillis?.() ?? 0;
-      return bMs - aMs;
-    });
+    // 無 search：Firestore 原生分頁
+    let baseQuery: FirebaseFirestore.Query = this.artistsCollection!;
+    if (params.status) {
+      baseQuery = baseQuery.where('status', '==', params.status);
+    }
 
-    const { page, limit, skip } = this.resolvePagination(params);
-    const total = artists.length;
+    const [countSnap, dataSnap] = await Promise.all([
+      withTimeoutAndRetry(() => baseQuery.count().get()),
+      withTimeoutAndRetry(() => baseQuery.orderBy('createdAt', 'desc').offset(skip).limit(limit).get()),
+    ]);
+
+    const total = countSnap.data().count;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    const data = artists.slice(skip, skip + limit);
+    const data = dataSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
 
     return { data, pagination: { page, limit, total, totalPages } };
   }
