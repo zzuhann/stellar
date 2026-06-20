@@ -115,7 +115,10 @@ export class AdminService {
 
     const total = filtered.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    return { data: filtered.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
+    return {
+      data: filtered.slice(skip, skip + limit),
+      pagination: { page, limit, total, totalPages },
+    };
   }
 
   async getAdminArtists(params: AdminQueryParams): Promise<AdminPaginatedResponse<Artist>> {
@@ -194,6 +197,9 @@ export class AdminService {
 
     const total = filtered.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-    return { data: filtered.slice(skip, skip + limit), pagination: { page, limit, total, totalPages } };
+    return {
+      data: filtered.slice(skip, skip + limit),
+      pagination: { page, limit, total, totalPages },
+    };
   }
 }
