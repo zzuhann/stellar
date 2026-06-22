@@ -27,12 +27,12 @@ export const validateRequest = (schema: {
       // 依序驗證，遇到錯誤立即停止
       if (schema.params) {
         const parsedParams = schema.params.parse(req.params);
-        req.params = parsedParams as typeof req.params;
+        Object.assign(req.params, parsedParams);
       }
 
       if (schema.query) {
         const parsedQuery = schema.query.parse(req.query);
-        req.query = parsedQuery as typeof req.query;
+        Object.assign(req.query, parsedQuery);
       }
 
       if (schema.body) {
@@ -329,5 +329,23 @@ export const eventSchemas = {
       .array(z.string().url('詳細圖片網址格式不正確'))
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
+  }),
+};
+
+// Admin 相關的 schema
+export const adminSchemas = {
+  listQuery: z.object({
+    search: z.string().optional(),
+    slug: z.string().optional(),
+    id: z.string().optional(),
+    status: z.enum(['pending', 'approved', 'rejected']).optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  }),
+  batchDeleteArtists: z.object({
+    ids: z
+      .array(z.string().min(1, 'id 不能為空'))
+      .min(1, '至少需要 1 筆')
+      .max(100, '一次最多刪除 100 筆'),
   }),
 };

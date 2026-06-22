@@ -8,6 +8,7 @@ import cacheRoutes from './cacheRoutes';
 import authRoutes from './authRoutes';
 import contactRoutes from './contactRoutes';
 import venueRoutes from './venueRoutes';
+import adminRoutes from './adminRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -47,6 +48,7 @@ if (hasFirebaseConfig) {
   router.use('/cache', cacheRoutes);
   router.use('/auth', authRoutes);
   router.use('/venues', venueRoutes);
+  router.use('/admin', adminRoutes);
 } else {
   const firebaseUnavailable = (_req: Request, res: Response) =>
     res.status(503).json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
