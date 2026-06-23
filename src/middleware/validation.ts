@@ -342,6 +342,12 @@ export const adminSchemas = {
     page: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(50).optional(),
   }),
+  venueListQuery: z.object({
+    search: z.string().optional(),
+    status: z.enum(['pending', 'active', 'inactive', 'rejected']).optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  }),
   batchDeleteArtists: z.object({
     ids: z
       .array(z.string().min(1, 'id 不能為空'))
