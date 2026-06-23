@@ -103,6 +103,7 @@ export class VenueService {
     );
 
     cache.delete('venues:all');
+    cache.clearPattern('admin:venues:');
 
     return {
       id: docRef.id,
@@ -237,6 +238,7 @@ export class VenueService {
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
     cache.delete(`venue:admin:detail:${id}`);
+    cache.clearPattern('admin:venues:');
 
     return true;
   }
@@ -324,6 +326,7 @@ export class VenueService {
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
     cache.delete(`venue:admin:detail:${id}`);
+    cache.clearPattern('admin:venues:');
 
     return 'deleted';
   }
@@ -345,6 +348,7 @@ export class VenueService {
     cache.delete('venues:all');
     cache.delete(`venue:detail:${id}`);
     cache.delete(`venue:admin:detail:${id}`);
+    cache.clearPattern('admin:venues:');
 
     return true;
   }
@@ -387,6 +391,7 @@ export class VenueService {
     }
 
     cache.delete('venues:all');
+    cache.clearPattern('admin:venues:');
   }
 
   /**
@@ -425,6 +430,7 @@ export class VenueService {
     }
 
     cache.delete('venues:all');
+    cache.clearPattern('admin:venues:');
     return processed;
   }
 
@@ -454,6 +460,7 @@ export class VenueService {
     }
 
     cache.delete('venues:all');
+    cache.clearPattern('admin:venues:');
     return processed;
   }
 

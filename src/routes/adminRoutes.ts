@@ -20,6 +20,13 @@ router.get(
   validateRequest({ query: adminSchemas.listQuery }),
   adminController.getArtists
 );
+router.get(
+  '/venues',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ query: adminSchemas.venueListQuery }),
+  adminController.getVenues
+);
 router.delete(
   '/artists/batch',
   authenticateToken,

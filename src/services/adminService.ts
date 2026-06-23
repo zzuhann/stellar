@@ -1,6 +1,6 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
-import { Artist, CoffeeEvent } from '../models/types';
+import { Artist, CoffeeEvent, Venue, VenueStatus } from '../models/types';
 import { cache } from '../utils/cache';
 
 const ADMIN_CACHE_TTL_MINUTES = 24 * 60;
@@ -10,6 +10,13 @@ export interface AdminQueryParams {
   slug?: string;
   id?: string;
   status?: 'pending' | 'approved' | 'rejected';
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminVenueQueryParams {
+  search?: string;
+  status?: VenueStatus;
   page?: number;
   limit?: number;
 }
@@ -27,6 +34,7 @@ export interface AdminPaginatedResponse<T> {
 export class AdminService {
   private eventsCollection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
   private artistsCollection = hasFirebaseConfig && db ? db.collection('artists') : null;
+  private venuesCollection = hasFirebaseConfig && db ? db.collection('venues') : null;
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !db) {
@@ -34,7 +42,7 @@ export class AdminService {
     }
   }
 
-  private resolvePagination(params: AdminQueryParams): {
+  private resolvePagination(params: { page?: number; limit?: number }): {
     page: number;
     limit: number;
     skip: number;
@@ -193,6 +201,48 @@ export class AdminService {
           (a.groupNames && a.groupNames.some(g => g.toLowerCase().includes(term))) ||
           (a.realName && a.realName.toLowerCase().includes(term))
       );
+    }
+
+    const total = filtered.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+    return {
+      data: filtered.slice(skip, skip + limit),
+      pagination: { page, limit, total, totalPages },
+    };
+  }
+
+  async getAdminVenues(params: AdminVenueQueryParams): Promise<AdminPaginatedResponse<Venue>> {
+    this.checkFirebaseConfig();
+
+    const { page, limit, skip } = this.resolvePagination(params);
+
+    // Fetch all venues for the given status, using in-memory cache to reduce Firestore reads
+    const cacheKey = params.status ? `admin:venues:status:${params.status}` : 'admin:venues:all';
+    let venues = cache.get<Venue[]>(cacheKey);
+
+    if (!venues) {
+      let baseQuery: FirebaseFirestore.Query = this.venuesCollection!;
+      if (params.status) {
+        baseQuery = baseQuery.where('status', '==', params.status);
+      }
+
+      const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
+      venues = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Venue);
+
+      venues.sort((a, b) => {
+        const aMs = a.createdAt?.toMillis?.() ?? 0;
+        const bMs = b.createdAt?.toMillis?.() ?? 0;
+        return bMs - aMs;
+      });
+
+      cache.set(cacheKey, venues, ADMIN_CACHE_TTL_MINUTES);
+    }
+
+    // Apply search filter in memory (not cached, since search terms vary widely)
+    let filtered = venues;
+    if (params.search) {
+      const term = params.search.toLowerCase();
+      filtered = venues.filter(v => v.name?.toLowerCase().includes(term));
     }
 
     const total = filtered.length;

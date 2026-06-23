@@ -1,7 +1,8 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { AdminService, AdminQueryParams } from '../services/adminService';
+import { AdminService, AdminQueryParams, AdminVenueQueryParams } from '../services/adminService';
 import { ArtistService } from '../services/artistService';
+import { VenueStatus } from '../models/types';
 
 export class AdminController {
   private adminService: AdminService;
@@ -51,6 +52,26 @@ export class AdminController {
       };
 
       const result = await this.adminService.getAdminArtists(params);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getVenues = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const params: AdminVenueQueryParams = {
+        search: req.query.search as string | undefined,
+        status: req.query.status as VenueStatus | undefined,
+        page: req.query.page ? Number(req.query.page) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      };
+
+      const result = await this.adminService.getAdminVenues(params);
       res.json(result);
     } catch (err) {
       next(err);
