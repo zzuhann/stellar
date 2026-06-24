@@ -341,21 +341,16 @@ export class ArtistService {
       return [];
     }
 
-    // 找出所有要 approved 的 artistIds，用於寄信
-    const approvedArtistIds = updates.filter(u => u.status === 'approved').map(u => u.artistId);
-
-    // 如果有要 approved 的，先批次讀取這些 artist 資料
-    const approvedArtistsData: Artist[] = [];
-    if (approvedArtistIds.length > 0) {
-      const artistDocs = await Promise.all(
-        approvedArtistIds.map(id => withTimeoutAndRetry(() => this.collection.doc(id).get()))
-      );
-      for (const doc of artistDocs) {
-        if (doc.exists) {
-          approvedArtistsData.push({ id: doc.id, ...doc.data() } as Artist);
-        }
-      }
-    }
+    // 批次讀取所有 artist 資料（用於寄信及清除 slug 快取）
+    const allArtistDocs = await Promise.all(
+      updates.map(u => withTimeoutAndRetry(() => this.collection.doc(u.artistId).get()))
+    );
+    const allArtistsData: Artist[] = allArtistDocs
+      .filter(doc => doc.exists)
+      .map(doc => ({ id: doc.id, ...doc.data() } as Artist));
+    const approvedArtistsData = allArtistsData.filter(a =>
+      updates.find(u => u.artistId === a.id && u.status === 'approved')
+    );
 
     // 使用 Firestore 的 batch 操作
     const batch = db.batch();
@@ -402,8 +397,9 @@ export class ArtistService {
     // 注意：藝人狀態改變不會影響統計結果，所以不需要清除統計快取
 
     // 清除相關藝人的個別快取
-    for (const update of updates) {
-      cache.delete(`artist:${update.artistId}`);
+    for (const artist of allArtistsData) {
+      cache.delete(`artist:${artist.id}`);
+      if (artist.slug) cache.delete(`artist:slug:${artist.slug}`);
     }
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
@@ -459,6 +455,7 @@ export class ArtistService {
     cache.delete('artists:approved');
     cache.delete('artists:pending');
     cache.delete(`artist:${artistId}`);
+    if (existingData?.slug) cache.delete(`artist:slug:${existingData.slug}`);
     // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
@@ -504,6 +501,7 @@ export class ArtistService {
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
+    if (artistData?.slug) cache.delete(`artist:slug:${artistData.slug}`);
     // 清除篩選快取（因為藝人刪除會影響篩選結果）
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人刪除會影響狀態查詢結果）
@@ -515,6 +513,7 @@ export class ArtistService {
     this.checkFirebaseConfig();
 
     const deletedIds: string[] = [];
+    const deletedSlugs: string[] = [];
     const errors: { id: string; reason: string }[] = [];
 
     for (const artistId of ids) {
@@ -535,12 +534,16 @@ export class ArtistService {
 
       await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());
       deletedIds.push(artistId);
+      if (artistData?.slug) deletedSlugs.push(artistData.slug);
     }
 
     if (deletedIds.length > 0) {
       // Clear per-artist cache keys
       for (const artistId of deletedIds) {
         cache.delete(`artist:${artistId}`);
+      }
+      for (const slug of deletedSlugs) {
+        cache.delete(`artist:slug:${slug}`);
       }
       // Clear shared caches once
       cache.delete('artists:approved');
