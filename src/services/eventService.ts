@@ -760,6 +760,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    if (eventData.slug) cache.delete(`event:${eventData.slug}`);
     cache.clearPattern('admin:events:');
 
     // 清除相關藝人的統計快取（編輯事件可能會影響藝人的活動統計）
@@ -826,6 +827,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    if (existingData.slug) cache.delete(`event:${existingData.slug}`);
     cache.clearPattern('admin:events:');
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
@@ -951,8 +953,10 @@ export class EventService {
     cache.clearPattern('artists:top:');
 
     // 清除相關活動的個別快取
-    for (const update of updates) {
-      cache.delete(`event:${update.eventId}`);
+    for (let i = 0; i < updates.length; i++) {
+      cache.delete(`event:${updates[i].eventId}`);
+      const slug = (eventDocs[i].data() as CoffeeEvent)?.slug;
+      if (slug) cache.delete(`event:${slug}`);
     }
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
@@ -1118,6 +1122,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    if (existingData.slug) cache.delete(`event:${existingData.slug}`);
     cache.clearPattern('admin:events:');
 
     // 通知管理員有重新送審（非同步，不阻塞回應）
@@ -1203,6 +1208,7 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.delete(`event:${eventId}`);
+    if (eventData.slug) cache.delete(`event:${eventData.slug}`);
     cache.clearPattern('admin:events:');
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
@@ -1448,6 +1454,8 @@ export class EventService {
     this.checkFirebaseConfig();
 
     const eventRef = this.collection.doc(eventId);
+    const eventDoc = await withTimeoutAndRetry(() => eventRef.get());
+    const eventData = eventDoc.exists ? (eventDoc.data() as CoffeeEvent) : null;
 
     await eventRef.update({
       verifiedOrganizers: FieldValue.arrayUnion(organizer),
@@ -1458,6 +1466,7 @@ export class EventService {
     // 清除相關快取
     cache.clearPattern('events:');
     cache.delete(`event:${eventId}`);
+    if (eventData?.slug) cache.delete(`event:${eventData.slug}`);
   }
 
   async hasUserClaimedEvent(eventId: string, userId: string): Promise<boolean> {

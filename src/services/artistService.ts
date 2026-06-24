@@ -204,13 +204,11 @@ export class ArtistService {
     this.checkFirebaseConfig();
     const docRef = this.collection.doc(artistId);
 
-    // 如果是 approved，先讀取 artist 資料用於寄信
+    // 讀取 artist 資料（用於寄信及清除 slug 快取）
     let artistData: Artist | null = null;
-    if (status === 'approved') {
-      const doc = await withTimeoutAndRetry(() => docRef.get());
-      if (doc.exists) {
-        artistData = { id: doc.id, ...doc.data() } as Artist;
-      }
+    const doc = await withTimeoutAndRetry(() => docRef.get());
+    if (doc.exists) {
+      artistData = { id: doc.id, ...doc.data() } as Artist;
     }
 
     const updateData: Record<string, unknown> = {
@@ -241,6 +239,7 @@ export class ArtistService {
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
+    if (artistData?.slug) cache.delete(`artist:slug:${artistData.slug}`);
     // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
@@ -312,6 +311,7 @@ export class ArtistService {
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
+    if (existingData?.slug) cache.delete(`artist:slug:${existingData.slug}`);
     // 清除篩選快取（因為藝人資料改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人資料改變會影響狀態查詢結果）
