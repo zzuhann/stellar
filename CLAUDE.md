@@ -9,19 +9,21 @@ bun run dev    # port 3001，使用 --watch 熱重載
 bun run build  # 編譯 TypeScript
 ```
 
-### ⚠️ Admin API 必須用 Node.js 跑
+### ⚠️ 本地開發請用 `bun run dev:node`
 
-`bun run dev` 使用 Bun runtime，但 **Bun 對 gRPC server streaming 的支援有 bug**。Firebase Admin SDK 的 Firestore collection query（`collection.get()`）底層走 gRPC streaming，在 Bun 上會永遠 pending 不 resolve。
+`bun run dev` 使用 Bun runtime，但 **firebase-admin 13.8+ 的 gRPC transport 與 Bun 不相容**。Firestore collection query（`collection.get()`、`collection.where(...).get()`）底層走 gRPC streaming，在 Bun 下會永遠 pending → timeout。
 
-影響範圍：所有需要撈整個 collection 的 API，包含 `/admin/events`、`/admin/artists`。
+影響範圍：所有做 collection query 的 API，包含 `/api/events`、`/api/venues`、`/admin/events`、`/admin/artists` 等。
 
-**測試 Admin API 時，請改用 Node.js 執行：**
+**本地開發一律用：**
 
 ```bash
-bun run build && node dist/server.js
+bun run dev:node   # tsx watch，無需 build，hot reload
 ```
 
-生產環境（Zeabur）的 `start` script 也是 `node dist/server.js`，所以線上不受此問題影響。
+`bun run dev` 只有單一 document 讀取（`.doc(id).get()`）的 endpoint 才能正常使用。
+
+生產環境（Zeabur）的 `start` script 是 `node dist/server.js`，不受此問題影響。
 
 單一 document 讀取（`.doc(id).get()`）走的是 gRPC unary call，Bun 支援正常，auth middleware 不受影響。
 
