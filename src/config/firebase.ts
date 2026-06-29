@@ -46,12 +46,9 @@ if (hasFirebaseConfig) {
     }
 
     db = admin.firestore();
-    // 設定 Firestore 超時和連接設定
     db.settings({
       ignoreUndefinedProperties: true,
-      // 設定最大重試次數和超時
-      maxIdleChannels: 1,
-      keepAlive: true,
+      preferRest: true,
     });
 
     auth = admin.auth();
