@@ -45,6 +45,20 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    // CLI scripts are manually-run migration/backfill tools; console.log is their output interface.
+    files: ['src/scripts/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
+    // Server startup banner and email delivery logs are informational, not debug leftovers.
+    files: ['src/server.ts', 'src/services/emailService.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     ignores: ['dist/', 'coverage/', 'node_modules/', 'eslint.config.js'],
   }
 );
