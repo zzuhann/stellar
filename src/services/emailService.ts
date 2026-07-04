@@ -481,7 +481,10 @@ export async function sendContactNotification(data: {
     console.log(`[email] contact confirmation sent to ${email}`);
   }
   if (notifyResult.status === 'rejected') {
-    console.error(`[email] failed to send contact notification to ${CONTACT_RECEIVER}:`, notifyResult.reason);
+    console.error(
+      `[email] failed to send contact notification to ${CONTACT_RECEIVER}:`,
+      notifyResult.reason
+    );
   } else {
     console.log(`[email] contact notification sent to ${CONTACT_RECEIVER} (from: ${email})`);
   }
