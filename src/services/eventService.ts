@@ -507,9 +507,7 @@ export class EventService {
   }
 
   // Backfill artist slugs for events that predate slug storage
-  private async backfillArtistSlugs(
-    event: CoffeeEvent
-  ): Promise<CoffeeEvent> {
+  private async backfillArtistSlugs(event: CoffeeEvent): Promise<CoffeeEvent> {
     if (!db) return event;
 
     const needsBackfill = event.artists.some(a => !a.slug);
@@ -642,9 +640,7 @@ export class EventService {
         ...(artistSlug && { slug: artistSlug }),
         profileImage: artistData?.profileImage || undefined,
       });
-      artistSlugsOrFallbacks.push(
-        artistSlug || artistId.substring(0, 6).toLowerCase()
-      );
+      artistSlugsOrFallbacks.push(artistSlug || artistId.substring(0, 6).toLowerCase());
     }
 
     // 驗證座標資料

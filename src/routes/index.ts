@@ -51,7 +51,9 @@ if (hasFirebaseConfig) {
   router.use('/admin', adminRoutes);
 } else {
   const firebaseUnavailable = (_req: Request, res: Response) =>
-    res.status(503).json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
+    res
+      .status(503)
+      .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
   ['/artists', '/events', '/users', '/venues', '/cache', '/auth'].forEach(p =>
     router.use(p, firebaseUnavailable)
   );

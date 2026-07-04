@@ -347,7 +347,7 @@ export class ArtistService {
     );
     const allArtistsData: Artist[] = allArtistDocs
       .filter(doc => doc.exists)
-      .map(doc => ({ id: doc.id, ...doc.data() } as Artist));
+      .map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
     const approvedArtistsData = allArtistsData.filter(a =>
       updates.find(u => u.artistId === a.id && u.status === 'approved')
     );
