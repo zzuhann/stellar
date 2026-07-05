@@ -117,7 +117,20 @@ FRONTEND_URL=              # https://www.stellar-zone.com
 ADDITIONAL_CORS_ORIGINS=   # 額外允許的 CORS origin（逗號分隔）
 PORT=3001
 NODE_ENV=development
+
+# API 文件（Swagger UI）
+DOCS_IP_WHITELIST=         # 逗號分隔 IP 清單，只有這些 IP 能存取 /api/docs（production 才會檢查，local 一律放行）
 ```
+
+---
+
+## API 文件
+
+`/api/docs` 是 Swagger UI，目前涵蓋 `events`、`venues`、`artists` 三個模組（spec 見 `openapi.yaml`）。
+
+- 只有 `NODE_ENV=production` 時才會檢查 IP 白名單，middleware 見 `src/middleware/ipWhitelist.ts`
+- 白名單外的請求回 404（不是 403），避免暴露這條路由的存在
+- 新增/修改 API 後記得手動更新 `openapi.yaml`（沒有跟 code 自動同步）
 
 ---
 

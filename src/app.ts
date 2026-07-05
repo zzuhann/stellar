@@ -7,13 +7,33 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import fs from 'fs';
+import path from 'path';
+import YAML from 'yaml';
+import swaggerUi from 'swagger-ui-express';
 import routes from './routes';
+import { restrictToWhitelistedIp } from './middleware/ipWhitelist';
 
 const app = express();
 
 // 信任 proxy（修復 rate limiter ValidationError）
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
+}
+
+// API 文件（Swagger UI）：僅白名單 IP 可存取，獨立於下方全域的 helmet/CORS/rate limit
+const openapiPath = path.join(process.cwd(), 'openapi.yaml');
+if (fs.existsSync(openapiPath)) {
+  const openapiDocument = YAML.parse(fs.readFileSync(openapiPath, 'utf8'));
+  app.use(
+    '/api/docs',
+    helmet({ contentSecurityPolicy: false }),
+    restrictToWhitelistedIp,
+    swaggerUi.serve,
+    swaggerUi.setup(openapiDocument)
+  );
+} else {
+  console.warn(`openapi.yaml not found at ${openapiPath}, skipping /api/docs`);
 }
 
 // 安全中介軟體
