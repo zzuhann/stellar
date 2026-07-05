@@ -61,6 +61,12 @@ export class VenueController {
       params.status = status as VenueFilterParams['status'];
     }
 
+    // 安全性：非管理員一律只能查詢 active 狀態的場地，
+    // 避免未登入或一般使用者透過 status 參數拿到 pending/rejected/inactive/all 等未公開資料
+    if (params.status && params.status !== 'active' && req.user?.role !== 'admin') {
+      params.status = 'active';
+    }
+
     const venues = await this.venueService.getVenues(params);
 
     const trackingContext: VenueTrackingContext = {
