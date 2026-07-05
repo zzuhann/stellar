@@ -16,7 +16,7 @@ export class EventController {
     const filters: EventFilterParams = {
       search: req.query.search as string,
       artistId: req.query.artistId as string,
-      status: req.query.status as 'all' | 'pending' | 'approved' | 'rejected',
+      status: req.query.status as 'pending' | 'approved' | 'rejected',
       region: req.query.region as string,
       createdBy: req.query.createdBy as string,
       startTimeFrom: req.query.startTimeFrom as string,
@@ -37,6 +37,12 @@ export class EventController {
 
     // 如果沒有提供 status，預設為 'approved'（只顯示已審核通過的活動）
     if (!filters.status) {
+      filters.status = 'approved';
+    }
+
+    // 安全性：非管理員一律只能查詢 approved 狀態的活動，
+    // 避免未登入或一般使用者透過 status 參數拿到 pending/rejected 等未公開資料
+    if (filters.status !== 'approved' && req.user?.role !== 'admin') {
       filters.status = 'approved';
     }
 

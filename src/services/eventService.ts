@@ -138,62 +138,6 @@ export class EventService {
     );
   }
 
-  async getEventsByStatus(status?: 'approved' | 'pending' | 'rejected'): Promise<CoffeeEvent[]> {
-    this.checkFirebaseConfig();
-
-    // 只有非 pending 狀態才快取
-    let cacheKey: string | null = null;
-    let ttl = 0;
-
-    if (status && status !== 'pending') {
-      cacheKey = `events:status:${status}`;
-      ttl = status === 'approved' ? 1440 : 240; // approved: 24小時, rejected: 4小時
-
-      const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-      if (cachedResult) {
-        return cachedResult;
-      }
-    }
-
-    // 簡化查詢策略：先用單一條件查詢，再在記憶體中篩選
-    let snapshot;
-
-    if (status) {
-      // 用狀態查詢（有單一欄位索引）
-      snapshot = await withTimeoutAndRetry(() =>
-        this.collection.where('status', '==', status).get()
-      );
-    } else {
-      // 取得所有文件
-      snapshot = await withTimeoutAndRetry(() => this.collection.get());
-    }
-
-    let events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
-    // 新版 API 已移除 isDeleted 欄位
-
-    // 如果是 approved 狀態，在記憶體中過濾未過期的活動
-    if (status === 'approved') {
-      const now = Date.now();
-      events = events.filter(event => event.datetime.end.toMillis() >= now);
-    }
-
-    // 按建立時間排序（最新在前）
-    const result = events.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
-    // 設定快取（僅非 pending 狀態）
-    if (cacheKey && ttl > 0) {
-      cache.set(cacheKey, result, ttl);
-    }
-
-    return result;
-  }
-
   // 新增：進階篩選和分頁功能
   async getEventsWithFilters(
     filters: EventFilterParams,
@@ -221,22 +165,12 @@ export class EventService {
       );
 
       // 審核狀態篩選
-      if (filters.status && filters.status !== 'all') {
+      if (filters.status) {
         events = events.filter(event => event.status === filters.status);
       }
     } else if (!filters.status || filters.status === 'approved') {
       // 使用分層快取的基礎資料（所有請求共用，防止雪崩）
       events = await this.getApprovedActiveEventsBase();
-    } else if (filters.status === 'all') {
-      // 需要查詢所有狀態
-      const snapshot = await withTimeoutAndRetry(() => this.collection.get());
-      events = snapshot.docs.map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
-      );
     } else {
       // 其他狀態 (pending, rejected)
       const snapshot = await withTimeoutAndRetry(() =>

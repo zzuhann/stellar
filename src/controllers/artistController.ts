@@ -32,15 +32,23 @@ export class ArtistController {
       };
     }
 
-    // 移除狀態查看權限限制，任何人都可以查看各種狀態
-    // 權限控制改在審核動作時進行檢查
-
     // 檢查權限：用戶只能查看自己的投稿或公開的資料
     if (filters.createdBy && req.user) {
       if (filters.createdBy !== req.user.uid && req.user.role !== 'admin') {
         res.status(403).json({ error: 'Permission denied' });
         return;
       }
+    }
+
+    // 如果沒有提供 status，預設為 'approved'（只顯示已審核通過的藝人）
+    if (!filters.status) {
+      filters.status = 'approved';
+    }
+
+    // 安全性：非管理員一律只能查詢 approved 狀態的藝人，
+    // 避免未登入或一般使用者透過 status 參數拿到 pending/rejected 等未公開資料
+    if (filters.status !== 'approved' && req.user?.role !== 'admin') {
+      filters.status = 'approved';
     }
 
     // 統一使用 getArtistsWithFilters（已包含統計資料）

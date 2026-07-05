@@ -311,7 +311,7 @@ export interface EventFilterParams {
   // 篩選參數
   search?: string; // 搜尋標題、藝人名稱、地址、描述
   artistId?: string; // 特定藝人ID
-  status?: 'all' | 'pending' | 'approved' | 'rejected'; // 審核狀態
+  status?: 'pending' | 'approved' | 'rejected'; // 審核狀態
   region?: string; // 地區名稱（台北市、新北市等）
   createdBy?: string; // 創建者 UID（篩選用戶自己的投稿）
   startTimeFrom?: string; // 開始時間範圍（從）
