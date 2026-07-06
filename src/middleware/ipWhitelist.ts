@@ -8,6 +8,9 @@ const docsIpWhitelist = new Set(
     .filter(Boolean)
 );
 
+// IPv4-mapped IPv6（如 ::ffff:1.2.3.4）正規化成純 IPv4，避免跟白名單的 1.2.3.4 字串比對不相等
+const normalizeIp = (ip: string): string => ip.replace(/^::ffff:/i, '');
+
 // 白名單外一律回 404，避免讓人知道這條路由其實存在
 export const restrictToWhitelistedIp = (req: Request, res: Response, next: NextFunction): void => {
   // 本地開發不設限，方便工程師自己看文件
@@ -16,10 +19,13 @@ export const restrictToWhitelistedIp = (req: Request, res: Response, next: NextF
     return;
   }
 
-  if (docsIpWhitelist.has(req.ip || '')) {
+  const normalizedIp = normalizeIp(req.ip || '');
+
+  if (docsIpWhitelist.has(normalizedIp)) {
     next();
     return;
   }
 
+  console.warn(`/api/docs blocked: req.ip=${req.ip || ''}, normalized=${normalizedIp}`);
   res.status(404).json({ error: 'Route not found' });
 };
