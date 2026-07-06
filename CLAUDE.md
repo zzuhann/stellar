@@ -119,7 +119,9 @@ PORT=3001
 NODE_ENV=development
 
 # API 文件（Swagger UI）
-DOCS_IP_WHITELIST=         # 逗號分隔 IP 清單，只有這些 IP 能存取 /api/docs（production 才會檢查，local 一律放行）
+DOCS_IP_WHITELIST=         # 逗號分隔 IP 清單（ipWhitelist.ts 邏輯保留但目前未套用在 /api/docs，此變數對該路由無效）
+DOCS_USER=                 # /api/docs 的 HTTP Basic Auth 帳號（目前保護 /api/docs 的唯一機制，production 才會檢查）
+DOCS_PASSWORD=             # /api/docs 的 HTTP Basic Auth 密碼（未設定時 production 一律拒絕，fail-closed）
 ```
 
 ---
@@ -128,9 +130,14 @@ DOCS_IP_WHITELIST=         # 逗號分隔 IP 清單，只有這些 IP 能存取 
 
 `/api/docs` 是 Swagger UI，目前涵蓋 `events`、`venues`、`artists` 三個模組（spec 見 `openapi.yaml`）。
 
-- 只有 `NODE_ENV=production` 時才會檢查 IP 白名單，middleware 見 `src/middleware/ipWhitelist.ts`
-- 白名單外的請求回 404（不是 403），避免暴露這條路由的存在
-- 新增/修改 API 後記得手動更新 `openapi.yaml`（沒有跟 code 自動同步）
+存取保護：**HTTP Basic Auth**（`src/middleware/docsAuth.ts`），只在 `NODE_ENV=production` 檢查，本地開發一律放行。
+
+- 帳密比對 `DOCS_USER`/`DOCS_PASSWORD`；不帶或帳密錯誤回 401 + `WWW-Authenticate` header（瀏覽器會跳原生登入框）
+- `DOCS_USER`/`DOCS_PASSWORD` 任一未設定時 production 一律拒絕（fail-closed），不會因為沒設定就放行
+
+⚠️ **IP 白名單邏輯保留但未啟用**：`src/middleware/ipWhitelist.ts` 的程式碼還在，但目前**沒有掛在 `/api/docs` 路由上**。原本是 IP 白名單 + Basic Auth 疊加，但公網 IP 是動態的，IP 一換帳密就形同虛設，因此改為 Basic Auth 單一關卡。`DOCS_IP_WHITELIST` 環境變數目前對 `/api/docs` 無效，不要誤以為它還在生效。
+
+新增/修改 API 後記得手動更新 `openapi.yaml`（沒有跟 code 自動同步）。
 
 ---
 
