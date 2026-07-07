@@ -925,7 +925,7 @@ export class EventService {
     if (!db) return;
 
     const snapshot = await withTimeoutAndRetry(() =>
-      db!.collection('venues').where('place_id', '==', placeId).limit(1).get()
+      db!.collection('venues').where('placeId', '==', placeId).limit(1).get()
     );
     if (snapshot.empty) return;
 
