@@ -13,4 +13,5 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/openapi.yaml ./openapi.yaml
 CMD ["node", "dist/server.js"]

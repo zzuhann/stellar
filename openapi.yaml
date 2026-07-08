@@ -1,0 +1,537 @@
+openapi: 3.0.3
+info:
+  title: Stellar API
+  description: |
+    Stellar 後端 API 文件。
+    目前僅涵蓋 events（生咖活動）、venues（場地）、artists（藝人）三個模組，
+    其餘模組（auth、users、admin 等）尚未納入此文件。
+  version: '1.0'
+servers:
+  - url: /api
+    description: 相對於部署網域的 API base path
+
+tags:
+  - name: events
+    description: 生咖活動
+  - name: venues
+    description: 場地
+  - name: artists
+    description: 藝人
+
+paths:
+  /events:
+    get:
+      tags: [events]
+      summary: 取得活動列表（支援篩選、分頁）
+      description: 未帶 status 篩選時，預設只回傳 status=approved 的活動。
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: artistId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, pending, approved, rejected] }
+        - in: query
+          name: region
+          schema: { type: string }
+        - in: query
+          name: createdBy
+          description: 僅本人或 admin 可查詢他人的 createdBy
+          schema: { type: string }
+        - in: query
+          name: startTimeFrom
+          schema: { type: string, format: date-time }
+        - in: query
+          name: startTimeTo
+          schema: { type: string, format: date-time }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: sortBy
+          schema: { type: string, enum: [title, startTime, createdAt] }
+        - in: query
+          name: sortOrder
+          schema: { type: string, enum: [asc, desc] }
+        - in: query
+          name: checkFavorite
+          description: true 且已登入時，回傳的每筆活動會附帶目前使用者的收藏狀態
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: 活動列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/CoffeeEvent' }
+                  total: { type: integer }
+                  page: { type: integer }
+    post:
+      tags: [events]
+      summary: 新增活動投稿
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateEventData' }
+      responses:
+        '201': { description: 建立成功 }
+        '400': { description: 缺少必填欄位 }
+
+  /events/map-data:
+    get:
+      tags: [events]
+      summary: 取得地圖用活動資料（輕量版）
+      responses:
+        '200':
+          description: 地圖資料
+
+  /events/search:
+    get:
+      tags: [events]
+      summary: 搜尋活動
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        '200':
+          description: 搜尋結果
+
+  /events/trending:
+    get:
+      tags: [events]
+      summary: 熱門活動
+      responses:
+        '200':
+          description: 熱門活動列表
+
+  /events/{id}:
+    get:
+      tags: [events]
+      summary: 取得單一活動詳情
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: 活動詳情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoffeeEvent' }
+        '404':
+          description: 找不到活動
+    put:
+      tags: [events]
+      summary: 編輯活動
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateEventData' }
+      responses:
+        '200': { description: 更新後的活動 }
+    delete:
+      tags: [events]
+      summary: 刪除活動
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 刪除成功 }
+
+  /events/{id}/view:
+    post:
+      tags: [events]
+      summary: 紀錄一次瀏覽（有 rate limit）
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 紀錄成功 }
+
+  /events/{id}/resubmit:
+    patch:
+      tags: [events]
+      summary: 重新送審（被拒絕後修改再送出）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 送審成功 }
+
+  /venues:
+    get:
+      tags: [venues]
+      summary: 取得場地列表
+      parameters:
+        - in: query
+          name: region
+          schema: { type: array, items: { type: string } }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200':
+          description: 場地列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Venue' }
+    post:
+      tags: [venues]
+      summary: 新增場地（僅 admin）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVenueData' }
+      responses:
+        '201': { description: 建立成功 }
+
+  /venues/{id}:
+    get:
+      tags: [venues]
+      summary: 取得單一場地詳情（含關聯活動）
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: 場地詳情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VenueDetail' }
+    patch:
+      tags: [venues]
+      summary: 編輯場地（僅 admin）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 更新成功 }
+    delete:
+      tags: [venues]
+      summary: 刪除場地（僅 admin）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 刪除成功 }
+
+  /venues/batch-review:
+    patch:
+      tags: [venues]
+      summary: 批次審核場地（僅 admin，最多 50 筆）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                updates:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    properties:
+                      venueId: { type: string }
+                      status: { type: string, enum: [active, rejected] }
+      responses:
+        '200': { description: 審核完成 }
+
+  /venues/batch-status:
+    patch:
+      tags: [venues]
+      summary: 批次更新場地狀態（僅 admin，最多 50 筆）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 更新完成 }
+
+  /artists:
+    get:
+      tags: [artists]
+      summary: 取得藝人列表
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [approved, pending, rejected] }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: sortBy
+          schema: { type: string, enum: [stageName, coffeeEventCount, createdAt, birthday] }
+        - in: query
+          name: sortOrder
+          schema: { type: string, enum: [asc, desc] }
+      responses:
+        '200':
+          description: 藝人列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Artist' }
+    post:
+      tags: [artists]
+      summary: 新增藝人投稿
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateArtistData' }
+      responses:
+        '201': { description: 建立成功 }
+
+  /artists/top:
+    get:
+      tags: [artists]
+      summary: 熱門藝人排行
+      responses:
+        '200': { description: 熱門藝人列表 }
+
+  /artists/{id}:
+    get:
+      tags: [artists]
+      summary: 取得單一藝人詳情
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: 藝人詳情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+    put:
+      tags: [artists]
+      summary: 編輯藝人資料
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 更新成功 }
+    delete:
+      tags: [artists]
+      summary: 刪除藝人（僅 admin）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 刪除成功 }
+
+  /artists/{id}/resubmit:
+    patch:
+      tags: [artists]
+      summary: 重新送審
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200': { description: 送審成功 }
+
+  /artists/batch-review:
+    post:
+      tags: [artists]
+      summary: 批次審核藝人（僅 admin）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 審核完成 }
+
+components:
+  parameters:
+    idPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Firebase ID Token，帶在 `Authorization: Bearer {token}`'
+
+  schemas:
+    CoffeeEvent:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string }
+        artists:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              slug: { type: string }
+              profileImage: { type: string }
+        location:
+          type: object
+          properties:
+            name: { type: string }
+            address: { type: string }
+            city: { type: string }
+            coordinates:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            placeId: { type: string }
+            venueId: { type: string }
+        datetime:
+          type: object
+          properties:
+            start: { type: string, format: date-time }
+            end: { type: string, format: date-time }
+        socialMedia:
+          type: object
+          properties:
+            instagram: { type: string }
+            x: { type: string }
+            threads: { type: string }
+        mainImage: { type: string }
+        detailImage: { type: array, items: { type: string } }
+        status: { type: string, enum: [pending, approved, rejected] }
+        rejectedReason: { type: string }
+        viewCount: { type: integer }
+
+    CreateEventData:
+      type: object
+      required: [artistIds, title, location, datetime]
+      properties:
+        artistIds: { type: array, items: { type: string } }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        location:
+          type: object
+          required: [name, coordinates]
+          properties:
+            name: { type: string }
+            address: { type: string }
+            city: { type: string }
+            coordinates:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            placeId: { type: string }
+        datetime:
+          type: object
+          properties:
+            start: { type: string, format: date-time }
+            end: { type: string, format: date-time }
+        socialMedia:
+          type: object
+          properties:
+            instagram: { type: string }
+            x: { type: string }
+            threads: { type: string }
+        mainImage: { type: string }
+        detailImage: { type: array, items: { type: string } }
+
+    UpdateEventData:
+      allOf:
+        - $ref: '#/components/schemas/CreateEventData'
+      description: 與 CreateEventData 相同，但不含 artistIds
+
+    Venue:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        address: { type: string }
+        region: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        nearestMrt: { type: string }
+        mrtWalkMinutes: { type: integer, nullable: true }
+        capacityRange: { type: string, nullable: true }
+        eventCount: { type: integer }
+        coverPhoto: { type: string }
+        otherPhotos: { type: array, items: { type: string } }
+        description: { type: string }
+        hostTags: { type: array, items: { type: string } }
+        status: { type: string }
+        socialMedia:
+          type: object
+          properties:
+            threads: { type: string }
+            instagram: { type: string }
+            line: { type: string }
+
+    VenueDetail:
+      allOf:
+        - $ref: '#/components/schemas/Venue'
+        - type: object
+          properties:
+            events:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  title: { type: string }
+                  artistName: { type: string }
+                  startDate: { type: string }
+                  endDate: { type: string }
+                  coverImage: { type: string }
+                  slug: { type: string, nullable: true }
+
+    CreateVenueData:
+      type: object
+      required: [name, address, region]
+      properties:
+        name: { type: string, maxLength: 200 }
+        address: { type: string, maxLength: 500 }
+        region: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        placeId: { type: string }
+        nearestMrt: { type: string }
+        mrtWalkMinutes: { type: integer, nullable: true }
+        description: { type: string }
+        hostTags: { type: array, items: { type: string } }
+        preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
+
+    Artist:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        stageName: { type: string }
+        stageNameZh: { type: string }
+        groupNames: { type: array, items: { type: string }, maxItems: 5 }
+        realName: { type: string }
+        birthday: { type: string, format: date }
+        profileImage: { type: string }
+        status: { type: string, enum: [pending, approved, rejected, exists] }
+        rejectedReason: { type: string }
+        activeEventIds: { type: array, items: { type: string } }
+
+    CreateArtistData:
+      type: object
+      required: [stageName]
+      properties:
+        stageName: { type: string, maxLength: 100 }
+        stageNameZh: { type: string, maxLength: 100 }
+        groupNames: { type: array, items: { type: string }, maxItems: 5 }
+        realName: { type: string, maxLength: 100 }
+        birthday: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+        profileImage: { type: string, format: uri }
