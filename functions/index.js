@@ -1,5 +1,6 @@
 const { setGlobalOptions } = require('firebase-functions');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
 
@@ -81,5 +82,48 @@ exports.cleanupExpiredActiveEventIds = onSchedule(
     }
 
     logger.info('Daily activeEventIds cleanup completed');
+  }
+);
+
+// GCP Cloud Run 遷移觀察期用：GitHub Actions 的 schedule cron 在高頻率下不可靠
+// （官方文件承認高負載會 drop job），改用 Cloud Scheduler 當計時器，
+// 職責只有觸發 canary-observation.yml 的 workflow_dispatch，實際檢查邏輯留在該 workflow 裡。
+// 觀察期結束（CUTOFF_DATE）後這個 function 可以直接刪除。
+const githubCanaryPat = defineSecret('GITHUB_CANARY_PAT');
+const CANARY_CUTOFF_DATE = '2026-07-15';
+const CANARY_REPO = 'zzuhann/stellar';
+
+exports.triggerCanaryObservation = onSchedule(
+  {
+    schedule: '*/15 * * * *',
+    timeZone: 'Etc/UTC',
+    region: 'asia-east1',
+    secrets: [githubCanaryPat],
+  },
+  async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (today >= CANARY_CUTOFF_DATE) {
+      logger.info(`觀察期已過 ${CANARY_CUTOFF_DATE}，略過觸發`);
+      return;
+    }
+
+    const res = await fetch(
+      `https://api.github.com/repos/${CANARY_REPO}/actions/workflows/canary-observation.yml/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubCanaryPat.value()}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({ ref: 'main' }),
+      }
+    );
+
+    if (!res.ok) {
+      logger.error(`觸發 canary-observation workflow 失敗: ${res.status} ${await res.text()}`);
+    } else {
+      logger.info('已觸發 canary-observation workflow');
+    }
   }
 );

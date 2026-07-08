@@ -8,9 +8,9 @@ name: GCP Cloud Run canary observation
 # 結果查法：Sentry 用 environment:gcp-test 過濾這段期間的錯誤/效能資料。
 
 on:
-  schedule:
-    # 錯開整點/整 15 分（GitHub 官方文件：這些時間點全站排程擠在一起容易延遲）
-    - cron: '7,22,37,52 * * * *'
+  # GitHub 自己的 schedule cron 在高頻率下不可靠（官方文件承認高負載會 drop job，
+  # 實測 3 小時內該觸發 13 次只觸發 1 次）。改由 stellar/functions 的
+  # triggerCanaryObservation（Cloud Scheduler 背書）每 15 分鐘呼叫 workflow_dispatch。
   workflow_dispatch: {}
 
 permissions:
