@@ -1,0 +1,96 @@
+name: GCP Cloud Run canary observation
+
+# 短期用：驗證 Cloud Run 測試部署（stellar-backend-test）是否還會出現 Zeabur 上
+# 觀察到的間歇性 Firestore/R2/Google API 網路失敗。跑 7 天後自動停用自己
+# （見下方 check-cutoff job），不需要手動關閉。
+#
+# 相關文件：specs/_decisions/2026-07-07-gcp-migration-action-plan.md
+# 結果查法：Sentry 用 environment:gcp-test 過濾這段期間的錯誤/效能資料。
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+
+env:
+  CLOUD_RUN_TEST_URL: https://stellar-backend-test-648727940350.asia-east1.run.app
+  # 觀察期截止日，過了這天下面 check-cutoff job 會自動停用這個 workflow
+  CUTOFF_DATE: '2026-07-15'
+
+jobs:
+  check-cutoff:
+    runs-on: ubuntu-latest
+    outputs:
+      expired: ${{ steps.check.outputs.expired }}
+    steps:
+      - id: check
+        run: |
+          today=$(date -u +%F)
+          if [[ "$today" > "$CUTOFF_DATE" || "$today" == "$CUTOFF_DATE" ]]; then
+            echo "expired=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "expired=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Disable this workflow (observation window ended)
+        if: steps.check.outputs.expired == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "觀察期已過 $CUTOFF_DATE，停用這個 workflow。"
+          gh workflow disable "canary-observation.yml" --repo "${{ github.repository }}"
+
+  probe:
+    needs: check-cutoff
+    if: needs.check-cutoff.outputs.expired == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Firestore collection 查詢（runQuery 路徑） — /api/venues
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${CLOUD_RUN_TEST_URL}/api/venues?status=active")
+          echo "venues -> $code"
+          [ "$code" = "200" ]
+
+      - name: Firestore 單一文件讀取（batchGet 路徑） — /api/events/:id
+        run: |
+          event_id=$(curl -s "${CLOUD_RUN_TEST_URL}/api/events?status=approved&limit=1" | jq -r '.events[0].id // empty')
+          if [ -z "$event_id" ]; then
+            echo "沒有可用的 event id，略過這項檢查"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${CLOUD_RUN_TEST_URL}/api/events/${event_id}")
+          echo "events/${event_id} -> $code"
+          [ "$code" = "200" ]
+
+      - name: R2 網路連線健康檢查（不建立檔案） — /api/images/r2-health
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${CLOUD_RUN_TEST_URL}/api/images/r2-health")
+          echo "r2-health -> $code"
+          [ "$code" = "200" ]
+
+      - name: 登入測試帳號並呼叫 Google Places API（測 auth middleware 的 Firestore 查詢 + Places API 自己的網路路徑）
+        env:
+          TEST_EMAIL: ${{ secrets.CANARY_TEST_USER_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.CANARY_TEST_USER_PASSWORD }}
+          FIREBASE_API_KEY: ${{ secrets.CANARY_FIREBASE_WEB_API_KEY }}
+        run: |
+          id_token=$(curl -s -X POST \
+            "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"${TEST_EMAIL}\",\"password\":\"${TEST_PASSWORD}\",\"returnSecureToken\":true}" \
+            | jq -r '.idToken // empty')
+
+          if [ -z "$id_token" ]; then
+            echo "測試帳號登入失敗（可能是 Firebase Auth 本身的問題，不是 Cloud Run）"
+            exit 1
+          fi
+
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${CLOUD_RUN_TEST_URL}/api/places/autocomplete" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${id_token}" \
+            -d '{"input":"台北"}')
+          echo "places/autocomplete -> $code"
+          [ "$code" = "200" ]

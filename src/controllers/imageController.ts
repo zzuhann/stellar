@@ -107,4 +107,14 @@ export class ImageController {
       });
     }
   };
+
+  // R2 網路連線健康檢查（不建立任何檔案，供合成監控使用）
+  checkR2Health = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const result = await this.imageService.checkR2Health();
+    if (result.reachable) {
+      res.json({ reachable: true });
+    } else {
+      res.status(502).json({ reachable: false, error: result.error });
+    }
+  };
 }
