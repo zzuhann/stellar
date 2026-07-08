@@ -1,4 +1,4 @@
-import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { r2Client, hasR2Config, R2_BUCKET_NAME, R2_PUBLIC_URL } from '../config/r2-client';
 import crypto from 'crypto';
 import path from 'path';
@@ -12,6 +12,11 @@ export interface UploadResult {
 
 export interface DeleteResult {
   success: boolean;
+  error?: string;
+}
+
+export interface R2HealthResult {
+  reachable: boolean;
   error?: string;
 }
 
@@ -159,6 +164,20 @@ export class ImageService {
     } catch (error) {
       console.error('Error extracting filename from URL:', error);
       return null;
+    }
+  }
+
+  // 實際打 R2 網路連線健康檢查，只確認 bucket 連得到，不建立/刪除任何檔案
+  async checkR2Health(): Promise<R2HealthResult> {
+    try {
+      this.checkR2Config();
+      await r2Client!.send(new HeadBucketCommand({ Bucket: R2_BUCKET_NAME }));
+      return { reachable: true };
+    } catch (error) {
+      return {
+        reachable: false,
+        error: error instanceof Error ? error.message : '未知錯誤',
+      };
     }
   }
 
