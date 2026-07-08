@@ -9,7 +9,8 @@ name: GCP Cloud Run canary observation
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    # 錯開整點/整 15 分（GitHub 官方文件：這些時間點全站排程擠在一起容易延遲）
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch: {}
 
 permissions:
