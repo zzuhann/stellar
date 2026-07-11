@@ -20,4 +20,21 @@ const upload = multer({
   fileFilter,
 });
 
-export const uploadSingle = upload.single('image') as RequestHandler;
+export const uploadSingle: RequestHandler = (req, res, next) => {
+  upload.single('image')(req, res, error => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError || error.message === '檔案格式不支援') {
+      res.status(400).json({
+        success: false,
+        error: error.code === 'LIMIT_FILE_SIZE' ? '圖片大小不能超過 5MB' : error.message,
+      });
+      return;
+    }
+
+    next(error);
+  });
+};

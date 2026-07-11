@@ -9,6 +9,7 @@ import authRoutes from './authRoutes';
 import contactRoutes from './contactRoutes';
 import venueRoutes from './venueRoutes';
 import adminRoutes from './adminRoutes';
+import venueSubmissionRoutes from './venueSubmissionRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -48,13 +49,14 @@ if (hasFirebaseConfig) {
   router.use('/cache', cacheRoutes);
   router.use('/auth', authRoutes);
   router.use('/venues', venueRoutes);
+  router.use('/venue-submissions', venueSubmissionRoutes);
   router.use('/admin', adminRoutes);
 } else {
   const firebaseUnavailable = (_req: Request, res: Response) =>
     res
       .status(503)
       .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  ['/artists', '/events', '/users', '/venues', '/cache', '/auth'].forEach(p =>
+  ['/artists', '/events', '/users', '/venues', '/venue-submissions', '/cache', '/auth'].forEach(p =>
     router.use(p, firebaseUnavailable)
   );
 }

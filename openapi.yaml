@@ -260,6 +260,75 @@ paths:
       responses:
         '200': { description: 更新完成 }
 
+  /venue-submissions:
+    post:
+      tags: [venues]
+      summary: 公開場地投稿（建立為 pending）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVenueData' }
+      responses:
+        '201':
+          description: 投稿建立成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VenueDetail' }
+        '400': { description: 輸入格式錯誤 }
+        '429': { description: 每 IP 每 60 分鐘最多 5 次 }
+
+  /venue-submissions/images:
+    post:
+      tags: [venues]
+      summary: 公開場地投稿圖片上傳
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG、PNG 或 WebP，最大 5MB
+      responses:
+        '200': { description: 上傳成功 }
+        '400': { description: 格式、大小或欄位錯誤 }
+        '429': { description: 每 IP 每 15 分鐘最多 60 次成功上傳 }
+
+  /venue-submissions/places/autocomplete:
+    post:
+      tags: [venues]
+      summary: 公開場地投稿 Places 搜尋
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input: { type: string }
+      responses:
+        '200': { description: Places 預測結果 }
+        '429': { description: 每 IP 每 15 分鐘最多 300 次 }
+
+  /venue-submissions/places/{placeId}:
+    get:
+      tags: [venues]
+      summary: 公開場地投稿 Place detail
+      parameters:
+        - name: placeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Place detail }
+        '429': { description: 每 IP 每 15 分鐘最多 300 次 }
+
   /artists:
     get:
       tags: [artists]
@@ -496,7 +565,7 @@ components:
 
     CreateVenueData:
       type: object
-      required: [name, address, region]
+      required: [name, address, region, capacityRange, coverPhoto, preferredContact, socialMedia]
       properties:
         name: { type: string, maxLength: 200 }
         address: { type: string, maxLength: 500 }
@@ -506,9 +575,23 @@ components:
         placeId: { type: string }
         nearestMrt: { type: string }
         mrtWalkMinutes: { type: integer, nullable: true }
+        capacityRange: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
         description: { type: string }
-        hostTags: { type: array, items: { type: string } }
+        hostTags: { type: array, maxItems: 5, items: { type: string } }
         preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
+        contactUrl: { type: string, format: uri }
+        coverPhoto: { type: string, format: uri }
+        otherPhotos: { type: array, maxItems: 9, items: { type: string, format: uri } }
+        socialMedia:
+          type: object
+          description: Instagram 或 Threads 至少一個非空；Line 可保留但不能單獨滿足建立條件
+          anyOf:
+            - required: [instagram]
+            - required: [threads]
+          properties:
+            threads: { type: string, minLength: 1 }
+            instagram: { type: string, minLength: 1 }
+            line: { type: string }
 
     Artist:
       type: object

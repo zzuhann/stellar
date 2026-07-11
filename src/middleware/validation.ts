@@ -191,20 +191,25 @@ export const venueSchemas = {
     placeId: z.string().max(500).trim().optional(),
     nearestMrt: z.string().max(100).trim().optional(),
     mrtWalkMinutes: z.number().int().min(0).nullable().optional(),
-    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']).nullable().optional(),
+    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']),
     description: z.string().max(3000).trim().optional(),
-    hostTags: z.array(z.string().min(1).max(50)).optional(),
-    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']).optional(),
+    hostTags: z.array(z.string().min(1).max(50)).max(5, '最多只能新增 5 個場地標籤').optional(),
+    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']),
     contactUrl: z.string().url('聯絡網址格式不正確').max(500).optional(),
-    coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
-    otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
+    coverPhoto: z.string().url('封面照片網址格式不正確'),
+    otherPhotos: z
+      .array(z.string().url('照片網址格式不正確'))
+      .max(9, '最多只能上傳 9 張其他照片')
+      .optional(),
     socialMedia: z
       .object({
         threads: z.string().max(500).trim().optional(),
         instagram: z.string().max(500).trim().optional(),
         line: z.string().max(500).trim().optional(),
       })
-      .optional(),
+      .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
+        message: '至少需要填寫 Instagram 或 Threads',
+      }),
   }),
   update: z.object({
     name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
