@@ -192,14 +192,14 @@ export interface CreateVenueData {
   placeId?: string;
   nearestMrt?: string;
   mrtWalkMinutes?: number | null;
-  capacityRange?: CapacityRange | null;
+  capacityRange: CapacityRange;
   description?: string;
   hostTags?: string[];
-  preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
+  preferredContact: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
-  coverPhoto?: string;
+  coverPhoto: string;
   otherPhotos?: string[];
-  socialMedia?: {
+  socialMedia: {
     threads?: string;
     instagram?: string;
     line?: string;

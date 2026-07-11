@@ -20,6 +20,15 @@ function isWhitelisted(email: string): boolean {
   return emailWhitelist.has(email.toLowerCase());
 }
 
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 interface ArtistApprovalEmailData {
   email: string;
   displayName?: string;
@@ -541,6 +550,39 @@ export async function sendEventSubmissionNotification(
   } catch (err) {
     console.error(
       `[email] failed to send event submission notification (event: ${eventTitle}):`,
+      err
+    );
+  }
+}
+
+export async function sendVenueSubmissionNotification(venueName: string): Promise<void> {
+  if (!resend || !adminNotifyEmail) return;
+
+  const escapedVenueName = escapeHtml(venueName);
+  const loggedVenueName = JSON.stringify(venueName);
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+  <p>有人投稿了新的場地：<strong>${escapedVenueName}</strong></p>
+  <p>可以去審核囉！</p>
+  <p><a href="https://www.stellar-zone.com/admin-new/venues">前往審核</a></p>
+</body>
+</html>
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: adminNotifyEmail,
+      subject: '[STELLAR] 有人投稿場地～',
+      html,
+    });
+    console.log(`[email] venue submission notification sent (venue: ${loggedVenueName})`);
+  } catch (err) {
+    console.error(
+      `[email] failed to send venue submission notification (venue: ${loggedVenueName}):`,
       err
     );
   }

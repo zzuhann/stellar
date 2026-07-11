@@ -86,14 +86,14 @@ export class VenueService {
         placeId: data.placeId ?? '',
         nearestMrt: data.nearestMrt ?? '',
         mrtWalkMinutes: data.mrtWalkMinutes ?? null,
-        capacityRange: data.capacityRange ?? null,
+        capacityRange: data.capacityRange,
         description: data.description ?? '',
         hostTags: data.hostTags ?? [],
-        ...(data.preferredContact !== undefined ? { preferredContact: data.preferredContact } : {}),
+        preferredContact: data.preferredContact,
         ...(data.contactUrl !== undefined ? { contactUrl: data.contactUrl } : {}),
-        coverPhoto: data.coverPhoto ?? '',
+        coverPhoto: data.coverPhoto,
         otherPhotos: data.otherPhotos ?? [],
-        ...(data.socialMedia !== undefined ? { socialMedia: data.socialMedia } : {}),
+        socialMedia: data.socialMedia,
         status: 'pending',
         eventCount: 0,
         eventRefs: [],
@@ -102,7 +102,6 @@ export class VenueService {
       })
     );
 
-    cache.delete('venues:all');
     cache.clearPattern('admin:venues:');
 
     return {
@@ -115,12 +114,12 @@ export class VenueService {
       placeId: data.placeId ?? '',
       nearestMrt: data.nearestMrt ?? '',
       mrtWalkMinutes: data.mrtWalkMinutes ?? null,
-      capacityRange: data.capacityRange ?? null,
+      capacityRange: data.capacityRange,
       description: data.description ?? '',
       hostTags: data.hostTags ?? [],
       preferredContact: data.preferredContact,
       contactUrl: data.contactUrl,
-      coverPhoto: data.coverPhoto ?? '',
+      coverPhoto: data.coverPhoto,
       otherPhotos: data.otherPhotos ?? [],
       socialMedia: data.socialMedia,
       status: 'pending',

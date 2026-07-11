@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
@@ -10,6 +10,7 @@ import {
   VenueBatchStatusItem,
   VenueFilterParams,
 } from '../models/types';
+import { sendVenueSubmissionNotification } from '../services/emailService';
 
 export class VenueController {
   private venueService: VenueService;
@@ -23,6 +24,13 @@ export class VenueController {
   createVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const data = req.body as CreateVenueData;
     const venue = await this.venueService.createVenue(data);
+    res.status(201).json(venue);
+  };
+
+  createVenueSubmission = async (req: Request, res: Response): Promise<void> => {
+    const data = req.body as CreateVenueData;
+    const venue = await this.venueService.createVenue(data);
+    void sendVenueSubmissionNotification(venue.name);
     res.status(201).json(venue);
   };
 
