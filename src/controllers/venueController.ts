@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
@@ -27,7 +27,7 @@ export class VenueController {
     res.status(201).json(venue);
   };
 
-  createVenueSubmission = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  createVenueSubmission = async (req: Request, res: Response): Promise<void> => {
     const data = req.body as CreateVenueData;
     const venue = await this.venueService.createVenue(data);
     void sendVenueSubmissionNotification(venue.name);

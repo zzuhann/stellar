@@ -36,6 +36,7 @@ export const venueSubmissionImageLimiter = rateLimit({
 export const venueSubmissionLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
+  skipFailedRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many venue submissions, please try again later' },

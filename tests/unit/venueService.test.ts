@@ -1,9 +1,17 @@
 import { VenueService } from '../../src/services/venueService';
+import { cache } from '../../src/utils/cache';
 
 const mockDelete = jest.fn();
 const mockGet = jest.fn();
 const mockUpdate = jest.fn();
-const mockDocRef = { get: mockGet, delete: mockDelete, update: mockUpdate };
+const mockSet = jest.fn();
+const mockDocRef = {
+  id: 'venue-1',
+  get: mockGet,
+  delete: mockDelete,
+  update: mockUpdate,
+  set: mockSet,
+};
 
 const mockCollectionGet = jest.fn();
 const mockWhere = jest.fn();
@@ -17,6 +25,32 @@ jest.mock('../../src/config/firebase', () => ({
     runTransaction: jest.fn(),
   },
 }));
+
+describe('VenueService.createVenue', () => {
+  it('pending 場地不清公開列表 cache，但清除 admin cache', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
+    (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
+    mockSet.mockResolvedValue(undefined);
+    const deleteSpy = jest.spyOn(cache, 'delete');
+    const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
+
+    await new VenueService().createVenue({
+      name: '測試場地',
+      address: '台北市測試路 1 號',
+      region: '台北',
+      capacityRange: '20-40',
+      preferredContact: 'instagram',
+      coverPhoto: 'https://example.com/cover.jpg',
+      socialMedia: { instagram: 'venue' },
+    });
+
+    expect(deleteSpy).not.toHaveBeenCalledWith('venues:all');
+    expect(clearPatternSpy).toHaveBeenCalledWith('admin:venues:');
+    deleteSpy.mockRestore();
+    clearPatternSpy.mockRestore();
+  });
+});
 
 describe('VenueService.permanentDeleteVenue', () => {
   let service: VenueService;

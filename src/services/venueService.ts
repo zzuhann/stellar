@@ -102,7 +102,6 @@ export class VenueService {
       })
     );
 
-    cache.delete('venues:all');
     cache.clearPattern('admin:venues:');
 
     return {
