@@ -1,0 +1,24 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/stellar-backend:$COMMIT_SHA'
+      - '.'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/stellar-backend:$COMMIT_SHA'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'stellar-backend'
+      - '--image=asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/stellar-backend:$COMMIT_SHA'
+      - '--region=asia-east1'
+      - '--platform=managed'
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/stellar-backend:$COMMIT_SHA'
+options:
+  logging: CLOUD_LOGGING_ONLY
