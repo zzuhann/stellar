@@ -46,6 +46,7 @@ export interface CoffeeEvent {
     };
     placeId?: string;
     venueId?: string; // approve 後由後端自動回填，前端不傳
+    venueActive?: boolean; // 詳情 API 根據場地當前狀態回傳
   };
   datetime: {
     start: Timestamp;

@@ -470,6 +470,41 @@ export class EventService {
     };
   }
 
+  private async prepareEventForResponse(
+    event: CoffeeEvent,
+    userId?: string
+  ): Promise<CoffeeEvent | CoffeeEventWithFavorite> {
+    const eventWithSlugs = await this.backfillArtistSlugs(event);
+    const venueId = eventWithSlugs.location.venueId;
+    let eventWithVenueStatus = eventWithSlugs;
+
+    if (venueId) {
+      try {
+        const venueDoc = await withTimeoutAndRetry(() =>
+          db!.collection('venues').doc(venueId).get()
+        );
+        eventWithVenueStatus = {
+          ...eventWithSlugs,
+          location: {
+            ...eventWithSlugs.location,
+            venueActive: venueDoc.exists && venueDoc.data()?.status === 'active',
+          },
+        };
+      } catch (error) {
+        console.warn(`[events] failed to resolve venue status for ${venueId}`, error);
+        eventWithVenueStatus = {
+          ...eventWithSlugs,
+          location: { ...eventWithSlugs.location, venueActive: false },
+        };
+      }
+    }
+
+    if (!userId) return eventWithVenueStatus;
+
+    const isFavorited = await this.userService.isFavorited(userId, event.id);
+    return { ...eventWithVenueStatus, isFavorited };
+  }
+
   async getEventById(
     eventId: string,
     userId?: string,
@@ -488,12 +523,7 @@ export class EventService {
 
     if (cachedResult) {
       if (!isAllowed(cachedResult)) return null;
-      const event = await this.backfillArtistSlugs(cachedResult);
-      if (userId) {
-        const isFavorited = await this.userService.isFavorited(userId, event.id);
-        return { ...event, isFavorited };
-      }
-      return event;
+      return this.prepareEventForResponse(cachedResult, userId);
     }
 
     // 先嘗試直接用 Firestore ID 查詢
@@ -503,12 +533,7 @@ export class EventService {
       const rawEvent = { id: doc.id, ...doc.data() } as CoffeeEvent;
       if (!isAllowed(rawEvent)) return null;
       cache.set(cacheKey, rawEvent, 1440);
-      const event = await this.backfillArtistSlugs(rawEvent);
-      if (userId) {
-        const isFavorited = await this.userService.isFavorited(userId, event.id);
-        return { ...event, isFavorited };
-      }
-      return event;
+      return this.prepareEventForResponse(rawEvent, userId);
     }
 
     // Firestore ID 找不到時，改用 slug 查詢
@@ -529,12 +554,7 @@ export class EventService {
     cache.set(`event:${rawEvent.id}`, rawEvent, 1440);
     cache.set(cacheKey, rawEvent, 1440);
 
-    const event = await this.backfillArtistSlugs(rawEvent);
-    if (userId) {
-      const isFavorited = await this.userService.isFavorited(userId, event.id);
-      return { ...event, isFavorited };
-    }
-    return event;
+    return this.prepareEventForResponse(rawEvent, userId);
   }
 
   async createEvent(
