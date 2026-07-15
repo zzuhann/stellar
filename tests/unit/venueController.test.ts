@@ -2,11 +2,9 @@ import { Response } from 'express';
 import { VenueController } from '../../src/controllers/venueController';
 import { AuthenticatedRequest } from '../../src/middleware/auth';
 import { VenueService } from '../../src/services/venueService';
-import { VenueTrackingService } from '../../src/services/venueTrackingService';
 
-// Mock 整個 VenueService / VenueTrackingService，避免碰 Firestore；建構子也不會執行真正的欄位初始化
+// Mock VenueService to avoid Firestore access.
 jest.mock('../../src/services/venueService');
-jest.mock('../../src/services/venueTrackingService');
 
 describe('VenueController.getVenues - status 守門邏輯', () => {
   let controller: VenueController;
@@ -22,17 +20,11 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
     (VenueService as jest.Mock).mockImplementation(() => ({
       getVenues: mockGetVenues,
     }));
-    (VenueTrackingService as jest.Mock).mockImplementation(() => ({
-      trackVenueListServed: jest.fn().mockResolvedValue(undefined),
-      trackVenueDetailServed: jest.fn().mockResolvedValue(undefined),
-    }));
-
     controller = new VenueController();
 
     res = {
       json: jest.fn(),
       status: jest.fn().mockReturnThis(),
-      setHeader: jest.fn(),
     };
   });
 
@@ -43,8 +35,6 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
     return {
       query,
       user,
-      header: jest.fn().mockReturnValue(undefined),
-      ip: '127.0.0.1',
     } as unknown as AuthenticatedRequest;
   };
 
