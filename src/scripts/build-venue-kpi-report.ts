@@ -75,12 +75,11 @@ function parseArgs(): CliOptions {
   return options as CliOptions;
 }
 
-function parseDateAtStartOfDay(input: string): Date {
+function assertValidDateFormat(input: string): void {
   const date = new Date(`${input}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) {
     throw new Error(`日期格式錯誤：${input}，請使用 YYYY-MM-DD`);
   }
-  return date;
 }
 
 function gaDateToYmd(gaDate: string): string {
@@ -303,8 +302,8 @@ ${topDetailViewsMd}
 
 async function main(): Promise<void> {
   const options = parseArgs();
-  parseDateAtStartOfDay(options.start);
-  parseDateAtStartOfDay(options.end);
+  assertValidDateFormat(options.start);
+  assertValidDateFormat(options.end);
 
   const bucket = new Map<string, VenueDailyAccumulator>();
   await collectGaEvents(options.gaCsvPath, bucket);

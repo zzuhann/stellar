@@ -137,9 +137,9 @@ async function main(): Promise<void> {
       const venueRef = venue.ref;
       const eventRef = db.collection('coffeeEvents').doc(candidate.eventId);
 
-      await db.runTransaction(async tx => {
+      const txResult = await db.runTransaction(async tx => {
         const venueDoc = await tx.get(venueRef);
-        if (!venueDoc.exists) return;
+        if (!venueDoc.exists) return null;
 
         const existingRefs: DocumentReference[] = venueDoc.data()?.eventRefs ?? [];
         const alreadyLinked = existingRefs.some(ref => ref.id === candidate.eventId);
@@ -150,13 +150,20 @@ async function main(): Promise<void> {
           });
         }
         tx.update(eventRef, { 'location.venueId': venue!.venueId });
+        return alreadyLinked ? 'repair-event' : 'link-both';
       });
-    }
 
-    // 記錄本次執行內已處理過的連結，避免同一場地在同一次執行中被重複計算 eventCount
-    venue.linkedEventIds.add(candidate.eventId);
-    if (action === 'repair-event') repairedEventOnly++;
-    updated++;
+      if (!txResult) continue;
+
+      // 記錄本次執行內已處理過的連結，避免同一場地在同一次執行中被重複計算 eventCount
+      venue.linkedEventIds.add(candidate.eventId);
+      if (txResult === 'repair-event') repairedEventOnly++;
+      updated++;
+    } else {
+      venue.linkedEventIds.add(candidate.eventId);
+      if (action === 'repair-event') repairedEventOnly++;
+      updated++;
+    }
   }
 
   console.log('\n=== 統計 ===');
