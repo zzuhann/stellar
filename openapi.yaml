@@ -173,6 +173,43 @@ paths:
       responses:
         '200': { description: 送審成功 }
 
+  /events/batch-review:
+    post:
+      tags: [events]
+      summary: 批次審核活動（僅 admin）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updates]
+              properties:
+                updates:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [eventId, status]
+                    properties:
+                      eventId: { type: string }
+                      status: { type: string, enum: [approved, rejected] }
+                      reason:
+                        type: string
+                        description: 拒絕原因；status 為 rejected 時使用
+      responses:
+        '200':
+          description: 審核完成
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CoffeeEvent' }
+        '400': { description: updates 為空或格式錯誤 }
+        '404': { description: 其中一筆活動不存在 }
+        '500': { description: 批次審核失敗 }
+
   /venues:
     get:
       tags: [venues]
