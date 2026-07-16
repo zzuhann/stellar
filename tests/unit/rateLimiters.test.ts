@@ -1,6 +1,6 @@
 import express from 'express';
 import request from 'supertest';
-import { eventViewLimiter } from '../../src/middleware/rateLimiters';
+import { eventViewLimiter, venueViewLimiter } from '../../src/middleware/rateLimiters';
 
 function createEventViewTestApp() {
   const app = express();
@@ -56,5 +56,30 @@ describe('eventViewLimiter', () => {
       .post('/events/event-2/view')
       .set('x-forwarded-for', allowedIp);
     expect(allowedResponse.status).toBe(204);
+  });
+});
+
+describe('venueViewLimiter', () => {
+  test('should return 429 after exceeding limit for same IP', async () => {
+    const app = express();
+    app.set('trust proxy', 1);
+    app.post('/venues/:id/view', venueViewLimiter, (_req, res) => res.status(204).send());
+    const clientIp = '198.51.100.21';
+
+    for (let i = 0; i < 120; i++) {
+      const response = await request(app)
+        .post('/venues/venue-1/view')
+        .set('x-forwarded-for', clientIp);
+      expect(response.status).toBe(204);
+    }
+
+    const blockedResponse = await request(app)
+      .post('/venues/venue-1/view')
+      .set('x-forwarded-for', clientIp);
+
+    expect(blockedResponse.status).toBe(429);
+    expect(blockedResponse.body).toEqual({
+      error: 'Too many venue view requests, please try again later',
+    });
   });
 });

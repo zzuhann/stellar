@@ -1,9 +1,6 @@
 import { Request, Response } from 'express';
-import { randomUUID } from 'crypto';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
-import { VenueTrackingContext, VenueTrackingService } from '../services/venueTrackingService';
-import { cache } from '../utils/cache';
 import {
   CreateVenueData,
   VenueBatchReviewItem,
@@ -11,14 +8,13 @@ import {
   VenueFilterParams,
 } from '../models/types';
 import { sendVenueSubmissionNotification } from '../services/emailService';
+import { cache } from '../utils/cache';
 
 export class VenueController {
   private venueService: VenueService;
-  private venueTrackingService: VenueTrackingService;
 
   constructor() {
     this.venueService = new VenueService();
-    this.venueTrackingService = new VenueTrackingService();
   }
 
   createVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -76,20 +72,7 @@ export class VenueController {
     }
 
     const venues = await this.venueService.getVenues(params);
-
-    const trackingContext: VenueTrackingContext = {
-      requestId: this.ensureRequestId(req, res),
-      sessionId: this.getSessionId(req),
-      userId: req.user?.uid ?? '',
-    };
     res.json({ venues });
-
-    void this.trackVenueListServed(
-      trackingContext,
-      params.region ?? [],
-      params.capacityRange ?? null,
-      venues.length
-    );
   };
 
   getVenueById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -101,20 +84,29 @@ export class VenueController {
       return;
     }
 
-    const trackingContext: VenueTrackingContext = {
-      requestId: this.ensureRequestId(req, res),
-      sessionId: this.getSessionId(req),
-      userId: req.user?.uid ?? '',
-    };
-    const ip = this.getClientIp(req);
-    const detailViewDedupeKey = `venue_detail_served_dedup:${ip}:${id}`;
-    const shouldTrackDetailView = cache.get(detailViewDedupeKey) === null;
-
     res.json(venue);
+  };
 
-    if (shouldTrackDetailView) {
-      cache.set(detailViewDedupeKey, true, 60);
-      void this.trackVenueDetailServed(trackingContext, id);
+  recordView = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const id = String(req.params.id ?? '');
+      const dedupKey = `venue_view_dedup:${req.ip ?? 'unknown'}:${id}`;
+
+      if (cache.get(dedupKey) !== null) {
+        res.status(204).send();
+        return;
+      }
+
+      await this.venueService.incrementViewCount(id);
+      cache.set(dedupKey, true, 60);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No document to update')) {
+        res.status(404).json({ error: 'Venue not found' });
+        return;
+      }
+      console.error('Error recording venue view:', error);
+      res.status(500).json({ error: 'Failed to record venue view' });
     }
   };
 
@@ -185,52 +177,4 @@ export class VenueController {
 
     res.status(200).json({ message: 'Venue permanently deleted' });
   };
-
-  private ensureRequestId(req: AuthenticatedRequest, res: Response): string {
-    const raw = req.header('x-request-id');
-    const requestId = typeof raw === 'string' ? raw.trim() : '';
-    const normalized = requestId || randomUUID();
-    res.setHeader('x-request-id', normalized);
-    return normalized;
-  }
-
-  private getSessionId(req: AuthenticatedRequest): string {
-    const raw = req.header('x-session-id');
-    if (typeof raw !== 'string') return '';
-    return raw.trim();
-  }
-
-  private getClientIp(req: AuthenticatedRequest): string {
-    return req.ip ?? 'unknown';
-  }
-
-  private async trackVenueListServed(
-    context: VenueTrackingContext,
-    regions: string[],
-    capacity: VenueFilterParams['capacityRange'] | null,
-    resultCount: number
-  ): Promise<void> {
-    try {
-      await this.venueTrackingService.trackVenueListServed(context, {
-        region: regions,
-        capacity,
-        result_count: resultCount,
-      });
-    } catch (error) {
-      console.warn('[venue tracking] failed to log venue_list_served', error);
-    }
-  }
-
-  private async trackVenueDetailServed(
-    context: VenueTrackingContext,
-    venueId: string
-  ): Promise<void> {
-    try {
-      await this.venueTrackingService.trackVenueDetailServed(context, {
-        venue_id: venueId,
-      });
-    } catch (error) {
-      console.warn('[venue tracking] failed to log venue_detail_served', error);
-    }
-  }
 }

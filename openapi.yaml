@@ -159,7 +159,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/idPath'
       responses:
-        '200': { description: 紀錄成功 }
+        '204': { description: 紀錄成功（含去重命中） }
+        '404': { description: 找不到活動 }
+        '429': { description: 超過 rate limit }
 
   /events/{id}/resubmit:
     patch:
@@ -229,6 +231,17 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '200': { description: 刪除成功 }
+
+  /venues/{id}/view:
+    post:
+      tags: [venues]
+      summary: 紀錄一次瀏覽（有 rate limit）
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '204': { description: 紀錄成功（含去重命中） }
+        '404': { description: 找不到場地 }
+        '429': { description: 超過 rate limit }
 
   /venues/batch-review:
     patch:
@@ -533,6 +546,7 @@ components:
         mrtWalkMinutes: { type: integer, nullable: true }
         capacityRange: { type: string, nullable: true }
         eventCount: { type: integer }
+        viewCount: { type: integer }
         coverPhoto: { type: string }
         otherPhotos: { type: array, items: { type: string } }
         description: { type: string }

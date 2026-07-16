@@ -24,6 +24,14 @@ export const eventViewLimiter = rateLimit({
   message: { error: 'Too many event view requests, please try again later' },
 });
 
+export const venueViewLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many venue view requests, please try again later' },
+});
+
 export const venueSubmissionImageLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,

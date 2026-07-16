@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { VenueController } from '../controllers/venueController';
 import { authenticateToken, optionalAuthenticate, requireAdmin } from '../middleware/auth';
-import { venueDetailLimiter, venuesListLimiter } from '../middleware/rateLimiters';
+import {
+  venueDetailLimiter,
+  venuesListLimiter,
+  venueViewLimiter,
+} from '../middleware/rateLimiters';
 import { validateRequest, venueSchemas } from '../middleware/validation';
 
 const router = Router();
@@ -34,6 +38,7 @@ router.patch(
 
 router.get('/admin/:id', authenticateToken, requireAdmin, venueController.getAdminVenueById);
 router.get('/:id', venueDetailLimiter, optionalAuthenticate, venueController.getVenueById);
+router.post('/:id/view', venueViewLimiter, venueController.recordView);
 router.delete(
   '/admin/:id/permanent',
   authenticateToken,

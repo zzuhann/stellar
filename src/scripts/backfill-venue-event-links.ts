@@ -10,9 +10,9 @@
  * 使用方式：
  *   1. 確認 .env 已設定 FIREBASE_PROJECT_ID / FIREBASE_PRIVATE_KEY / FIREBASE_CLIENT_EMAIL
  *   2. 先跑 dry-run，確認會更新的清單（不加 flag 或加 --dry-run 都是 dry-run）：
- *        npx ts-node src/scripts/backfill-venue-event-links.ts
+ *        npx tsx src/scripts/backfill-venue-event-links.ts
  *   3. 確認清單無誤後，加上 --commit 才會真的寫入：
- *        npx ts-node src/scripts/backfill-venue-event-links.ts --commit
+ *        npx tsx src/scripts/backfill-venue-event-links.ts --commit
  *
  * 注意：
  *   - 這支腳本會對生產資料做批次寫入，預設一律 dry-run，只有明確帶 --commit 才會寫入
@@ -31,6 +31,7 @@ interface Candidate {
   eventId: string;
   eventTitle: string;
   placeId: string;
+  linkedVenueId?: string;
 }
 
 interface VenueLinkInfo {
@@ -38,6 +39,17 @@ interface VenueLinkInfo {
   venueName: string;
   ref: DocumentReference;
   linkedEventIds: Set<string>;
+}
+
+export type BackfillAction = 'skip' | 'link-both' | 'repair-event';
+
+export function determineBackfillAction(
+  hasVenueRef: boolean,
+  linkedVenueId: string | undefined,
+  targetVenueId: string
+): BackfillAction {
+  if (hasVenueRef && linkedVenueId === targetVenueId) return 'skip';
+  return hasVenueRef ? 'repair-event' : 'link-both';
 }
 
 async function main(): Promise<void> {
@@ -59,6 +71,7 @@ async function main(): Promise<void> {
         eventId: doc.id,
         eventTitle: data.title ?? '(無標題)',
         placeId,
+        linkedVenueId: data.location?.venueId,
       });
     }
   }
@@ -71,6 +84,7 @@ async function main(): Promise<void> {
   let updated = 0;
   let skippedNoVenue = 0;
   let skippedAlreadyLinked = 0;
+  let repairedEventOnly = 0;
 
   for (const candidate of candidates) {
     let venue = venueCache.get(candidate.placeId);
@@ -104,22 +118,28 @@ async function main(): Promise<void> {
 
     matched++;
 
-    if (venue.linkedEventIds.has(candidate.eventId)) {
+    const action = determineBackfillAction(
+      venue.linkedEventIds.has(candidate.eventId),
+      candidate.linkedVenueId,
+      venue.venueId
+    );
+
+    if (action === 'skip') {
       skippedAlreadyLinked++;
       continue;
     }
 
     console.log(
-      `${isCommit ? '✅ 連結' : '👉 將連結'}：活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.venueName}」(${venue.venueId})`
+      `${isCommit ? '✅' : '👉'} ${action === 'repair-event' ? '補活動連結' : '連結兩端'}：活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.venueName}」(${venue.venueId})`
     );
 
     if (isCommit) {
       const venueRef = venue.ref;
       const eventRef = db.collection('coffeeEvents').doc(candidate.eventId);
 
-      await db.runTransaction(async tx => {
+      const txResult = await db.runTransaction(async tx => {
         const venueDoc = await tx.get(venueRef);
-        if (!venueDoc.exists) return;
+        if (!venueDoc.exists) return null;
 
         const existingRefs: DocumentReference[] = venueDoc.data()?.eventRefs ?? [];
         const alreadyLinked = existingRefs.some(ref => ref.id === candidate.eventId);
@@ -130,30 +150,41 @@ async function main(): Promise<void> {
           });
         }
         tx.update(eventRef, { 'location.venueId': venue!.venueId });
+        return alreadyLinked ? 'repair-event' : 'link-both';
       });
-    }
 
-    // 記錄本次執行內已處理過的連結，避免同一場地在同一次執行中被重複計算 eventCount
-    venue.linkedEventIds.add(candidate.eventId);
-    updated++;
+      if (!txResult) continue;
+
+      // 記錄本次執行內已處理過的連結，避免同一場地在同一次執行中被重複計算 eventCount
+      venue.linkedEventIds.add(candidate.eventId);
+      if (txResult === 'repair-event') repairedEventOnly++;
+      updated++;
+    } else {
+      venue.linkedEventIds.add(candidate.eventId);
+      if (action === 'repair-event') repairedEventOnly++;
+      updated++;
+    }
   }
 
   console.log('\n=== 統計 ===');
   console.log(`掃到待檢查活動：${candidates.length}`);
   console.log(`找到對應場地：${matched}`);
   console.log(`${isCommit ? '實際更新' : 'Dry-run 模擬更新'}：${updated}`);
+  console.log(`其中僅修復活動 venueId：${repairedEventOnly}`);
   console.log(`跳過（找不到對應場地）：${skippedNoVenue}`);
   console.log(`跳過（已連結過）：${skippedAlreadyLinked}`);
 
   if (!isCommit && updated > 0) {
     console.log('\n這是 dry-run，尚未寫入。確認清單無誤後加上 --commit 執行：');
-    console.log('  npx ts-node src/scripts/backfill-venue-event-links.ts --commit');
+    console.log('  npx tsx src/scripts/backfill-venue-event-links.ts --commit');
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch(err => {
-    console.error('❌ 錯誤：', err);
-    process.exit(1);
-  });
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error('❌ 錯誤：', err);
+      process.exit(1);
+    });
+}

@@ -2,12 +2,11 @@
  * STELLAR venues KPI report builder (skeleton)
  *
  * 目的：
- * 1) 讀取後端 analyticsVenueEventsRaw（server-side 事件）
- * 2) 讀取 GA 匯出 CSV（前端事件）
- * 3) 產出每日 KPI 報表（CSV + Markdown）
+ * 1) 讀取 GA 匯出 CSV（前端事件）
+ * 2) 產出每日 KPI 報表（CSV + Markdown）
  *
  * 使用方式（範例）：
- *   npx ts-node src/scripts/build-venue-kpi-report.ts --start=2026-05-01 --end=2026-05-28 --ga=./reports/venues/ga-export.csv
+ *   npx tsx src/scripts/build-venue-kpi-report.ts --start=2026-05-01 --end=2026-05-28 --ga=./reports/venues/ga-export.csv
  *
  * GA CSV 欄位要求（最小）：
  * - date（YYYYMMDD）
@@ -17,16 +16,9 @@
  * - venueRegion（可空）
  */
 
-import dotenv from 'dotenv';
-dotenv.config();
-
 import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
-import { Timestamp } from 'firebase-admin/firestore';
-import { db, hasFirebaseConfig } from '../config/firebase';
-
-type ServerEventType = 'venue_list_served' | 'venue_detail_served';
 
 interface CliOptions {
   start: string;
@@ -45,8 +37,6 @@ interface GaCsvRow {
 interface DailyKpiRow {
   date: string;
   venueId: string;
-  listServedCount: number;
-  detailServedCount: number;
   listImpressionCount: number;
   detailClickCount: number;
   detailPageViewCount: number;
@@ -55,18 +45,17 @@ interface DailyKpiRow {
   filterEventCount: number;
   filterZeroResultCount: number;
   ctr: number;
-  detailViewRate: number;
   contactConversionRate: number;
 }
 
 interface VenueDetailViewRank {
   venueId: string;
-  detailServedCount: number;
+  detailPageViewCount: number;
 }
 
 type VenueDailyAccumulator = Omit<
   DailyKpiRow,
-  'date' | 'venueId' | 'ctr' | 'detailViewRate' | 'contactConversionRate'
+  'date' | 'venueId' | 'ctr' | 'contactConversionRate'
 >;
 
 function parseArgs(): CliOptions {
@@ -86,16 +75,11 @@ function parseArgs(): CliOptions {
   return options as CliOptions;
 }
 
-function parseDateAtStartOfDay(input: string): Date {
+function assertValidDateFormat(input: string): void {
   const date = new Date(`${input}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) {
     throw new Error(`日期格式錯誤：${input}，請使用 YYYY-MM-DD`);
   }
-  return date;
-}
-
-function formatDateYmd(date: Date): string {
-  return date.toISOString().slice(0, 10);
 }
 
 function gaDateToYmd(gaDate: string): string {
@@ -118,8 +102,6 @@ function toCsv(rows: DailyKpiRow[]): string {
   const header = [
     'date',
     'venueId',
-    'listServedCount',
-    'detailServedCount',
     'listImpressionCount',
     'detailClickCount',
     'detailPageViewCount',
@@ -128,7 +110,6 @@ function toCsv(rows: DailyKpiRow[]): string {
     'filterEventCount',
     'filterZeroResultCount',
     'ctr',
-    'detailViewRate',
     'contactConversionRate',
   ].join(',');
 
@@ -136,8 +117,6 @@ function toCsv(rows: DailyKpiRow[]): string {
     [
       row.date,
       row.venueId,
-      row.listServedCount,
-      row.detailServedCount,
       row.listImpressionCount,
       row.detailClickCount,
       row.detailPageViewCount,
@@ -146,7 +125,6 @@ function toCsv(rows: DailyKpiRow[]): string {
       row.filterEventCount,
       row.filterZeroResultCount,
       row.ctr,
-      row.detailViewRate,
       row.contactConversionRate,
     ].join(',')
   );
@@ -167,8 +145,6 @@ async function readGaCsv(gaCsvPath: string): Promise<GaCsvRow[]> {
 
 function createEmptyAccumulator(): VenueDailyAccumulator {
   return {
-    listServedCount: 0,
-    detailServedCount: 0,
     listImpressionCount: 0,
     detailClickCount: 0,
     detailPageViewCount: 0,
@@ -191,43 +167,6 @@ function upsertAccumulator(
   const created = createEmptyAccumulator();
   bucket.set(key, created);
   return created;
-}
-
-async function collectServerEvents(
-  startDate: Date,
-  endDate: Date,
-  bucket: Map<string, VenueDailyAccumulator>
-): Promise<void> {
-  if (!hasFirebaseConfig || !db) {
-    console.warn('⚠️ Firebase 未設定，略過 server-side 事件收集');
-    return;
-  }
-
-  const snapshot = await db
-    .collection('analyticsVenueEventsRaw')
-    .where('ts', '>=', Timestamp.fromDate(startDate))
-    .where('ts', '<=', Timestamp.fromDate(endDate))
-    .get();
-
-  snapshot.forEach(doc => {
-    const data = doc.data() as {
-      event_type?: ServerEventType;
-      metadata?: { venue_id?: string };
-      ts?: Timestamp;
-    };
-
-    if (!data.ts || !data.event_type) return;
-
-    const date = formatDateYmd(data.ts.toDate());
-    const venueId = data.metadata?.venue_id ?? '';
-    const acc = upsertAccumulator(bucket, date, venueId);
-
-    if (data.event_type === 'venue_list_served') {
-      acc.listServedCount += 1;
-    } else if (data.event_type === 'venue_detail_served') {
-      acc.detailServedCount += 1;
-    }
-  });
 }
 
 async function collectGaEvents(
@@ -284,7 +223,6 @@ function buildDailyRows(bucket: Map<string, VenueDailyAccumulator>): DailyKpiRow
       venueId,
       ...value,
       ctr: toPercent(value.detailClickCount, value.listImpressionCount),
-      detailViewRate: toPercent(value.detailPageViewCount, value.listServedCount),
       contactConversionRate: toPercent(value.contactClickCount, value.detailPageViewCount),
     });
   }
@@ -297,14 +235,14 @@ function buildTopDetailViews(rows: DailyKpiRow[], limit: number = 10): VenueDeta
 
   for (const row of rows) {
     if (!row.venueId || row.venueId === 'all') continue;
-    if (!row.detailServedCount) continue;
+    if (!row.detailPageViewCount) continue;
 
-    totalsByVenue.set(row.venueId, (totalsByVenue.get(row.venueId) ?? 0) + row.detailServedCount);
+    totalsByVenue.set(row.venueId, (totalsByVenue.get(row.venueId) ?? 0) + row.detailPageViewCount);
   }
 
   return Array.from(totalsByVenue.entries())
-    .map(([venueId, detailServedCount]) => ({ venueId, detailServedCount }))
-    .sort((a, b) => b.detailServedCount - a.detailServedCount)
+    .map(([venueId, detailPageViewCount]) => ({ venueId, detailPageViewCount }))
+    .sort((a, b) => b.detailPageViewCount - a.detailPageViewCount)
     .slice(0, limit);
 }
 
@@ -333,11 +271,11 @@ function buildSummaryMarkdown(rows: DailyKpiRow[], start: string, end: string): 
   const topDetailViews = buildTopDetailViews(rows, 10);
   const topDetailViewsMd =
     topDetailViews.length === 0
-      ? '- 無資料（請確認 analyticsVenueEventsRaw 是否有 `venue_detail_served`）'
+      ? '- 無資料（請確認 GA 匯出是否包含場地詳情頁 `page_view`）'
       : topDetailViews
           .map(
             (item, index) =>
-              `${index + 1}. venueId=${item.venueId}｜detail view times=${item.detailServedCount}`
+              `${index + 1}. venueId=${item.venueId}｜detail view times=${item.detailPageViewCount}`
           )
           .join('\n');
 
@@ -352,7 +290,7 @@ function buildSummaryMarkdown(rows: DailyKpiRow[], start: string, end: string): 
 - 聯絡轉換率：${contactCvr}%
 - 地圖導流率：${mapRate}%
 
-## 詳情頁 View Times Top 10（server-side）
+## 詳情頁 View Times Top 10（GA4）
 ${topDetailViewsMd}
 
 ## 下一步（給 /analytics）
@@ -364,12 +302,10 @@ ${topDetailViewsMd}
 
 async function main(): Promise<void> {
   const options = parseArgs();
-  const startDate = parseDateAtStartOfDay(options.start);
-  const endDate = parseDateAtStartOfDay(options.end);
-  endDate.setUTCHours(23, 59, 59, 999);
+  assertValidDateFormat(options.start);
+  assertValidDateFormat(options.end);
 
   const bucket = new Map<string, VenueDailyAccumulator>();
-  await collectServerEvents(startDate, endDate, bucket);
   await collectGaEvents(options.gaCsvPath, bucket);
 
   const rows = buildDailyRows(bucket);
