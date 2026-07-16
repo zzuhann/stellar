@@ -8,6 +8,7 @@ import {
   VenueFilterParams,
 } from '../models/types';
 import { sendVenueSubmissionNotification } from '../services/emailService';
+import { cache } from '../utils/cache';
 
 export class VenueController {
   private venueService: VenueService;
@@ -84,6 +85,29 @@ export class VenueController {
     }
 
     res.json(venue);
+  };
+
+  recordView = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const id = String(req.params.id ?? '');
+      const dedupKey = `venue_view_dedup:${req.ip ?? 'unknown'}:${id}`;
+
+      if (cache.get(dedupKey) !== null) {
+        res.status(204).send();
+        return;
+      }
+
+      await this.venueService.incrementViewCount(id);
+      cache.set(dedupKey, true, 60);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No document to update')) {
+        res.status(404).json({ error: 'Venue not found' });
+        return;
+      }
+      console.error('Error recording venue view:', error);
+      res.status(500).json({ error: 'Failed to record venue view' });
+    }
   };
 
   updateVenue = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

@@ -125,6 +125,7 @@ export interface Venue {
   mrtWalkMinutes: number | null;
   capacityRange: CapacityRange | null;
   eventCount: number;
+  viewCount?: number;
   coverPhoto: string;
   otherPhotos: string[];
   description: string;

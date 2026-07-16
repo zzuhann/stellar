@@ -197,6 +197,13 @@ export class VenueService {
     return detail;
   }
 
+  async incrementViewCount(id: string): Promise<void> {
+    this.checkFirebaseConfig();
+    await this.collection.doc(id).update({
+      viewCount: FieldValue.increment(1),
+    });
+  }
+
   async updateVenue(id: string, data: UpdateVenueData): Promise<boolean> {
     this.checkFirebaseConfig();
 
