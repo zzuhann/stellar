@@ -6,7 +6,7 @@
  * 2) 產出每日 KPI 報表（CSV + Markdown）
  *
  * 使用方式（範例）：
- *   npx ts-node src/scripts/build-venue-kpi-report.ts --start=2026-05-01 --end=2026-05-28 --ga=./reports/venues/ga-export.csv
+ *   npx tsx src/scripts/build-venue-kpi-report.ts --start=2026-05-01 --end=2026-05-28 --ga=./reports/venues/ga-export.csv
  *
  * GA CSV 欄位要求（最小）：
  * - date（YYYYMMDD）
