@@ -254,3 +254,74 @@ describe('VenueService.batchStatus', () => {
     expect(mockUpdate).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('VenueService.getVenues random sampling', () => {
+  const venues = Array.from({ length: 12 }, (_, index) => ({
+    id: `venue-${index + 1}`,
+    name: `場地 ${index + 1}`,
+    address: '台北市測試路 1 號',
+    region: index < 5 ? '台北' : '新北',
+    lat: 25,
+    lng: 121,
+    nearestMrt: '',
+    mrtWalkMinutes: null,
+    capacityRange: '20-40' as const,
+    eventCount: index,
+    coverPhoto: '',
+    otherPhotos: [],
+    description: '',
+    hostTags: [],
+    status: (index === 11 ? 'inactive' : 'active') as 'active' | 'inactive',
+  }));
+
+  let getWithLockSpy: jest.SpyInstance;
+  let randomSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+    randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+    randomSpy.mockRestore();
+  });
+
+  it('只從 active 場地抽出指定數量，且不重複', async () => {
+    const result = await new VenueService().getVenues({ sort: 'random', limit: 10 });
+
+    expect(result).toHaveLength(10);
+    expect(new Set(result.map(venue => venue.id)).size).toBe(10);
+    expect(result.every(venue => venue.status === 'active')).toBe(true);
+  });
+
+  it('符合條件的場地不足 limit 時回傳全部', async () => {
+    const result = await new VenueService().getVenues({
+      region: ['台北'],
+      sort: 'random',
+      limit: 10,
+    });
+
+    expect(result.map(venue => venue.id)).toEqual([
+      'venue-1',
+      'venue-2',
+      'venue-3',
+      'venue-4',
+      'venue-5',
+    ]);
+  });
+
+  it('每次 request 都重新執行抽樣，同時重用 venues:all cache', async () => {
+    const service = new VenueService();
+
+    await service.getVenues({ sort: 'random', limit: 10 });
+    await service.getVenues({ sort: 'random', limit: 10 });
+
+    expect(randomSpy).toHaveBeenCalledTimes(20);
+    expect(getWithLockSpy).toHaveBeenCalledTimes(2);
+    expect(getWithLockSpy).toHaveBeenCalledWith('venues:all', expect.any(Function), 1440);
+  });
+});

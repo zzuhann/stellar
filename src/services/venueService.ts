@@ -471,7 +471,7 @@ export class VenueService {
   }
 
   async getVenues(params: VenueFilterParams): Promise<Venue[]> {
-    const { region, capacityRange, sort, status } = params;
+    const { region, capacityRange, sort, limit, status } = params;
 
     let venues = await this.fetchAll();
 
@@ -486,6 +486,18 @@ export class VenueService {
 
     if (capacityRange !== undefined) {
       venues = venues.filter(v => v.capacityRange === capacityRange);
+    }
+
+    if (sort === 'random' && limit !== undefined) {
+      const sampled = [...venues];
+      const sampleSize = Math.min(limit, sampled.length);
+
+      for (let index = 0; index < sampleSize; index++) {
+        const swapIndex = index + Math.floor(Math.random() * (sampled.length - index));
+        [sampled[index], sampled[swapIndex]] = [sampled[swapIndex], sampled[index]];
+      }
+
+      return sampled.slice(0, sampleSize);
     }
 
     if (sort === 'name') {

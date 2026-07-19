@@ -104,4 +104,27 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
 
     expect(getPassedStatus()).toBeUndefined();
   });
+
+  it('接受首頁 random 10 查詢', async () => {
+    const req = buildReq({ sort: 'random', limit: '10' });
+
+    await controller.getVenues(req, res as Response);
+
+    expect(mockGetVenues).toHaveBeenCalledWith({ sort: 'random', limit: 10 });
+  });
+
+  it.each([
+    [{ sort: 'random' }, 'limit is required when sort is "random"'],
+    [{ sort: 'random', limit: '0' }, 'limit must be a positive integer'],
+    [{ sort: 'random', limit: '1.5' }, 'limit must be a positive integer'],
+    [{ sort: 'newest', limit: '10' }, 'limit is only supported when sort is "random"'],
+  ])('拒絕不合法的 random/limit 組合：%o', async (query, error) => {
+    const req = buildReq(query);
+
+    await controller.getVenues(req, res as Response);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error });
+    expect(mockGetVenues).not.toHaveBeenCalled();
+  });
 });

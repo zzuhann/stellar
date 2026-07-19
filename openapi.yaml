@@ -219,6 +219,16 @@ paths:
           name: region
           schema: { type: array, items: { type: string } }
         - in: query
+          name: capacityRange
+          schema: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [eventCount, name, newest, random], default: eventCount }
+        - in: query
+          name: limit
+          description: 僅搭配 sort=random 使用，且必須為正整數
+          schema: { type: integer, minimum: 1 }
+        - in: query
           name: status
           schema: { type: string }
       responses:
@@ -227,8 +237,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Venue' }
+                type: object
+                required: [venues]
+                properties:
+                  venues:
+                    type: array
+                    items: { $ref: '#/components/schemas/Venue' }
+        '400': { description: sort 或 limit 參數組合不合法 }
     post:
       tags: [venues]
       summary: 新增場地（僅 admin）
