@@ -27,15 +27,48 @@ export class ImageService {
     }
   }
 
+  // 檢查 buffer 開頭是否符合指定 magic bytes
+  private matchesMagicBytes(buffer: Buffer, signature: number[]): boolean {
+    if (buffer.length < signature.length) {
+      return false;
+    }
+    return signature.every((byte, index) => buffer[index] === byte);
+  }
+
+  // 檢查 buffer 實際內容是否為宣稱的 mimetype 對應的真實圖片格式
+  private isValidImageContent(buffer: Buffer, mimetype: string): boolean {
+    switch (mimetype) {
+      case 'image/jpeg':
+      case 'image/jpg':
+        return this.matchesMagicBytes(buffer, [0xff, 0xd8, 0xff]);
+      case 'image/png':
+        return this.matchesMagicBytes(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      case 'image/webp':
+        return (
+          buffer.length >= 12 &&
+          buffer.toString('ascii', 0, 4) === 'RIFF' &&
+          buffer.toString('ascii', 8, 12) === 'WEBP'
+        );
+      default:
+        return false;
+    }
+  }
+
   // 驗證檔案類型
   private validateFile(file: Express.Multer.File): { valid: boolean; error?: string } {
     const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
     const maxSize = 5 * 1024 * 1024; // 5MB
+    const minSize = 1024; // 1KB，真實圖片不可能小於此大小
 
-    // 檢查檔案大小
+    // 檢查檔案大小上限
     if (file.size > maxSize) {
       return { valid: false, error: '檔案過大' };
+    }
+
+    // 檢查檔案大小下限
+    if (file.size < minSize) {
+      return { valid: false, error: '檔案過小或內容不完整' };
     }
 
     // 檢查 MIME type
@@ -46,6 +79,11 @@ export class ImageService {
     // 檢查副檔名
     const ext = path.extname(file.originalname).toLowerCase();
     if (!allowedExtensions.includes(ext)) {
+      return { valid: false, error: '檔案格式不支援' };
+    }
+
+    // 檢查 magic bytes：檔案實際內容需與宣稱的 mimetype 相符，避免偽造 header 的假圖片
+    if (!this.isValidImageContent(file.buffer, file.mimetype)) {
       return { valid: false, error: '檔案格式不支援' };
     }
 
