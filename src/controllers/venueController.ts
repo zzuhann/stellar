@@ -31,7 +31,7 @@ export class VenueController {
   };
 
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { region, capacityRange, sort, status } = req.query;
+    const { region, capacityRange, sort, status, limit } = req.query;
 
     const params: VenueFilterParams = {};
 
@@ -49,11 +49,32 @@ export class VenueController {
     }
 
     if (sort !== undefined) {
-      if (sort !== 'eventCount' && sort !== 'name' && sort !== 'newest') {
-        res.status(400).json({ error: 'sort must be "eventCount", "name", or "newest"' });
+      if (sort !== 'eventCount' && sort !== 'name' && sort !== 'newest' && sort !== 'random') {
+        res.status(400).json({
+          error: 'sort must be "eventCount", "name", "newest", or "random"',
+        });
         return;
       }
       params.sort = sort;
+    }
+
+    if (sort === 'random' && limit === undefined) {
+      res.status(400).json({ error: 'limit is required when sort is "random"' });
+      return;
+    }
+
+    if (limit !== undefined) {
+      if (sort !== 'random') {
+        res.status(400).json({ error: 'limit is only supported when sort is "random"' });
+        return;
+      }
+
+      const parsedLimit = typeof limit === 'string' && /^\d+$/.test(limit) ? Number(limit) : NaN;
+      if (!Number.isSafeInteger(parsedLimit) || parsedLimit <= 0) {
+        res.status(400).json({ error: 'limit must be a positive integer' });
+        return;
+      }
+      params.limit = parsedLimit;
     }
 
     if (status !== undefined) {
