@@ -8,9 +8,11 @@ const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models
 // 已依 requirements.md／design-backend.md 的抽取要求撰寫，涵蓋：
 // - 無法可靠判斷的欄位回 null，不猜測、不捏造
 // - 沒寫結束日期時 eventDateEnd 回 null，不假設等於開始日期
-// - 明確區分「店家營業時間」與「活動時段」
 // - 日期沒寫年份時，依提供的今天日期推算正確年份
 // - 地址只取地址本體，不混入方向指引文字（例如捷運 X 號出口）
+//
+// 不抽取活動時段（timeStart/timeEnd）：這支匯入功能的欄位刻意與既有
+// EventSubmissionForm 對齊，該表單只有 startDate/endDate 日期，沒有時段欄位。
 const EXTRACTION_PROMPT = `你是專門從台灣 Instagram／Threads 生日應援咖啡廳貼文中抽取活動資訊的助手。
 請閱讀下方貼文文案，抽取以下欄位，並嚴格依照指定的 JSON 結構回傳：
 
@@ -18,8 +20,6 @@ const EXTRACTION_PROMPT = `你是專門從台灣 Instagram／Threads 生日應�
 - artistName：貼文提到的藝人／偶像名字（僅供人工參考，不用做比對）
 - eventDateStart：活動開始日期，格式 YYYY-MM-DD
 - eventDateEnd：活動結束日期，格式 YYYY-MM-DD；貼文沒有明確寫結束日期時回傳 null，不要假設等於開始日期
-- timeStart：活動當天的開始時段，格式 HH:mm（24 小時制）
-- timeEnd：活動當天的結束時段，格式 HH:mm（24 小時制）
 - locationName：店名
 - locationAddress：地址本體，只取地址文字，不要包含捷運站、出口、地標等方向指引文字
 - socialHandles：貼文中出現的社群帳號，格式為 "平台:帳號"（例如 "instagram:@example"、"threads:@example"），平台只用 instagram 或 threads
@@ -27,10 +27,9 @@ const EXTRACTION_PROMPT = `你是專門從台灣 Instagram／Threads 生日應�
 
 重要規則：
 1. 任何欄位如果無法從文案可靠判斷，一律回傳 null（socialHandles 找不到則回傳空陣列），絕對不要猜測或捏造內容。
-2. 務必區分「店家一般營業時間」與「活動當天的特定時段」：只有貼文明確標示這是應援活動當天的時段才填入 timeStart／timeEnd，一般營業時間不算活動時段，此時回 null。
-3. 若日期沒有寫年份（例如「8/1(六)」），請依下方提供的「今天日期」推算合理的年份（優先假設是今天之後最接近的日期）。
-4. locationAddress 只填地址本體，不要混入「捷運 OO 站 X 號出口」之類的到達方式說明文字。
-5. 只回傳 JSON，不要有其他文字說明。`;
+2. 若日期沒有寫年份（例如「8/1(六)」），請依下方提供的「今天日期」推算合理的年份（優先假設是今天之後最接近的日期）。
+3. locationAddress 只填地址本體，不要混入「捷運 OO 站 X 號出口」之類的到達方式說明文字。
+4. 只回傳 JSON，不要有其他文字說明。`;
 
 const GEMINI_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -39,8 +38,6 @@ const GEMINI_RESPONSE_SCHEMA = {
     artistName: { type: 'STRING', nullable: true },
     eventDateStart: { type: 'STRING', nullable: true },
     eventDateEnd: { type: 'STRING', nullable: true },
-    timeStart: { type: 'STRING', nullable: true },
-    timeEnd: { type: 'STRING', nullable: true },
     locationName: { type: 'STRING', nullable: true },
     locationAddress: { type: 'STRING', nullable: true },
     socialHandles: { type: 'ARRAY', items: { type: 'STRING' } },
@@ -51,8 +48,6 @@ const GEMINI_RESPONSE_SCHEMA = {
     'artistName',
     'eventDateStart',
     'eventDateEnd',
-    'timeStart',
-    'timeEnd',
     'locationName',
     'locationAddress',
     'socialHandles',
@@ -67,8 +62,6 @@ const geminiExtractionSchema = z.object({
   artistName: z.string().nullable(),
   eventDateStart: z.string().nullable(),
   eventDateEnd: z.string().nullable(),
-  timeStart: z.string().nullable(),
-  timeEnd: z.string().nullable(),
   locationName: z.string().nullable(),
   locationAddress: z.string().nullable(),
   socialHandles: z.array(z.string()),
@@ -84,8 +77,6 @@ export interface ParsedCaptionFields {
   artistName: string | null;
   eventDateStart: string | null;
   eventDateEnd: string | null;
-  timeStart: string | null;
-  timeEnd: string | null;
   location: ParsedLocation | null;
   socialMedia: { instagram?: string; threads?: string } | null;
   redemptionCondition: string | null;
@@ -99,7 +90,6 @@ export interface ParsedCaptionResult {
 }
 
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_FORMAT = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function isValidCalendarDate(dateStr: string): boolean {
   if (!DATE_FORMAT.test(dateStr)) return false;
@@ -136,12 +126,6 @@ function sanitizeDates(
   }
 
   return { eventDateStart: start, eventDateEnd: end };
-}
-
-function sanitizeTime(field: 'timeStart' | 'timeEnd', value: string | null): string | null {
-  if (value === null || TIME_FORMAT.test(value)) return value;
-  console.warn(`parse-caption: ${field} 格式不符，丟回 null`, { value });
-  return null;
 }
 
 function parseSocialHandles(handles: string[]): { instagram?: string; threads?: string } | null {
@@ -194,8 +178,6 @@ async function buildParsedFields(extraction: GeminiExtraction): Promise<ParsedCa
     extraction.eventDateStart,
     extraction.eventDateEnd
   );
-  const timeStart = sanitizeTime('timeStart', extraction.timeStart);
-  const timeEnd = sanitizeTime('timeEnd', extraction.timeEnd);
 
   const locationText = [extraction.locationName, extraction.locationAddress]
     .filter(Boolean)
@@ -210,8 +192,6 @@ async function buildParsedFields(extraction: GeminiExtraction): Promise<ParsedCa
     artistName: extraction.artistName,
     eventDateStart,
     eventDateEnd,
-    timeStart,
-    timeEnd,
     location,
     socialMedia,
     redemptionCondition: extraction.redemptionCondition,

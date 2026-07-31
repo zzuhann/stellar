@@ -23,8 +23,6 @@ function baseExtraction(overrides: Record<string, unknown> = {}) {
     artistName: '小明',
     eventDateStart: '2026-08-01',
     eventDateEnd: null,
-    timeStart: '14:00',
-    timeEnd: '18:00',
     locationName: '某咖啡廳',
     locationAddress: '台北市大安區',
     socialHandles: ['instagram:@example', 'threads:@example2'],
@@ -69,8 +67,6 @@ describe('ImportService.parseCaption', () => {
       artistName: '小明',
       eventDateStart: '2026-08-01',
       eventDateEnd: null,
-      timeStart: '14:00',
-      timeEnd: '18:00',
       location: {
         name: '某咖啡廳',
         address: '台北市大安區某路 1 號',
@@ -147,18 +143,6 @@ describe('ImportService.parseCaption', () => {
     const result = await service.parseCaption('貼文文案原文');
 
     expect(result.parsed?.eventDateStart).toBeNull();
-  });
-
-  it('時間格式不符 24 小時制時，該欄位丟回 null', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue(
-        geminiOkResponse(baseExtraction({ timeStart: '25:61' }))
-      ) as unknown as typeof fetch;
-
-    const result = await service.parseCaption('貼文文案原文');
-
-    expect(result.parsed?.timeStart).toBeNull();
   });
 
   it('Gemini 回傳內容不符 schema（缺欄位）時，回傳 parse_failed', async () => {
