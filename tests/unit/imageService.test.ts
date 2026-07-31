@@ -24,6 +24,14 @@ function fakePngBuffer(size = 2048): Buffer {
   return buffer;
 }
 
+// 合法 JPEG signature + 補到超過 minSize（1KB）的 padding
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
+function fakeJpegBuffer(size = 2048): Buffer {
+  const buffer = Buffer.alloc(size);
+  JPEG_SIGNATURE.copy(buffer, 0);
+  return buffer;
+}
+
 describe('ImageService.uploadImageFromUrl', () => {
   let service: ImageService;
 
@@ -45,6 +53,43 @@ describe('ImageService.uploadImageFromUrl', () => {
     expect(result.success).toBe(true);
     expect(result.imageUrl).toMatch(/^https:\/\/cdn\.example\.com\/images\//);
     expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('來源網址路徑副檔名與實際 content-type 不符時（例如 IG CDN 的 .heic 路徑實為 jpeg），仍成功上傳', async () => {
+    // 對應真實案例：IG CDN 網址路徑是 xxx_n.heic，但伺服器回的 content-type 是 image/jpeg
+    // （.heic 只是 IG 內部命名，不代表實際 served 格式）。副檔名檢查應該依 content-type
+    // 判斷，不能相信來源網址路徑，否則會誤擋合法圖片。
+    const body = fakeJpegBuffer();
+    mockFetchWithSsrfGuard.mockResolvedValue({
+      ok: true,
+      response: new Response(body, { status: 200, headers: { 'content-type': 'image/jpeg' } }),
+    });
+
+    const result = await service.uploadImageFromUrl(
+      'https://instagram.ftpe9-1.fna.fbcdn.net/v/t51.82787-15/755734804_n.heic?stp=dst-jpg_e35_tt6'
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.imageUrl).toMatch(/^https:\/\/cdn\.example\.com\/images\/.*\.jpg$/);
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('來源網址路徑沒有副檔名，content-type 是 image/webp 時，仍成功上傳且檔名副檔名正確', async () => {
+    const body = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.alloc(4),
+      Buffer.from('WEBP'),
+      Buffer.alloc(2040),
+    ]);
+    mockFetchWithSsrfGuard.mockResolvedValue({
+      ok: true,
+      response: new Response(body, { status: 200, headers: { 'content-type': 'image/webp' } }),
+    });
+
+    const result = await service.uploadImageFromUrl('https://example.com/download?id=abc123');
+
+    expect(result.success).toBe(true);
+    expect(result.imageUrl).toMatch(/^https:\/\/cdn\.example\.com\/images\/.*\.webp$/);
   });
 
   it('SSRF 防護擋下網址時，回傳 blocked_host，不呼叫 R2', async () => {

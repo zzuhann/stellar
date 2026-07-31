@@ -25,6 +25,17 @@ export interface FetchImageResult extends UploadResult {
 const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_FETCH_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB，與既有 validateFile 上限一致
 
+// content-type → 副檔名對應表，用於 uploadImageFromUrl 組 pseudoFile.originalname。
+// 不能相信來源網址路徑本身的副檔名：CDN（例如 IG）常見用內部／歷史命名，副檔名
+// 跟實際 served 的 content-type 可能不一致（例如路徑是 .heic，但 content-type 是
+// image/jpeg），若拿路徑副檔名去跑 validateFile 的副檔名檢查，會誤擋掉合法圖片。
+const CONTENT_TYPE_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+
 // 邊讀邊計數位元組，超過上限立即中止連線，不等下載完才判斷過大
 // （來源不受信任，提早擋比 validateFile 現有的「先有完整 buffer 才檢查大小」更安全）
 async function readWithSizeCap(
@@ -247,11 +258,13 @@ export class ImageService {
       return { success: false, error: '圖片檔案過大', reason: 'size_out_of_range' };
     }
 
+    // 副檔名從已驗證過的 contentType 推導，不用來源網址路徑的副檔名（不可靠，見上方常數註解）
+    const ext = CONTENT_TYPE_TO_EXT[contentType] ?? '';
     const pseudoFile = {
       buffer,
       mimetype: contentType,
       size: buffer.length,
-      originalname: new URL(sourceUrl).pathname.split('/').pop() || 'image',
+      originalname: `image${ext}`,
     } as Express.Multer.File;
 
     try {
