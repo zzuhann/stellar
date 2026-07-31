@@ -57,3 +57,21 @@ export const venueSubmissionPlacesLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many place searches, please try again later' },
 });
+
+// 貼文匯入輔助（僅限 admin）：非規則強制要求（端點本身已需要登入），
+// 純粹防呆，避免 token 外流或誤觸發造成 Gemini/R2 費用暴增，見 design-backend.md
+export const importParseCaptionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many caption parse requests, please try again later' },
+});
+
+export const importFetchImageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many image fetch requests, please try again later' },
+});
