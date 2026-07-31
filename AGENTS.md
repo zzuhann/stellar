@@ -113,6 +113,7 @@ OAUTH_STATE_SECRET=
 
 # 其他
 GOOGLE_MAPS_API_KEY=
+GEMINI_API_KEY=            # 貼文半自動匯入輔助（POST /api/import/parse-caption），僅後端使用，未設定時該端點回 503
 FRONTEND_URL=              # https://www.stellar-zone.com
 ADDITIONAL_CORS_ORIGINS=   # 額外允許的 CORS origin（逗號分隔）
 PORT=3001
@@ -150,6 +151,7 @@ DOCS_PASSWORD=             # /api/docs 的 HTTP Basic Auth 密碼（未設定時
 - `specs/features/page-view-tracking/design-backend.md` — 瀏覽量追蹤
 - `specs/features/top-artists/design-backend.md` — 熱門藝人 API
 - `specs/features/email-notification/design-backend.md` — Email 通知
+- `specs/features/event-import-assistant/design-backend.md` — 貼文半自動匯入輔助（Gemini 文案解析、圖片網址抓取，僅限管理員）
 
 ---
 
