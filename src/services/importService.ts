@@ -23,7 +23,6 @@ const EXTRACTION_PROMPT = `你是專門從台灣 Instagram／Threads 生日應�
 - locationName：店名
 - locationAddress：地址本體，只取地址文字，不要包含捷運站、出口、地標等方向指引文字
 - socialHandles：貼文中出現的社群帳號，格式為 "平台:帳號"（例如 "instagram:@example"、"threads:@example"），平台只用 instagram 或 threads
-- redemptionCondition：兌換／領取活動贈品或服務的條件（例如「消費飲品即可兌換小卡」）
 
 重要規則：
 1. 任何欄位如果無法從文案可靠判斷，一律回傳 null（socialHandles 找不到則回傳空陣列），絕對不要猜測或捏造內容。
@@ -41,7 +40,6 @@ const GEMINI_RESPONSE_SCHEMA = {
     locationName: { type: 'STRING', nullable: true },
     locationAddress: { type: 'STRING', nullable: true },
     socialHandles: { type: 'ARRAY', items: { type: 'STRING' } },
-    redemptionCondition: { type: 'STRING', nullable: true },
   },
   required: [
     'title',
@@ -51,7 +49,6 @@ const GEMINI_RESPONSE_SCHEMA = {
     'locationName',
     'locationAddress',
     'socialHandles',
-    'redemptionCondition',
   ],
 };
 
@@ -65,7 +62,6 @@ const geminiExtractionSchema = z.object({
   locationName: z.string().nullable(),
   locationAddress: z.string().nullable(),
   socialHandles: z.array(z.string()),
-  redemptionCondition: z.string().nullable(),
 });
 
 type GeminiExtraction = z.infer<typeof geminiExtractionSchema>;
@@ -79,7 +75,6 @@ export interface ParsedCaptionFields {
   eventDateEnd: string | null;
   location: ParsedLocation | null;
   socialMedia: { instagram?: string; threads?: string } | null;
-  redemptionCondition: string | null;
 }
 
 export interface ParsedCaptionResult {
@@ -194,7 +189,6 @@ async function buildParsedFields(extraction: GeminiExtraction): Promise<ParsedCa
     eventDateEnd,
     location,
     socialMedia,
-    redemptionCondition: extraction.redemptionCondition,
   };
 }
 

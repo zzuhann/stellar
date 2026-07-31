@@ -26,7 +26,6 @@ function baseExtraction(overrides: Record<string, unknown> = {}) {
     locationName: '某咖啡廳',
     locationAddress: '台北市大安區',
     socialHandles: ['instagram:@example', 'threads:@example2'],
-    redemptionCondition: '消費飲品即可兌換小卡',
     ...overrides,
   };
 }
@@ -75,7 +74,6 @@ describe('ImportService.parseCaption', () => {
         placeId: 'place-123',
       },
       socialMedia: { instagram: '@example', threads: '@example2' },
-      redemptionCondition: '消費飲品即可兌換小卡',
     });
     expect(mockResolveLocation).toHaveBeenCalledWith('某咖啡廳 台北市大安區');
   });
