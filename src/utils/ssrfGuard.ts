@@ -119,9 +119,17 @@ const MAX_REDIRECTS = 5;
 
 export type GuardedFetchFailureReason = 'blocked_host' | 'fetch_failed';
 
-export type GuardedFetchResult =
-  | { ok: true; response: globalThis.Response }
-  | { ok: false; reason: GuardedFetchFailureReason; error: string };
+// 刻意用扁平、欄位皆為 optional 的 interface，不用 discriminated union：
+// 這個專案的 tsconfig 是 `strict: false`（未開 strictNullChecks），
+// 在這個設定下 `if (!result.ok)` 無法正確 narrow 出 union 的另一個分支
+// （已用最小重現案例驗證），比照專案既有 `UploadResult`/`DeleteResult` 的寫法，
+// 呼叫端改用 `result.ok`／`result.response` 的存在與否判斷，不依賴 union narrowing。
+export interface GuardedFetchResult {
+  ok: boolean;
+  response?: globalThis.Response;
+  reason?: GuardedFetchFailureReason;
+  error?: string;
+}
 
 async function fetchWithTimeout(
   url: string,
