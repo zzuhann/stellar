@@ -60,9 +60,16 @@ if (hasFirebaseConfig) {
     res
       .status(503)
       .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  ['/artists', '/events', '/users', '/venues', '/venue-submissions', '/cache', '/auth', '/import'].forEach(
-    p => router.use(p, firebaseUnavailable)
-  );
+  [
+    '/artists',
+    '/events',
+    '/users',
+    '/venues',
+    '/venue-submissions',
+    '/cache',
+    '/auth',
+    '/import',
+  ].forEach(p => router.use(p, firebaseUnavailable));
 }
 
 export default router;

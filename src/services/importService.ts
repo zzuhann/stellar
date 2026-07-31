@@ -144,9 +144,7 @@ function sanitizeTime(field: 'timeStart' | 'timeEnd', value: string | null): str
   return null;
 }
 
-function parseSocialHandles(
-  handles: string[]
-): { instagram?: string; threads?: string } | null {
+function parseSocialHandles(handles: string[]): { instagram?: string; threads?: string } | null {
   const result: { instagram?: string; threads?: string } = {};
 
   for (const raw of handles) {
@@ -175,7 +173,11 @@ async function callGemini(caption: string): Promise<globalThis.Response> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [
-          { parts: [{ text: `${EXTRACTION_PROMPT}\n\n今天日期：${today}\n\n貼文文案：\n${caption}` }] },
+          {
+            parts: [
+              { text: `${EXTRACTION_PROMPT}\n\n今天日期：${today}\n\n貼文文案：\n${caption}` },
+            ],
+          },
         ],
         generationConfig: {
           responseMimeType: 'application/json',

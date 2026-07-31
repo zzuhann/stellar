@@ -161,9 +161,11 @@ describe('fetchWithSsrfGuard', () => {
   });
 
   it('redirect 跳轉到私網位址時，第二跳被擋下', async () => {
-    const mockFetch = jest.fn().mockResolvedValueOnce(
-      new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/secret' } })
-    );
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/secret' } })
+      );
     global.fetch = mockFetch as unknown as typeof fetch;
 
     const result = await fetchWithSsrfGuard('https://8.8.8.8/redirect-me');

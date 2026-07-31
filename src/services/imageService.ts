@@ -226,7 +226,8 @@ export class ImageService {
       };
     }
 
-    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
+    const contentType =
+      response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
     if (!ALLOWED_IMAGE_MIME_TYPES.includes(contentType)) {
       return {
         success: false,

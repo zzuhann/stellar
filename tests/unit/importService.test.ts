@@ -57,7 +57,9 @@ describe('ImportService.parseCaption', () => {
   });
 
   it('回傳格式正確時，成功解析並套用欄位對應', async () => {
-    global.fetch = jest.fn().mockResolvedValue(geminiOkResponse(baseExtraction())) as unknown as typeof fetch;
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(geminiOkResponse(baseExtraction())) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -99,7 +101,9 @@ describe('ImportService.parseCaption', () => {
   it('socialHandles 為空陣列時，socialMedia 回 null', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(geminiOkResponse(baseExtraction({ socialHandles: [] }))) as unknown as typeof fetch;
+      .mockResolvedValue(
+        geminiOkResponse(baseExtraction({ socialHandles: [] }))
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -124,7 +128,9 @@ describe('ImportService.parseCaption', () => {
   it('日期格式不符（不是 YYYY-MM-DD）時，該欄位丟回 null', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(geminiOkResponse(baseExtraction({ eventDateStart: '2026/08/01' }))) as unknown as typeof fetch;
+      .mockResolvedValue(
+        geminiOkResponse(baseExtraction({ eventDateStart: '2026/08/01' }))
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -134,7 +140,9 @@ describe('ImportService.parseCaption', () => {
   it('日期是不存在的日曆日（例如 2/30）時，該欄位丟回 null', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(geminiOkResponse(baseExtraction({ eventDateStart: '2026-02-30' }))) as unknown as typeof fetch;
+      .mockResolvedValue(
+        geminiOkResponse(baseExtraction({ eventDateStart: '2026-02-30' }))
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -144,7 +152,9 @@ describe('ImportService.parseCaption', () => {
   it('時間格式不符 24 小時制時，該欄位丟回 null', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(geminiOkResponse(baseExtraction({ timeStart: '25:61' }))) as unknown as typeof fetch;
+      .mockResolvedValue(
+        geminiOkResponse(baseExtraction({ timeStart: '25:61' }))
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -168,7 +178,9 @@ describe('ImportService.parseCaption', () => {
     };
     global.fetch = jest
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify(malformedBody), { status: 200 })) as unknown as typeof fetch;
+      .mockResolvedValue(
+        new Response(JSON.stringify(malformedBody), { status: 200 })
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
@@ -179,7 +191,9 @@ describe('ImportService.parseCaption', () => {
   it('Gemini 回應缺少 candidates 時，回傳 parse_failed', async () => {
     global.fetch = jest
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
+      .mockResolvedValue(
+        new Response(JSON.stringify({}), { status: 200 })
+      ) as unknown as typeof fetch;
 
     const result = await service.parseCaption('貼文文案原文');
 
