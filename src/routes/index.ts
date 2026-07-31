@@ -10,6 +10,7 @@ import contactRoutes from './contactRoutes';
 import venueRoutes from './venueRoutes';
 import adminRoutes from './adminRoutes';
 import venueSubmissionRoutes from './venueSubmissionRoutes';
+import importRoutes from './importRoutes';
 import { hasFirebaseConfig } from '../config/firebase';
 import { hasR2Config } from '../config/r2-client';
 
@@ -51,13 +52,16 @@ if (hasFirebaseConfig) {
   router.use('/venues', venueRoutes);
   router.use('/venue-submissions', venueSubmissionRoutes);
   router.use('/admin', adminRoutes);
+  // authenticateToken 依賴 Firestore 的 users collection 查角色，跟其他認證相關路由一樣
+  // 只在 Firebase 可用時掛載
+  router.use('/import', importRoutes);
 } else {
   const firebaseUnavailable = (_req: Request, res: Response) =>
     res
       .status(503)
       .json({ error: 'Firebase 問題，請檢查環境變數. Please set up environment variables first.' });
-  ['/artists', '/events', '/users', '/venues', '/venue-submissions', '/cache', '/auth'].forEach(p =>
-    router.use(p, firebaseUnavailable)
+  ['/artists', '/events', '/users', '/venues', '/venue-submissions', '/cache', '/auth', '/import'].forEach(
+    p => router.use(p, firebaseUnavailable)
   );
 }
 
