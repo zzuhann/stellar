@@ -1,5 +1,6 @@
 import dns from 'dns';
 import net from 'net';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 /**
  * SSRF 防護：`fetch-image` endpoint 讓已登入的 admin 帳號觸發伺服器對任意網址發出 request，
@@ -46,8 +47,12 @@ function isPrivateIpv6(ip: string): boolean {
     return true;
   }
 
-  // fe80::/10：link-local
-  if (normalized.startsWith('fe8') || normalized.startsWith('fe9')) {
+  // fe80::/10：link-local。範圍是第一個 16-bit 群組落在 0xfe80~0xfebf
+  // （即 fe80 ~ febf 開頭都算，例如 fea0::1、feb2::1 也是 link-local）。
+  // 舊版只用字串前綴比對 'fe8'／'fe9'，漏掉 'fea*'／'feb*'，等於這段範圍完全沒被攔到。
+  // 改成把第一個 hextet 解析成數值後判斷區間，不受省略前導零的表示法影響。
+  const firstHextet = parseInt(normalized.split(':')[0] || '', 16);
+  if (!Number.isNaN(firstHextet) && firstHextet >= 0xfe80 && firstHextet <= 0xfebf) {
     return true;
   }
 
@@ -68,14 +73,27 @@ export function isPrivateOrReservedIp(ip: string): boolean {
   return true; // 無法辨識的格式一律視為不安全
 }
 
+// 通過安全檢查後，實際應該拿去連線的 IP。用來把 assertSafePublicUrl 檢查當下驗證過的
+// IP「釘」在後續真正的連線上，見下方 fetchWithTimeout 對 DNS rebinding TOCTOU 的說明。
+export interface PinnedAddress {
+  ip: string;
+  family: 4 | 6;
+}
+
 export interface SafeUrlCheckResult {
   ok: boolean;
   error?: string;
+  pinnedAddress?: PinnedAddress;
 }
 
 /**
  * 檢查單一網址是否可安全存取：protocol 白名單 + hostname/DNS 解析後的 IP 不落在私有/保留範圍。
  * 只檢查「這個網址本身」，不處理 redirect（redirect 由 fetchWithSsrfGuard 逐跳呼叫本函式）。
+ *
+ * 回傳的 pinnedAddress 是這次檢查當下驗證過的其中一個安全 IP，呼叫端應該讓實際發送的
+ * request 直接連到這個 IP（而不是讓 fetch 自己對 hostname 重新做一次 DNS 解析），
+ * 否則會有 DNS rebinding TOCTOU 風險：檢查當下解析出安全 IP，但實際連線時 DNS
+ * 已經改指向內網位址。
  */
 export async function assertSafePublicUrl(rawUrl: string): Promise<SafeUrlCheckResult> {
   let url: URL;
@@ -91,12 +109,13 @@ export async function assertSafePublicUrl(rawUrl: string): Promise<SafeUrlCheckR
 
   const hostname = url.hostname;
 
-  // hostname 本身就是 IP 字面值
+  // hostname 本身就是 IP 字面值：沒有 DNS 解析這一步，不存在 rebinding 問題，
+  // 直接把這個 IP 當作 pinnedAddress。
   if (net.isIP(hostname)) {
     if (isPrivateOrReservedIp(hostname)) {
       return { ok: false, error: '不允許存取內部網路位址' };
     }
-    return { ok: true };
+    return { ok: true, pinnedAddress: { ip: hostname, family: net.isIP(hostname) as 4 | 6 } };
   }
 
   // hostname 是網域名稱，DNS 解析後逐一檢查每個回傳的 IP
@@ -108,11 +127,12 @@ export async function assertSafePublicUrl(rawUrl: string): Promise<SafeUrlCheckR
     if (addresses.some(addr => isPrivateOrReservedIp(addr.address))) {
       return { ok: false, error: '不允許存取內部網路位址' };
     }
+    // 挑其中一筆（第一筆）已驗證過的位址釘住，後續連線不再重新查 DNS
+    const [{ address, family }] = addresses;
+    return { ok: true, pinnedAddress: { ip: address, family: family as 4 | 6 } };
   } catch {
     return { ok: false, error: '無法解析網址主機' };
   }
-
-  return { ok: true };
 }
 
 const MAX_REDIRECTS = 5;
@@ -131,15 +151,72 @@ export interface GuardedFetchResult {
   error?: string;
 }
 
+// Node net 模組 lookup option 的 callback 簽名（型別未對外匯出，這裡照文件手刻一份）。
+// Node 20+ 的 net/tls connect 預設走 Happy Eyeballs（dual-stack 並行嘗試），會用
+// `{ all: true }` 呼叫 lookup、並期待 callback 收到「位址陣列」而不是單一位址字串；
+// 沒有 all 時才是單一位址的舊式簽名。兩種呼叫方式都要支援，只實作其中一種在 Node 20+
+// 下會直接連線失敗（已用下方 fetchWithSsrfGuard 的整合測試實測驗證過這個分歧）。
+type NodeLookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | { address: string; family: number }[],
+  family?: number
+) => void;
+type NodeLookupOptions = { all?: boolean };
+
+/**
+ * 建立一個「不查 DNS、直接回傳已釘住的 IP」的 lookup function，塞進 undici Agent 的
+ * `connect.lookup`。Node 的 net/tls connect 預設會用 dns.lookup(hostname, ...) 自己重新
+ * 解析一次 hostname 才建立 TCP 連線；用這個 lookup 頂替掉那次解析，讓實際連線走的是
+ * assertSafePublicUrl 檢查當下就已經驗證過安全的那個 IP，而不是連線當下才臨時查到、
+ * 可能已經被攻擊者透過 DNS rebinding 改指向內網的位址。
+ */
+function createPinnedLookup(pinnedAddress: PinnedAddress) {
+  return (_hostname: string, options: NodeLookupOptions, callback: NodeLookupCallback): void => {
+    if (options?.all) {
+      callback(null, [{ address: pinnedAddress.ip, family: pinnedAddress.family }]);
+    } else {
+      callback(null, pinnedAddress.ip, pinnedAddress.family);
+    }
+  };
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
-  timeoutMs: number
+  timeoutMs: number,
+  pinnedAddress: PinnedAddress
 ): Promise<globalThis.Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  // dispatcher 只服務這一次連線：連線目標被釘死在 pinnedAddress，不會被其他呼叫共用，
+  // 也就不需要處理跨請求的連線池重用問題。不手動呼叫 agent.close()：呼叫端可能還在
+  // 串流讀取 response body，這裡就把連線關掉會中斷讀取；交給 undici 預設的
+  // keepAliveTimeout（4 秒無活動）在使用完後自動回收即可。
+  const agent = new Agent({
+    connect: {
+      lookup: createPinnedLookup(pinnedAddress),
+      // TLS 憑證／SNI 仍然驗證原始 hostname（來自 url 本身，不受這裡影響），
+      // 只有「連去哪個 IP」被釘住，不影響憑證主機名稱驗證的正確性。
+    } as ConstructorParameters<typeof Agent>[0]['connect'],
+  });
+
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    // 刻意用 `undici` 套件自己的 fetch，不用 Node 全域的 fetch：Node 全域 fetch 底下綁的是
+    // Node 自己內建、版本固定的 undici，若把外部安裝的 `undici` 套件生成的 Agent
+    // 塞進全域 fetch 的 dispatcher，兩邊 undici 版本的 dispatch handler 協定對不上，
+    // 會直接丟出 `InvalidArgumentError: invalid onRequestStart method`（已實測重現）。
+    // Agent 跟 fetch 必須來自同一個 undici 版本才相容。
+    // undici 套件自帶的 Response 型別跟 @types/node 全域 Response 型別在極少數 iterator
+    // 相關型別細節上對不齊（實際上都是標準 WHATWG Response，執行期行為一致），
+    // 這裡用型別轉換橋接，呼叫端一律用回傳值上既有的 headers/status/arrayBuffer 等
+    // 標準 Fetch API 存取，不受影響。
+    const response = await undiciFetch(url, {
+      ...init,
+      signal: controller.signal,
+      dispatcher: agent,
+    } as Parameters<typeof undiciFetch>[1]);
+    return response as unknown as globalThis.Response;
   } finally {
     clearTimeout(timer);
   }
@@ -159,13 +236,18 @@ export async function fetchWithSsrfGuard(
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const guard = await assertSafePublicUrl(currentUrl);
-    if (!guard.ok) {
+    if (!guard.ok || !guard.pinnedAddress) {
       return { ok: false, reason: 'blocked_host', error: guard.error ?? '不允許存取的網址' };
     }
 
     let response: globalThis.Response;
     try {
-      response = await fetchWithTimeout(currentUrl, { redirect: 'manual' }, timeoutMs);
+      response = await fetchWithTimeout(
+        currentUrl,
+        { redirect: 'manual' },
+        timeoutMs,
+        guard.pinnedAddress
+      );
     } catch {
       return { ok: false, reason: 'fetch_failed', error: '來源圖片無法取得，網址可能已失效' };
     }

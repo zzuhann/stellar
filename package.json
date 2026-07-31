@@ -48,6 +48,7 @@
     "multer": "^2.1.1",
     "resend": "^6.12.2",
     "swagger-ui-express": "^5.0.1",
+    "undici": "^8.9.0",
     "yaml": "^2.9.0",
     "zod": "^4.3.6"
   },
