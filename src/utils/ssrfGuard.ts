@@ -56,11 +56,28 @@ function isPrivateIpv6(ip: string): boolean {
     return true;
   }
 
-  // IPv4-mapped IPv6（例如 ::ffff:127.0.0.1）：拆出內層 IPv4 再檢查一次，
-  // 避免用這個形式繞過 IPv4 私網檢查
-  const v4Mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (v4Mapped) {
-    return isPrivateIpv4(v4Mapped[1]);
+  // IPv4-mapped IPv6（RFC 4291 ::ffff:0:0/96）：內層 IPv4 位址可能寫成
+  // dotted-quad（例如 ::ffff:127.0.0.1）或壓縮後的 hex 形式（例如 ::ffff:7f00:1，
+  // 等於 127.0.0.1；::ffff:a9fe:a9fe 等於雲端 metadata endpoint 169.254.169.254）。
+  // 舊版只比對 dotted-quad 前綴，hex 形式會被誤判成一般公開位址、完全繞過 SSRF 檢查。
+  // 前綴同時涵蓋 `::ffff:`（前導零群組被壓縮）與完整展開的 `0:0:0:0:0:ffff:` 兩種寫法，
+  // 拆出內層 IPv4 位址後套用既有的 isPrivateIpv4 判斷。
+  const v4MappedPrefix = '(?:::ffff:|(?:0{1,4}:){5}ffff:)';
+  const v4MappedDotted = normalized.match(
+    new RegExp(`^${v4MappedPrefix}(\\d+\\.\\d+\\.\\d+\\.\\d+)$`)
+  );
+  if (v4MappedDotted) {
+    return isPrivateIpv4(v4MappedDotted[1]);
+  }
+
+  const v4MappedHex = normalized.match(
+    new RegExp(`^${v4MappedPrefix}([0-9a-f]{1,4}):([0-9a-f]{1,4})$`)
+  );
+  if (v4MappedHex) {
+    const high = parseInt(v4MappedHex[1], 16);
+    const low = parseInt(v4MappedHex[2], 16);
+    const ipv4 = [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join('.');
+    return isPrivateIpv4(ipv4);
   }
 
   return false;

@@ -95,11 +95,28 @@ describe('isPrivateOrReservedIp', () => {
   test('fec0::1（範圍外一格，高於 febf）判定為公開', () => {
     expect(isPrivateOrReservedIp('fec0::1')).toBe(false);
   });
-  test('::ffff:127.0.0.1（IPv4-mapped IPv6 loopback）判定為私有', () => {
+  test('::ffff:127.0.0.1（IPv4-mapped IPv6 loopback，dotted-quad 形式）判定為私有', () => {
     expect(isPrivateOrReservedIp('::ffff:127.0.0.1')).toBe(true);
   });
-  test('::ffff:8.8.8.8（IPv4-mapped IPv6 公開位址）判定為公開', () => {
+  test('::ffff:8.8.8.8（IPv4-mapped IPv6 公開位址，dotted-quad 形式）判定為公開', () => {
     expect(isPrivateOrReservedIp('::ffff:8.8.8.8')).toBe(false);
+  });
+
+  // IPv4-mapped IPv6 的 hex 壓縮形式：::ffff:XXXX:YYYY（XXXX/YYYY 各是 16 bit hex，
+  // 合起來就是內層 32 bit 的 IPv4 位址）。舊版只認 dotted-quad 前綴字串比對，
+  // 這種 hex 表示法會被誤判成一般公開 IPv6、完全繞過 SSRF 檢查。
+  test('::ffff:7f00:1（IPv4-mapped IPv6 loopback，hex 壓縮形式，等於 127.0.0.1）判定為私有', () => {
+    expect(isPrivateOrReservedIp('::ffff:7f00:1')).toBe(true);
+  });
+  test('::ffff:a9fe:a9fe（IPv4-mapped IPv6，hex 壓縮形式，等於雲端 metadata endpoint 169.254.169.254）判定為私有', () => {
+    expect(isPrivateOrReservedIp('::ffff:a9fe:a9fe')).toBe(true);
+  });
+  test('::ffff:808:808（IPv4-mapped IPv6，hex 壓縮形式，等於公開位址 8.8.8.8）判定為公開', () => {
+    expect(isPrivateOrReservedIp('::ffff:808:808')).toBe(false);
+  });
+  // 完整展開（未用 :: 壓縮前導零群組）的 hex 形式也要涵蓋
+  test('0:0:0:0:0:ffff:7f00:1（IPv4-mapped IPv6 loopback，完整展開 hex 形式）判定為私有', () => {
+    expect(isPrivateOrReservedIp('0:0:0:0:0:ffff:7f00:1')).toBe(true);
   });
   test('2001:4860:4860::8888（公開 IPv6）判定為公開', () => {
     expect(isPrivateOrReservedIp('2001:4860:4860::8888')).toBe(false);
