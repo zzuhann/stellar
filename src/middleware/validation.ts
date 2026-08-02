@@ -337,6 +337,16 @@ export const eventSchemas = {
   }),
 };
 
+// Import（貼文半自動匯入）相關的 schema
+export const importSchemas = {
+  parseCaption: z.object({
+    caption: z.string().min(1, '請輸入貼文文案').max(5000, '文案內容過長'),
+  }),
+  fetchImage: z.object({
+    imageUrl: z.string().url('請輸入正確的圖片網址格式').max(2000),
+  }),
+};
+
 // Admin 相關的 schema
 export const adminSchemas = {
   listQuery: z.object({
