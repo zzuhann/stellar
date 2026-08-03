@@ -31,7 +31,7 @@ export class VenueController {
   };
 
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { region, capacityRange, sort, status, limit } = req.query;
+    const { region, capacityRange, search, sort, status, limit, page } = req.query;
 
     const params: VenueFilterParams = {};
 
@@ -46,6 +46,13 @@ export class VenueController {
         return;
       }
       params.capacityRange = capacityRange as VenueFilterParams['capacityRange'];
+    }
+
+    if (search !== undefined) {
+      const trimmed = String(search).trim();
+      if (trimmed.length > 0) {
+        params.search = trimmed;
+      }
     }
 
     if (sort !== undefined) {
@@ -64,17 +71,21 @@ export class VenueController {
     }
 
     if (limit !== undefined) {
-      if (sort !== 'random') {
-        res.status(400).json({ error: 'limit is only supported when sort is "random"' });
-        return;
-      }
-
       const parsedLimit = typeof limit === 'string' && /^\d+$/.test(limit) ? Number(limit) : NaN;
       if (!Number.isSafeInteger(parsedLimit) || parsedLimit <= 0) {
         res.status(400).json({ error: 'limit must be a positive integer' });
         return;
       }
       params.limit = parsedLimit;
+    }
+
+    // page 只用於一般（非 random）查詢；random 模式不套用分頁
+    if (sort !== 'random' && page !== undefined) {
+      const parsedPage = typeof page === 'string' && /^\d+$/.test(page) ? Number(page) : NaN;
+      if (Number.isSafeInteger(parsedPage) && parsedPage > 0) {
+        params.page = parsedPage;
+      }
+      // 非正整數（含 0、負數、非數字字串）不報錯，交由 service fallback 為 1
     }
 
     if (status !== undefined) {
@@ -92,8 +103,13 @@ export class VenueController {
       params.status = 'active';
     }
 
-    const venues = await this.venueService.getVenues(params);
-    res.json({ venues });
+    const result = await this.venueService.getVenues(params);
+
+    if (Array.isArray(result)) {
+      res.json({ venues: result });
+    } else {
+      res.json(result);
+    }
   };
 
   getVenueById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
