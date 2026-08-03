@@ -6,6 +6,9 @@ import { VenueService } from '../../src/services/venueService';
 // Mock VenueService to avoid Firestore access.
 jest.mock('../../src/services/venueService');
 
+// 注意：這裡的 validatedQuery 模擬的是 route 層 validateRequest({ query: venueSchemas.getVenues })
+// 跑完之後寫入 req.validatedQuery 的「已驗證、已轉型」結果（例如 limit/page 已是 number），
+// 不是 controller 自己解析的原始 req.query 字串。格式驗證本身測在 venueValidation.test.ts。
 describe('VenueController.getVenues - status 守門邏輯', () => {
   let controller: VenueController;
   let mockGetVenues: jest.Mock;
@@ -29,11 +32,12 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
   });
 
   const buildReq = (
-    query: Record<string, string>,
+    validatedQuery: Record<string, unknown>,
     user?: { uid: string; email: string; role: 'user' | 'admin' }
   ): AuthenticatedRequest => {
     return {
-      query,
+      query: {},
+      validatedQuery,
       user,
     } as unknown as AuthenticatedRequest;
   };
@@ -106,7 +110,7 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
   });
 
   it('接受首頁 random 10 查詢', async () => {
-    const req = buildReq({ sort: 'random', limit: '10' });
+    const req = buildReq({ sort: 'random', limit: 10 });
 
     await controller.getVenues(req, res as Response);
 
@@ -115,7 +119,7 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
 
   it('sort=random 的回應不含 pagination（維持現況行為）', async () => {
     mockGetVenues.mockResolvedValue([{ id: 'v1' }]);
-    const req = buildReq({ sort: 'random', limit: '10' });
+    const req = buildReq({ sort: 'random', limit: 10 });
 
     await controller.getVenues(req, res as Response);
 
@@ -123,10 +127,10 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
   });
 });
 
-// 注意：capacityRange/sort/status 的枚舉檢查與 limit 的格式/必填檢查，
+// 注意：capacityRange/sort/status/region 的枚舉檢查與 limit 的格式/必填檢查，
 // 已改由 route 層的 validateRequest({ query: venueSchemas.getVenues }) 處理，
 // 對應測試在 tests/unit/venueValidation.test.ts。以下只測 controller 在
-// 「輸入已經過驗證」前提下，仍需自行負責的映射與業務規則。
+// 「輸入已經過驗證、已寫入 req.validatedQuery」前提下，仍需自行負責的映射與業務規則。
 describe('VenueController.getVenues - 已驗證輸入的映射與業務規則', () => {
   let controller: VenueController;
   let mockGetVenues: jest.Mock;
@@ -149,8 +153,8 @@ describe('VenueController.getVenues - 已驗證輸入的映射與業務規則', 
     };
   });
 
-  const buildReq = (query: Record<string, string>): AuthenticatedRequest => {
-    return { query, user: undefined } as unknown as AuthenticatedRequest;
+  const buildReq = (validatedQuery: Record<string, unknown>): AuthenticatedRequest => {
+    return { query: {}, validatedQuery, user: undefined } as unknown as AuthenticatedRequest;
   };
 
   it('非 random 模式的 response 為 { venues, pagination }', async () => {
@@ -175,21 +179,34 @@ describe('VenueController.getVenues - 已驗證輸入的映射與業務規則', 
   });
 
   it('page 為合法正整數時傳入 service', async () => {
-    await controller.getVenues(buildReq({ page: '2' }), res as Response);
+    await controller.getVenues(buildReq({ page: 2 }), res as Response);
     expect(mockGetVenues.mock.calls[0][0].page).toBe(2);
   });
 
   it('非 random 模式可帶 limit（不再限定僅 sort=random 使用）', async () => {
-    await controller.getVenues(buildReq({ limit: '5' }), res as Response);
+    await controller.getVenues(buildReq({ limit: 5 }), res as Response);
     expect(mockGetVenues.mock.calls[0][0].limit).toBe(5);
   });
 
   it('sort=random 時 page 不套用（此模式不支援分頁），即使有帶也忽略', async () => {
     mockGetVenues.mockResolvedValue([]);
-    await controller.getVenues(
-      buildReq({ sort: 'random', limit: '10', page: '2' }),
-      res as Response
-    );
+    await controller.getVenues(buildReq({ sort: 'random', limit: 10, page: 2 }), res as Response);
     expect(mockGetVenues.mock.calls[0][0].page).toBeUndefined();
+  });
+
+  it('單一 region 值會被包成陣列傳入 service', async () => {
+    await controller.getVenues(buildReq({ region: '台北' }), res as Response);
+    expect(mockGetVenues.mock.calls[0][0].region).toEqual(['台北']);
+  });
+
+  it('陣列 region 直接傳入 service', async () => {
+    await controller.getVenues(buildReq({ region: ['台北', '新北'] }), res as Response);
+    expect(mockGetVenues.mock.calls[0][0].region).toEqual(['台北', '新北']);
+  });
+
+  it('req.validatedQuery 未設定時（防禦性 fallback）不丟例外，視同空 query', async () => {
+    const req = { query: {}, user: undefined } as unknown as AuthenticatedRequest;
+    await controller.getVenues(req, res as Response);
+    expect(mockGetVenues).toHaveBeenCalledWith({});
   });
 });

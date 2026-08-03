@@ -217,7 +217,13 @@ paths:
       parameters:
         - in: query
           name: region
-          schema: { type: array, items: { type: string } }
+          description: >-
+            單一地區可傳字串（?region=台北），多個地區則重複 key（?region=台北&region=新北）
+            由 Express 解析為陣列；接受「臺」字形並正規化為「台」；不合法地區回 400。
+          schema:
+            oneOf:
+              - { type: string }
+              - { type: array, items: { type: string } }
         - in: query
           name: capacityRange
           schema: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }

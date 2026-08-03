@@ -33,6 +33,10 @@ export const validateRequest = (schema: {
       if (schema.query) {
         const parsedQuery = schema.query.parse(req.query);
         Object.assign(req.query, parsedQuery);
+        // 保留一份型別完整（已 transform/coerce）的解析結果，
+        // 讓 controller 可以直接消費 req.validatedQuery，
+        // 不用再對 req.query（Express 的 ParsedQs 型別）逐欄位 `as` 轉型。
+        req.validatedQuery = parsedQuery;
       }
 
       if (schema.body) {
@@ -175,10 +179,14 @@ const venuePageQuerySchema = z.preprocess(value => {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }, z.number().int().positive().optional());
 
+// Express 將重複的 query key（?region=a&region=b）解析為陣列，單一 key 則為字串，
+// 兩種型態都要能吃到既有的 venueRegionEnum（含「臺」→「台」正規化與合法地區檢查）
+const venueRegionQuerySchema = z.union([venueRegionEnum, z.array(venueRegionEnum)]).optional();
+
 export const venueSchemas = {
   getVenues: z
     .object({
-      region: z.union([z.string(), z.array(z.string())]).optional(),
+      region: venueRegionQuerySchema,
       capacityRange: z
         .enum(['20以下', '20-40', '40-60', '60以上'], {
           error: 'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上',

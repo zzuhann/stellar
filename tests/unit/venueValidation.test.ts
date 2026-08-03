@@ -209,4 +209,23 @@ describe('GET /venues query validation (venueSchemas.getVenues)', () => {
     expect(parse({ region: '台北' }).success).toBe(true);
     expect(parse({ region: ['台北', '新北'] }).success).toBe(true);
   });
+
+  it('normalizes 臺 to 台 for both single-value and array region', () => {
+    const single = parse({ region: '臺北' });
+    expect(single.success).toBe(true);
+    if (single.success) expect(single.data.region).toBe('台北');
+
+    const array = parse({ region: ['臺北', '臺南'] });
+    expect(array.success).toBe(true);
+    if (array.success) expect(array.data.region).toEqual(['台北', '台南']);
+  });
+
+  it('rejects an invalid single-value region (previously fell through as "valid")', () => {
+    expect(parse({ region: '東京' }).success).toBe(false);
+    expect(parse({ region: 'not-a-real-region' }).success).toBe(false);
+  });
+
+  it('rejects an array region containing any invalid value', () => {
+    expect(parse({ region: ['台北', '東京'] }).success).toBe(false);
+  });
 });
