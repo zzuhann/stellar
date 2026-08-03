@@ -217,17 +217,38 @@ paths:
       parameters:
         - in: query
           name: region
-          schema: { type: array, items: { type: string } }
+          description: >-
+            單一地區可傳字串（?region=台北），多個地區則重複 key（?region=台北&region=新北）
+            由 Express 解析為陣列；接受「臺」字形並正規化為「台」；不合法地區回 400。
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/VenueRegion'
+              - { type: array, items: { $ref: '#/components/schemas/VenueRegion' } }
         - in: query
           name: capacityRange
           schema: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
+        - in: query
+          name: search
+          description: >-
+            場地名稱模糊比對：去除名稱與關鍵字的空白/標點後轉小寫比對（substring），
+            如 abcmart 會比對到 ABC Mart、scoups 會比對到 S.Coups。
+            與 region/capacityRange 為交集；空字串或未帶時不套用。
+          schema: { type: string }
         - in: query
           name: sort
           schema: { type: string, enum: [eventCount, name, newest, random], default: eventCount }
         - in: query
           name: limit
-          description: 僅搭配 sort=random 使用，且必須為正整數
+          description: >-
+            一般（非 random）查詢為每頁筆數，預設 20，不設上限；
+            sort=random 時為必填的抽樣數量，且不套用 page。
           schema: { type: integer, minimum: 1 }
+        - in: query
+          name: page
+          description: >-
+            僅用於一般（非 sort=random）查詢；非正整數（含缺少、0、負數、非數字字串）
+            時 fallback 為 1，不報錯；超過 totalPages 時回傳空陣列。
+          schema: { type: integer, minimum: 1, default: 1 }
         - in: query
           name: status
           schema: { type: string }
@@ -243,6 +264,14 @@ paths:
                   venues:
                     type: array
                     items: { $ref: '#/components/schemas/Venue' }
+                  pagination:
+                    description: 僅一般（非 sort=random）查詢會回傳此欄位
+                    type: object
+                    properties:
+                      page: { type: integer }
+                      limit: { type: integer }
+                      total: { type: integer }
+                      totalPages: { type: integer }
         '400': { description: sort 或 limit 參數組合不合法 }
     post:
       tags: [venues]
@@ -585,13 +614,40 @@ components:
         - $ref: '#/components/schemas/CreateEventData'
       description: 與 CreateEventData 相同，但不含 artistIds
 
+    VenueRegion:
+      type: string
+      enum:
+        [
+          台北,
+          新北,
+          桃園,
+          台中,
+          台南,
+          高雄,
+          基隆,
+          新竹,
+          嘉義,
+          宜蘭,
+          苗栗,
+          彰化,
+          南投,
+          雲林,
+          屏東,
+          花蓮,
+          台東,
+          澎湖,
+          金門,
+          連江,
+        ]
+      description: 與 src/middleware/validation.ts 的 venueRegionEnum 一致；「臺」字形會先正規化為「台」再比對。
+
     Venue:
       type: object
       properties:
         id: { type: string }
         name: { type: string }
         address: { type: string }
-        region: { type: string }
+        region: { $ref: '#/components/schemas/VenueRegion' }
         lat: { type: number }
         lng: { type: number }
         nearestMrt: { type: string }

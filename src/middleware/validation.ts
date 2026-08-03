@@ -33,6 +33,10 @@ export const validateRequest = (schema: {
       if (schema.query) {
         const parsedQuery = schema.query.parse(req.query);
         Object.assign(req.query, parsedQuery);
+        // 保留一份型別完整（已 transform/coerce）的解析結果，
+        // 讓 controller 可以直接消費 req.validatedQuery，
+        // 不用再對 req.query（Express 的 ParsedQs 型別）逐欄位 `as` 轉型。
+        req.validatedQuery = parsedQuery;
       }
 
       if (schema.body) {
@@ -159,7 +163,59 @@ const venueRegionEnum = z.preprocess(
   ])
 );
 
+// GET /venues 的 limit：若帶必須為正整數字串；sort=random 時為必填（見下方 refine）
+const venueLimitQuerySchema = z
+  .string()
+  .regex(/^\d+$/, { error: 'limit must be a positive integer' })
+  .transform(Number)
+  .refine(n => Number.isSafeInteger(n) && n > 0, { error: 'limit must be a positive integer' })
+  .optional();
+
+// GET /venues 的 page：非正整數（含缺少、0、負數、非數字字串）不報錯，視為未帶，
+// 交由 VenueService 沿用 AdminService.resolvePagination 的 fallback 邏輯處理為 1
+const venuePageQuerySchema = z.preprocess(value => {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}, z.number().int().positive().optional());
+
+// Express 將重複的 query key（?region=a&region=b）解析為陣列，單一 key 則為字串，
+// 兩種型態都要能吃到既有的 venueRegionEnum（含「臺」→「台」正規化與合法地區檢查）
+const venueRegionQuerySchema = z.union([venueRegionEnum, z.array(venueRegionEnum)]).optional();
+
 export const venueSchemas = {
+  getVenues: z
+    .object({
+      region: venueRegionQuerySchema,
+      capacityRange: z
+        .enum(['20以下', '20-40', '40-60', '60以上'], {
+          error: 'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上',
+        })
+        .optional(),
+      search: z
+        .string()
+        .optional()
+        .transform(value => {
+          const trimmed = value?.trim();
+          return trimmed && trimmed.length > 0 ? trimmed : undefined;
+        }),
+      sort: z
+        .enum(['eventCount', 'name', 'newest', 'random'], {
+          error: 'sort must be "eventCount", "name", "newest", or "random"',
+        })
+        .optional(),
+      limit: venueLimitQuerySchema,
+      page: venuePageQuerySchema,
+      status: z
+        .enum(['active', 'inactive', 'pending', 'rejected', 'all'], {
+          error: 'status must be one of: active, inactive, pending, rejected, all',
+        })
+        .optional(),
+    })
+    .refine(data => data.sort !== 'random' || data.limit !== undefined, {
+      error: 'limit is required when sort is "random"',
+      path: ['limit'],
+    }),
   batchReview: z.object({
     updates: z
       .array(

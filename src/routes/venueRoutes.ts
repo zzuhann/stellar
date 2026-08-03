@@ -18,7 +18,13 @@ router.post(
   validateRequest({ body: venueSchemas.create }),
   venueController.createVenue
 );
-router.get('/', venuesListLimiter, optionalAuthenticate, venueController.getVenues);
+router.get(
+  '/',
+  venuesListLimiter,
+  optionalAuthenticate,
+  validateRequest({ query: venueSchemas.getVenues }),
+  venueController.getVenues
+);
 
 // Batch routes must come before /:id to avoid being matched as an id param
 router.patch(

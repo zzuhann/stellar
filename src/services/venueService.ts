@@ -2,6 +2,7 @@ import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import {
   CreateVenueData,
+  PaginatedVenues,
   UpdateVenueData,
   Venue,
   VenueBatchReviewItem,
@@ -22,6 +23,10 @@ import {
 
 // Normalize region: replace 臺 with 台 for consistency with Zod schema
 const normalizeRegion = (region: string): string => region.replace(/臺/g, '台');
+
+// Normalize for fuzzy name search: lowercase, strip everything except letters/numbers
+// (keeps CJK chars), so "ABC Mart" matches "abcmart" and "S.Coups" matches "scoups".
+const normalizeSearchText = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 export class VenueService {
   private collection = hasFirebaseConfig && db ? db.collection('venues') : null;
@@ -470,8 +475,8 @@ export class VenueService {
     return processed;
   }
 
-  async getVenues(params: VenueFilterParams): Promise<Venue[]> {
-    const { region, capacityRange, sort, limit, status } = params;
+  async getVenues(params: VenueFilterParams): Promise<Venue[] | PaginatedVenues> {
+    const { region, capacityRange, search, sort, limit, page, status } = params;
 
     let venues = await this.fetchAll();
 
@@ -486,6 +491,11 @@ export class VenueService {
 
     if (capacityRange !== undefined) {
       venues = venues.filter(v => v.capacityRange === capacityRange);
+    }
+
+    if (search !== undefined && search.length > 0) {
+      const normalizedSearch = normalizeSearchText(search);
+      venues = venues.filter(v => normalizeSearchText(v.name).includes(normalizedSearch));
     }
 
     if (sort === 'random' && limit !== undefined) {
@@ -510,6 +520,19 @@ export class VenueService {
       });
     }
 
-    return venues;
+    // Fallback shape mirrors AdminService.resolvePagination, but limit is intentionally
+    // NOT capped here — the public /venues SSR page needs a large limit to fetch the
+    // full active set for its region-chip dropdown.
+    const resolvedPage = Math.max(1, page ?? 1);
+    const resolvedLimit = Math.max(1, limit ?? 20);
+    const skip = (resolvedPage - 1) * resolvedLimit;
+
+    const total = venues.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / resolvedLimit);
+
+    return {
+      venues: venues.slice(skip, skip + resolvedLimit),
+      pagination: { page: resolvedPage, limit: resolvedLimit, total, totalPages },
+    };
   }
 }

@@ -1,5 +1,6 @@
 import { VenueService } from '../../src/services/venueService';
 import { cache } from '../../src/utils/cache';
+import { CapacityRange, Venue, VenueStatus } from '../../src/models/types';
 
 const mockDelete = jest.fn();
 const mockGet = jest.fn();
@@ -291,7 +292,7 @@ describe('VenueService.getVenues random sampling', () => {
   });
 
   it('只從 active 場地抽出指定數量，且不重複', async () => {
-    const result = await new VenueService().getVenues({ sort: 'random', limit: 10 });
+    const result = (await new VenueService().getVenues({ sort: 'random', limit: 10 })) as Venue[];
 
     expect(result).toHaveLength(10);
     expect(new Set(result.map(venue => venue.id)).size).toBe(10);
@@ -299,11 +300,11 @@ describe('VenueService.getVenues random sampling', () => {
   });
 
   it('符合條件的場地不足 limit 時回傳全部', async () => {
-    const result = await new VenueService().getVenues({
+    const result = (await new VenueService().getVenues({
       region: ['台北'],
       sort: 'random',
       limit: 10,
-    });
+    })) as Venue[];
 
     expect(result.map(venue => venue.id)).toEqual([
       'venue-1',
@@ -321,6 +322,224 @@ describe('VenueService.getVenues random sampling', () => {
     await service.getVenues({ sort: 'random', limit: 10 });
 
     expect(randomSpy).toHaveBeenCalledTimes(20);
+    expect(getWithLockSpy).toHaveBeenCalledTimes(2);
+    expect(getWithLockSpy).toHaveBeenCalledWith('venues:all', expect.any(Function), 1440);
+  });
+
+  it('random 模式套用 search 後才抽樣，回應形狀不變（不含 pagination）', async () => {
+    const service = new VenueService();
+
+    const result = await service.getVenues({ search: '場地', sort: 'random', limit: 10 });
+
+    // fixture 的名稱都是「場地 N」，全部符合 search（11 筆 active），抽樣後仍受 limit 限制
+    expect(Array.isArray(result)).toBe(true);
+    expect(result as unknown[]).toHaveLength(10);
+    expect(result).not.toHaveProperty('pagination');
+  });
+});
+
+type VenueFixture = Omit<Venue, 'capacityRange' | 'status'> & {
+  capacityRange: CapacityRange;
+  status: VenueStatus;
+};
+
+const buildVenue = (overrides: Partial<VenueFixture>): VenueFixture => ({
+  ...makeBaseVenue(),
+  ...overrides,
+});
+
+function makeBaseVenue(): VenueFixture {
+  return {
+    id: 'venue-base',
+    name: '',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    lat: 25,
+    lng: 121,
+    nearestMrt: '',
+    mrtWalkMinutes: null,
+    capacityRange: '20-40',
+    eventCount: 0,
+    coverPhoto: '',
+    otherPhotos: [],
+    description: '',
+    hostTags: [],
+    status: 'active',
+  };
+}
+
+describe('VenueService.getVenues — search 正規化比對', () => {
+  const venues = [
+    buildVenue({ id: 'v-abc', name: 'ABC Mart', region: '台北' }),
+    buildVenue({ id: 'v-scoups', name: 'S.Coups', region: '新北' }),
+    buildVenue({ id: 'v-other', name: '測試場地', region: '台北' }),
+  ];
+
+  let getWithLockSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('search=abcmart 比對到名稱為 ABC Mart 的場地（空白被忽略）', async () => {
+    const result = await new VenueService().getVenues({ search: 'abcmart' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['v-abc']);
+  });
+
+  it('search=scoups 比對到名稱為 S.Coups 的場地（標點被忽略）', async () => {
+    const result = await new VenueService().getVenues({ search: 'scoups' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['v-scoups']);
+  });
+
+  it('search 不分大小寫（SCOUPS / scoups 結果相同）', async () => {
+    const upper = await new VenueService().getVenues({ search: 'SCOUPS' });
+    const lower = await new VenueService().getVenues({ search: 'scoups' });
+    if (Array.isArray(upper) || Array.isArray(lower)) throw new Error('expected paginated result');
+    expect(upper.venues.map(v => v.id)).toEqual(lower.venues.map(v => v.id));
+  });
+
+  it('search 為空字串時不套用搜尋 filter', async () => {
+    const result = await new VenueService().getVenues({ search: '' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toHaveLength(3);
+  });
+
+  it('search 未帶時不套用搜尋 filter', async () => {
+    const result = await new VenueService().getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toHaveLength(3);
+  });
+
+  it('search 沒有任何場地符合時，回傳空陣列與 total/totalPages 為 0', async () => {
+    const result = await new VenueService().getVenues({ search: '完全不存在的關鍵字xyz' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(result.pagination.totalPages).toBe(0);
+  });
+});
+
+describe('VenueService.getVenues — filter 交集', () => {
+  const venues = [
+    buildVenue({ id: 'v1', name: 'ABC Mart', region: '台北', capacityRange: '20-40' }),
+    buildVenue({ id: 'v2', name: 'ABC Cafe', region: '台北', capacityRange: '40-60' }),
+    buildVenue({ id: 'v3', name: 'ABC Studio', region: '新北', capacityRange: '20-40' }),
+    buildVenue({ id: 'v4', name: '其他場地', region: '台北', capacityRange: '20-40' }),
+  ];
+
+  let getWithLockSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('region + capacityRange + search 同時帶入時為交集，非聯集', async () => {
+    const result = await new VenueService().getVenues({
+      region: ['台北'],
+      capacityRange: '20-40',
+      search: 'abc',
+    });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['v1']);
+  });
+
+  it('只帶 capacityRange（不帶 region）時，僅套用容納人數 filter', async () => {
+    const result = await new VenueService().getVenues({ capacityRange: '20-40' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id).sort()).toEqual(['v1', 'v3', 'v4']);
+  });
+
+  it('疊加後結果為 0 筆時，pagination.total 為 0', async () => {
+    const result = await new VenueService().getVenues({
+      region: ['新北'],
+      capacityRange: '40-60',
+    });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+  });
+});
+
+describe('VenueService.getVenues — 分頁', () => {
+  const venues = Array.from({ length: 25 }, (_, index) =>
+    buildVenue({ id: `venue-${index + 1}`, name: `場地 ${index + 1}` })
+  );
+
+  let getWithLockSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('25 筆、limit=20 時，第 1 頁回 20 筆、totalPages=2', async () => {
+    const result = await new VenueService().getVenues({ page: 1, limit: 20 });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toHaveLength(20);
+    expect(result.pagination).toEqual({ page: 1, limit: 20, total: 25, totalPages: 2 });
+  });
+
+  it('25 筆、limit=20 時，第 2 頁回 5 筆', async () => {
+    const result = await new VenueService().getVenues({ page: 2, limit: 20 });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toHaveLength(5);
+    expect(result.pagination.totalPages).toBe(2);
+  });
+
+  it('page 超過 totalPages 時回傳空陣列，pagination.page 仍回傳請求值', async () => {
+    const result = await new VenueService().getVenues({ page: 99, limit: 20 });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues).toEqual([]);
+    expect(result.pagination.page).toBe(99);
+  });
+
+  it.each([0, -1])('page 為非正整數（%s）時 fallback 為 1', async page => {
+    const result = await new VenueService().getVenues({ page, limit: 20 });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.pagination.page).toBe(1);
+  });
+
+  it('limit 未帶時 fallback 為預設值 20', async () => {
+    const result = await new VenueService().getVenues({ page: 1 });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.pagination.limit).toBe(20);
+    expect(result.venues).toHaveLength(20);
+  });
+
+  it('不帶 page/limit 時，行為等同 page=1&limit=20', async () => {
+    const result = await new VenueService().getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.pagination).toEqual({ page: 1, limit: 20, total: 25, totalPages: 2 });
+    expect(result.venues).toHaveLength(20);
+  });
+
+  it('同一批 filter 條件下的多次 request 不重複打 Firestore，只在記憶體中重新 filter/分頁', async () => {
+    const service = new VenueService();
+    await service.getVenues({ page: 1, limit: 20 });
+    await service.getVenues({ page: 2, limit: 20 });
+
     expect(getWithLockSpy).toHaveBeenCalledTimes(2);
     expect(getWithLockSpy).toHaveBeenCalledWith('venues:all', expect.any(Function), 1440);
   });

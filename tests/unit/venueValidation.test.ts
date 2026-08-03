@@ -103,3 +103,129 @@ describe('public venue submission validation', () => {
     ).toBe(false);
   });
 });
+
+describe('GET /venues query validation (venueSchemas.getVenues)', () => {
+  const parse = (query: Record<string, unknown>) => venueSchemas.getVenues.safeParse(query);
+
+  it('accepts an empty query and defaults everything to undefined', () => {
+    const result = parse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ search: undefined });
+    }
+  });
+
+  it.each(['20以下', '20-40', '40-60', '60以上'])('accepts capacityRange=%s', value => {
+    expect(parse({ capacityRange: value }).success).toBe(true);
+  });
+
+  it('rejects an invalid capacityRange with the existing error message', () => {
+    const result = parse({ capacityRange: '100以上' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe(
+        'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上'
+      );
+    }
+  });
+
+  it.each(['eventCount', 'name', 'newest', 'random'])('accepts sort=%s', value => {
+    // random 模式下 limit 為必填，補上以孤立測試 sort 本身的合法性
+    expect(parse({ sort: value, limit: value === 'random' ? '10' : undefined }).success).toBe(true);
+  });
+
+  it('rejects an invalid sort with the existing error message', () => {
+    const result = parse({ sort: 'popularity' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe(
+        'sort must be "eventCount", "name", "newest", or "random"'
+      );
+    }
+  });
+
+  it.each(['active', 'inactive', 'pending', 'rejected', 'all'])('accepts status=%s', value => {
+    expect(parse({ status: value }).success).toBe(true);
+  });
+
+  it('rejects an invalid status with the existing error message', () => {
+    const result = parse({ status: 'archived' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe(
+        'status must be one of: active, inactive, pending, rejected, all'
+      );
+    }
+  });
+
+  it('requires limit when sort=random', () => {
+    const result = parse({ sort: 'random' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('limit is required when sort is "random"');
+    }
+  });
+
+  it.each(['0', '-1', '1.5', 'abc'])('rejects limit=%s as not a positive integer', limitValue => {
+    const result = parse({ sort: 'random', limit: limitValue });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('limit must be a positive integer');
+    }
+  });
+
+  it('accepts a positive integer limit and coerces it to a number', () => {
+    const result = parse({ limit: '20' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.limit).toBe(20);
+  });
+
+  it.each(['0', '-1', 'abc', '1.5'])(
+    'silently drops an invalid page=%s to undefined instead of erroring',
+    pageValue => {
+      const result = parse({ page: pageValue });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.page).toBeUndefined();
+    }
+  );
+
+  it('accepts a positive integer page and coerces it to a number', () => {
+    const result = parse({ page: '3' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.page).toBe(3);
+  });
+
+  it('trims search and drops it to undefined when blank', () => {
+    const trimmed = parse({ search: '  abc mart  ' });
+    expect(trimmed.success).toBe(true);
+    if (trimmed.success) expect(trimmed.data.search).toBe('abc mart');
+
+    const blank = parse({ search: '   ' });
+    expect(blank.success).toBe(true);
+    if (blank.success) expect(blank.data.search).toBeUndefined();
+  });
+
+  it('accepts region as a single value or an array', () => {
+    expect(parse({ region: '台北' }).success).toBe(true);
+    expect(parse({ region: ['台北', '新北'] }).success).toBe(true);
+  });
+
+  it('normalizes 臺 to 台 for both single-value and array region', () => {
+    const single = parse({ region: '臺北' });
+    expect(single.success).toBe(true);
+    if (single.success) expect(single.data.region).toBe('台北');
+
+    const array = parse({ region: ['臺北', '臺南'] });
+    expect(array.success).toBe(true);
+    if (array.success) expect(array.data.region).toEqual(['台北', '台南']);
+  });
+
+  it('rejects an invalid single-value region (previously fell through as "valid")', () => {
+    expect(parse({ region: '東京' }).success).toBe(false);
+    expect(parse({ region: 'not-a-real-region' }).success).toBe(false);
+  });
+
+  it('rejects an array region containing any invalid value', () => {
+    expect(parse({ region: ['台北', '東京'] }).success).toBe(false);
+  });
+});
