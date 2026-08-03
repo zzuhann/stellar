@@ -222,8 +222,8 @@ paths:
             由 Express 解析為陣列；接受「臺」字形並正規化為「台」；不合法地區回 400。
           schema:
             oneOf:
-              - { type: string }
-              - { type: array, items: { type: string } }
+              - $ref: '#/components/schemas/VenueRegion'
+              - { type: array, items: { $ref: '#/components/schemas/VenueRegion' } }
         - in: query
           name: capacityRange
           schema: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
@@ -614,13 +614,40 @@ components:
         - $ref: '#/components/schemas/CreateEventData'
       description: 與 CreateEventData 相同，但不含 artistIds
 
+    VenueRegion:
+      type: string
+      enum:
+        [
+          台北,
+          新北,
+          桃園,
+          台中,
+          台南,
+          高雄,
+          基隆,
+          新竹,
+          嘉義,
+          宜蘭,
+          苗栗,
+          彰化,
+          南投,
+          雲林,
+          屏東,
+          花蓮,
+          台東,
+          澎湖,
+          金門,
+          連江,
+        ]
+      description: 與 src/middleware/validation.ts 的 venueRegionEnum 一致；「臺」字形會先正規化為「台」再比對。
+
     Venue:
       type: object
       properties:
         id: { type: string }
         name: { type: string }
         address: { type: string }
-        region: { type: string }
+        region: { $ref: '#/components/schemas/VenueRegion' }
         lat: { type: number }
         lng: { type: number }
         nearestMrt: { type: string }
