@@ -143,9 +143,23 @@ export interface Venue {
 export interface VenueFilterParams {
   region?: string[];
   capacityRange?: CapacityRange;
+  search?: string;
   sort?: 'eventCount' | 'name' | 'newest' | 'random';
   limit?: number;
+  page?: number;
   status?: VenueStatus | 'all';
+}
+
+export interface VenuePagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedVenues {
+  venues: Venue[];
+  pagination: VenuePagination;
 }
 
 export interface VenueEventCard {
