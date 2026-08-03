@@ -159,7 +159,55 @@ const venueRegionEnum = z.preprocess(
   ])
 );
 
+// GET /venues 的 limit：若帶必須為正整數字串；sort=random 時為必填（見下方 refine）
+const venueLimitQuerySchema = z
+  .string()
+  .regex(/^\d+$/, { error: 'limit must be a positive integer' })
+  .transform(Number)
+  .refine(n => Number.isSafeInteger(n) && n > 0, { error: 'limit must be a positive integer' })
+  .optional();
+
+// GET /venues 的 page：非正整數（含缺少、0、負數、非數字字串）不報錯，視為未帶，
+// 交由 VenueService 沿用 AdminService.resolvePagination 的 fallback 邏輯處理為 1
+const venuePageQuerySchema = z.preprocess(value => {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}, z.number().int().positive().optional());
+
 export const venueSchemas = {
+  getVenues: z
+    .object({
+      region: z.union([z.string(), z.array(z.string())]).optional(),
+      capacityRange: z
+        .enum(['20以下', '20-40', '40-60', '60以上'], {
+          error: 'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上',
+        })
+        .optional(),
+      search: z
+        .string()
+        .optional()
+        .transform(value => {
+          const trimmed = value?.trim();
+          return trimmed && trimmed.length > 0 ? trimmed : undefined;
+        }),
+      sort: z
+        .enum(['eventCount', 'name', 'newest', 'random'], {
+          error: 'sort must be "eventCount", "name", "newest", or "random"',
+        })
+        .optional(),
+      limit: venueLimitQuerySchema,
+      page: venuePageQuerySchema,
+      status: z
+        .enum(['active', 'inactive', 'pending', 'rejected', 'all'], {
+          error: 'status must be one of: active, inactive, pending, rejected, all',
+        })
+        .optional(),
+    })
+    .refine(data => data.sort !== 'random' || data.limit !== undefined, {
+      error: 'limit is required when sort is "random"',
+      path: ['limit'],
+    }),
   batchReview: z.object({
     updates: z
       .array(

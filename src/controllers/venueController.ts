@@ -30,6 +30,9 @@ export class VenueController {
     res.status(201).json(venue);
   };
 
+  // 注意：region/capacityRange/search/sort/limit/page/status 的格式驗證
+  // 由 route 層的 validateRequest({ query: venueSchemas.getVenues }) 保證，
+  // 這裡只做「已驗證資料 → VenueFilterParams」的映射與業務規則（非格式）判斷。
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { region, capacityRange, search, sort, status, limit, page } = req.query;
 
@@ -40,60 +43,27 @@ export class VenueController {
     }
 
     if (capacityRange !== undefined) {
-      const validRanges = ['20以下', '20-40', '40-60', '60以上'];
-      if (!validRanges.includes(capacityRange as string)) {
-        res.status(400).json({ error: `capacityRange must be one of: ${validRanges.join(', ')}` });
-        return;
-      }
       params.capacityRange = capacityRange as VenueFilterParams['capacityRange'];
     }
 
     if (search !== undefined) {
-      const trimmed = String(search).trim();
-      if (trimmed.length > 0) {
-        params.search = trimmed;
-      }
+      params.search = search as string;
     }
 
     if (sort !== undefined) {
-      if (sort !== 'eventCount' && sort !== 'name' && sort !== 'newest' && sort !== 'random') {
-        res.status(400).json({
-          error: 'sort must be "eventCount", "name", "newest", or "random"',
-        });
-        return;
-      }
-      params.sort = sort;
-    }
-
-    if (sort === 'random' && limit === undefined) {
-      res.status(400).json({ error: 'limit is required when sort is "random"' });
-      return;
+      params.sort = sort as VenueFilterParams['sort'];
     }
 
     if (limit !== undefined) {
-      const parsedLimit = typeof limit === 'string' && /^\d+$/.test(limit) ? Number(limit) : NaN;
-      if (!Number.isSafeInteger(parsedLimit) || parsedLimit <= 0) {
-        res.status(400).json({ error: 'limit must be a positive integer' });
-        return;
-      }
-      params.limit = parsedLimit;
+      params.limit = Number(limit);
     }
 
-    // page 只用於一般（非 random）查詢；random 模式不套用分頁
+    // page 僅用於一般（非 random）查詢；random 模式不套用分頁，即使有帶也忽略
     if (sort !== 'random' && page !== undefined) {
-      const parsedPage = typeof page === 'string' && /^\d+$/.test(page) ? Number(page) : NaN;
-      if (Number.isSafeInteger(parsedPage) && parsedPage > 0) {
-        params.page = parsedPage;
-      }
-      // 非正整數（含 0、負數、非數字字串）不報錯，交由 service fallback 為 1
+      params.page = Number(page);
     }
 
     if (status !== undefined) {
-      const validStatuses = ['active', 'inactive', 'pending', 'rejected', 'all'];
-      if (!validStatuses.includes(status as string)) {
-        res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
-        return;
-      }
       params.status = status as VenueFilterParams['status'];
     }
 

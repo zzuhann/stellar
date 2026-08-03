@@ -113,20 +113,6 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
     expect(mockGetVenues).toHaveBeenCalledWith({ sort: 'random', limit: 10 });
   });
 
-  it.each([
-    [{ sort: 'random' }, 'limit is required when sort is "random"'],
-    [{ sort: 'random', limit: '0' }, 'limit must be a positive integer'],
-    [{ sort: 'random', limit: '1.5' }, 'limit must be a positive integer'],
-  ])('拒絕不合法的 random/limit 組合：%o', async (query, error) => {
-    const req = buildReq(query);
-
-    await controller.getVenues(req, res as Response);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error });
-    expect(mockGetVenues).not.toHaveBeenCalled();
-  });
-
   it('sort=random 的回應不含 pagination（維持現況行為）', async () => {
     mockGetVenues.mockResolvedValue([{ id: 'v1' }]);
     const req = buildReq({ sort: 'random', limit: '10' });
@@ -137,7 +123,11 @@ describe('VenueController.getVenues - status 守門邏輯', () => {
   });
 });
 
-describe('VenueController.getVenues - search / page 參數解析', () => {
+// 注意：capacityRange/sort/status 的枚舉檢查與 limit 的格式/必填檢查，
+// 已改由 route 層的 validateRequest({ query: venueSchemas.getVenues }) 處理，
+// 對應測試在 tests/unit/venueValidation.test.ts。以下只測 controller 在
+// 「輸入已經過驗證」前提下，仍需自行負責的映射與業務規則。
+describe('VenueController.getVenues - 已驗證輸入的映射與業務規則', () => {
   let controller: VenueController;
   let mockGetVenues: jest.Mock;
   let res: Partial<Response>;
@@ -174,38 +164,32 @@ describe('VenueController.getVenues - search / page 參數解析', () => {
     });
   });
 
-  it('search 會被 trim 後傳入 service；純空白視為未帶', async () => {
-    await controller.getVenues(buildReq({ search: '  abc mart  ' }), res as Response);
+  it('已驗證的 search 直接透傳給 service，不再重複處理', async () => {
+    await controller.getVenues(buildReq({ search: 'abc mart' }), res as Response);
     expect(mockGetVenues.mock.calls[0][0].search).toBe('abc mart');
+  });
 
-    mockGetVenues.mockClear();
-    await controller.getVenues(buildReq({ search: '   ' }), res as Response);
+  it('未帶 search 時不傳入 service', async () => {
+    await controller.getVenues(buildReq({}), res as Response);
     expect(mockGetVenues.mock.calls[0][0].search).toBeUndefined();
   });
 
-  it('page 為合法正整數字串時傳入 service', async () => {
+  it('page 為合法正整數時傳入 service', async () => {
     await controller.getVenues(buildReq({ page: '2' }), res as Response);
     expect(mockGetVenues.mock.calls[0][0].page).toBe(2);
   });
 
-  it.each(['0', '-1', 'abc', '1.5'])(
-    'page 非正整數（%s）時不報錯，交由 service fallback',
-    async page => {
-      await controller.getVenues(buildReq({ page }), res as Response);
-      expect(res.status).not.toHaveBeenCalledWith(400);
-      expect(mockGetVenues.mock.calls[0][0].page).toBeUndefined();
-    }
-  );
-
   it('非 random 模式可帶 limit（不再限定僅 sort=random 使用）', async () => {
     await controller.getVenues(buildReq({ limit: '5' }), res as Response);
-    expect(res.status).not.toHaveBeenCalledWith(400);
     expect(mockGetVenues.mock.calls[0][0].limit).toBe(5);
   });
 
-  it('sort=random 時 page 不套用（此模式不支援分頁）', async () => {
+  it('sort=random 時 page 不套用（此模式不支援分頁），即使有帶也忽略', async () => {
     mockGetVenues.mockResolvedValue([]);
-    await controller.getVenues(buildReq({ sort: 'random', limit: '10', page: '2' }), res as Response);
+    await controller.getVenues(
+      buildReq({ sort: 'random', limit: '10', page: '2' }),
+      res as Response
+    );
     expect(mockGetVenues.mock.calls[0][0].page).toBeUndefined();
   });
 });
