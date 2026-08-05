@@ -622,6 +622,15 @@ export class EventService {
       socialMedia: eventData.socialMedia || {},
       ...(eventData.mainImage && { mainImage: eventData.mainImage }),
       detailImage: eventData.detailImage || [],
+      ...(eventData.reservation &&
+        (eventData.reservation.url || eventData.reservation.startAt) && {
+          reservation: {
+            ...(eventData.reservation.url && { url: eventData.reservation.url }),
+            ...(eventData.reservation.startAt && {
+              startAt: this.parseDateTime(eventData.reservation.startAt),
+            }),
+          },
+        }),
       status: 'pending' as const,
       createdBy: userId,
       createdByEmail: userEmail || undefined,
@@ -695,6 +704,17 @@ export class EventService {
     if (updateData.socialMedia !== undefined) updates.socialMedia = updateData.socialMedia;
     if (updateData.mainImage !== undefined) updates.mainImage = updateData.mainImage;
     if (updateData.detailImage !== undefined) updates.detailImage = updateData.detailImage;
+    if (updateData.reservation !== undefined) {
+      const reservation = updateData.reservation;
+      const hasReservation = reservation && (reservation.url || reservation.startAt);
+
+      updates.reservation = hasReservation
+        ? {
+            ...(reservation!.url && { url: reservation!.url }),
+            ...(reservation!.startAt && { startAt: this.parseDateTime(reservation!.startAt) }),
+          }
+        : FieldValue.delete();
+    }
 
     // 處理時間資料
     if (updateData.datetime) {
