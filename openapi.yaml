@@ -629,13 +629,41 @@ components:
             startAt: { type: string, format: date-time }
 
     UpdateEventData:
-      allOf:
-        - $ref: '#/components/schemas/CreateEventData'
+      type: object
       description: >-
-        與 CreateEventData 相同，但不含 artistIds。reservation 額外接受 null
-        或 {}（url、startAt 皆缺）代表明確清除整個預約資訊；省略 reservation
-        欄位則不變動既有值。
+        欄位與 CreateEventData 相同但皆為選填（局部更新，未傳入的欄位不變動既有值）。
+        不繼承 CreateEventData（allOf 疊加覆寫在部分 validator 下無法正確表達
+        reservation 的 nullable 語意），改為完整重新定義。
       properties:
+        artistIds: { type: array, items: { type: string } }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        location:
+          type: object
+          required: [name, coordinates]
+          properties:
+            name: { type: string }
+            address: { type: string }
+            city: { type: string }
+            coordinates:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            placeId: { type: string }
+        datetime:
+          type: object
+          properties:
+            start: { type: string, format: date-time }
+            end: { type: string, format: date-time }
+        socialMedia:
+          type: object
+          properties:
+            instagram: { type: string }
+            x: { type: string }
+            threads: { type: string }
+        mainImage: { type: string }
+        detailImage: { type: array, items: { type: string } }
         reservation:
           type: object
           nullable: true
