@@ -87,7 +87,10 @@ paths:
             schema: { $ref: '#/components/schemas/CreateEventData' }
       responses:
         '201': { description: 建立成功 }
-        '400': { description: 缺少必填欄位 }
+        '400':
+          description: >-
+            缺少必填欄位，或 reservation.startAt 有值但 reservation.url
+            未填（錯誤訊息掛在 reservation.url）
 
   /events/map-data:
     get:
@@ -143,6 +146,10 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateEventData' }
       responses:
         '200': { description: 更新後的活動 }
+        '400':
+          description: >-
+            reservation.startAt 有值但 reservation.url 未填（錯誤訊息掛在
+            reservation.url）
     delete:
       tags: [events]
       summary: 刪除活動
@@ -571,6 +578,12 @@ components:
             threads: { type: string }
         mainImage: { type: string }
         detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          description: 選填。舊活動（投稿於此欄位上線前）沒有此欄位，前端視為未填寫即可。
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { type: string, format: date-time }
         status: { type: string, enum: [pending, approved, rejected] }
         rejectedReason: { type: string }
         viewCount: { type: integer }
@@ -608,11 +621,28 @@ components:
             threads: { type: string }
         mainImage: { type: string }
         detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          description: '選填。url 需以 http:// 或 https:// 開頭；startAt 有值時 url 必填（否則 400）。'
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { type: string, format: date-time }
 
     UpdateEventData:
       allOf:
         - $ref: '#/components/schemas/CreateEventData'
-      description: 與 CreateEventData 相同，但不含 artistIds
+      description: >-
+        與 CreateEventData 相同，但不含 artistIds。reservation 額外接受 null
+        或 {}（url、startAt 皆缺）代表明確清除整個預約資訊；省略 reservation
+        欄位則不變動既有值。
+      properties:
+        reservation:
+          type: object
+          nullable: true
+          description: 傳入 null 或 {} 代表清除既有預約資訊；省略此欄位則不變動既有值。
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { type: string, format: date-time }
 
     VenueRegion:
       type: string
