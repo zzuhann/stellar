@@ -43,9 +43,11 @@ paths:
           schema: { type: string }
         - in: query
           name: startTimeFrom
+          description: ISO 8601 字串（查詢參數走 URL，非 Firestore Timestamp 物件）
           schema: { type: string, format: date-time }
         - in: query
           name: startTimeTo
+          description: ISO 8601 字串（查詢參數走 URL，非 Firestore Timestamp 物件）
           schema: { type: string, format: date-time }
         - in: query
           name: page
@@ -536,6 +538,16 @@ components:
       description: 'Firebase ID Token，帶在 `Authorization: Bearer {token}`'
 
   schemas:
+    FirestoreTimestamp:
+      type: object
+      description: >-
+        Firestore Timestamp 物件（非 ISO 字串）。API 目前不接受/回傳
+        ISO 8601 字串，一律是這個形狀。
+      required: [_seconds, _nanoseconds]
+      properties:
+        _seconds: { type: integer }
+        _nanoseconds: { type: integer }
+
     CoffeeEvent:
       type: object
       properties:
@@ -568,8 +580,8 @@ components:
         datetime:
           type: object
           properties:
-            start: { type: string, format: date-time }
-            end: { type: string, format: date-time }
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
         socialMedia:
           type: object
           properties:
@@ -583,7 +595,7 @@ components:
           description: 選填。舊活動（投稿於此欄位上線前）沒有此欄位，前端視為未填寫即可。
           properties:
             url: { type: string, description: '需以 http:// 或 https:// 開頭' }
-            startAt: { type: string, format: date-time }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
         status: { type: string, enum: [pending, approved, rejected] }
         rejectedReason: { type: string }
         viewCount: { type: integer }
@@ -611,8 +623,8 @@ components:
         datetime:
           type: object
           properties:
-            start: { type: string, format: date-time }
-            end: { type: string, format: date-time }
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
         socialMedia:
           type: object
           properties:
@@ -626,7 +638,7 @@ components:
           description: '選填。url 需以 http:// 或 https:// 開頭；startAt 有值時 url 必填（否則 400）。'
           properties:
             url: { type: string, description: '需以 http:// 或 https:// 開頭' }
-            startAt: { type: string, format: date-time }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
 
     UpdateEventData:
       type: object
@@ -654,8 +666,8 @@ components:
         datetime:
           type: object
           properties:
-            start: { type: string, format: date-time }
-            end: { type: string, format: date-time }
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
         socialMedia:
           type: object
           properties:
@@ -670,7 +682,7 @@ components:
           description: 傳入 null 或 {} 代表清除既有預約資訊；省略此欄位則不變動既有值。
           properties:
             url: { type: string, description: '需以 http:// 或 https:// 開頭' }
-            startAt: { type: string, format: date-time }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
 
     VenueRegion:
       type: string
