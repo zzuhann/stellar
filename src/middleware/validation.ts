@@ -302,7 +302,9 @@ const reservationUrlSchema = z
 
 const reservationSchema = z
   .object({
-    url: reservationUrlSchema.optional(),
+    // 空字串跟省略欄位一樣視為「未填寫」，不要讓 .url() 把它當成無效網址擋下 400
+    // （清除預約資訊時，除了 undefined / {} / null，直接送 { url: '' } 也要成立）
+    url: z.preprocess(val => (val === '' ? undefined : val), reservationUrlSchema.optional()),
     startAt: z
       .object({
         _seconds: z.number(),

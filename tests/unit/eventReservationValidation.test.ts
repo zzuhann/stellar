@@ -28,6 +28,17 @@ describe('eventSchemas.create reservation validation', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts reservation with url: "" (treated as omitted, not rejected by .url())', () => {
+    const result = eventSchemas.create.safeParse({
+      ...baseCreatePayload,
+      reservation: { url: '' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.reservation?.url).toBeUndefined();
+    }
+  });
+
   it('accepts reservation with url and startAt', () => {
     const result = eventSchemas.create.safeParse({
       ...baseCreatePayload,
@@ -100,6 +111,17 @@ describe('eventSchemas.update reservation validation', () => {
       reservation: {},
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts reservation: { url: "" } as a clear, same as {} or null (not a 400)', () => {
+    const result = eventSchemas.update.safeParse({
+      ...baseUpdatePayload,
+      reservation: { url: '' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.reservation?.url).toBeUndefined();
+    }
   });
 
   it('accepts a full reservation object', () => {
