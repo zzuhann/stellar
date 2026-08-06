@@ -19,7 +19,6 @@ const mockWhere = jest.fn();
 
 jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
-  withTimeoutAndRetry: jest.fn().mockImplementation((fn: () => unknown) => fn()),
   db: {
     collection: jest.fn(),
     getAll: jest.fn(),
@@ -27,11 +26,14 @@ jest.mock('../../src/config/firebase', () => ({
   },
 }));
 
+jest.mock('../../src/utils/firestoreTimeout', () => ({
+  withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
+}));
+
 describe('VenueService.createVenue', () => {
   it('pending 場地不清公開列表 cache，但清除 admin cache', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
     (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
-    (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
     mockSet.mockResolvedValue(undefined);
     const deleteSpy = jest.spyOn(cache, 'delete');
     const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
@@ -62,7 +64,6 @@ describe('VenueService.permanentDeleteVenue', () => {
     (firebase.db.collection as jest.Mock).mockReturnValue({
       doc: jest.fn(() => mockDocRef),
     });
-    (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
     service = new VenueService();
   });
 
@@ -110,7 +111,6 @@ describe('VenueService.batchReview', () => {
       };
     });
     mockWhere.mockReturnValue({ get: mockCollectionGet });
-    (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
     (firebase.db.runTransaction as jest.Mock).mockImplementation(
       async (fn: (tx: unknown) => Promise<void>) => {
         const tx = { get: jest.fn(), update: jest.fn() };
@@ -215,7 +215,6 @@ describe('VenueService.batchStatus', () => {
     (firebase.db.collection as jest.Mock).mockReturnValue({
       doc: jest.fn(() => mockDocRef),
     });
-    (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
     service = new VenueService();
   });
 
