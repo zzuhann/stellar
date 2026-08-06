@@ -12,10 +12,13 @@ function asUpdateEventData(data: unknown): UpdateEventData {
 
 jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
-  withTimeoutAndRetry: jest.fn().mockImplementation((fn: () => unknown) => fn()),
   db: {
     collection: jest.fn(),
   },
+}));
+
+jest.mock('../../src/utils/firestoreTimeout', () => ({
+  withTimeoutAndRetry: jest.fn().mockImplementation((fn: () => unknown) => fn()),
 }));
 
 const mockArtistGet = jest.fn();
@@ -44,7 +47,10 @@ function setupCollections() {
       })),
     };
   });
-  (firebase.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) => fn());
+  const firestoreTimeout = jest.requireMock('../../src/utils/firestoreTimeout');
+  (firestoreTimeout.withTimeoutAndRetry as jest.Mock).mockImplementation((fn: () => unknown) =>
+    fn()
+  );
 }
 
 describe('EventService.createEvent reservation handling', () => {
