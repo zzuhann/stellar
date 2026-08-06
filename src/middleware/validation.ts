@@ -292,6 +292,30 @@ export const venueSchemas = {
 };
 
 // Event 相關的 schema
+const reservationUrlSchema = z
+  .string()
+  .trim()
+  .url('請輸入正確的網址格式（需以 http:// 或 https:// 開頭）')
+  .refine(val => val.startsWith('http://') || val.startsWith('https://'), {
+    message: '請輸入正確的網址格式（需以 http:// 或 https:// 開頭）',
+  });
+
+const reservationSchema = z
+  .object({
+    // 空字串正規化為 undefined，避免 .url() 把「清除」誤判成無效網址擋下 400
+    url: z.preprocess(val => (val === '' ? undefined : val), reservationUrlSchema.optional()),
+    startAt: z
+      .object({
+        _seconds: z.number(),
+        _nanoseconds: z.number(),
+      })
+      .optional(),
+  })
+  .refine(data => !data.startAt || data.url, {
+    message: '請填寫預約網址，或清空預約日期／時間',
+    path: ['url'],
+  });
+
 export const eventSchemas = {
   create: z.object({
     title: z.string().min(1, '標題為必填欄位').max(200, '標題不能超過200個字').trim(),
@@ -335,6 +359,7 @@ export const eventSchemas = {
       .array(z.string().url('詳細圖片網址格式不正確'))
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
+    reservation: reservationSchema.optional(),
   }),
 
   update: z.object({
@@ -390,6 +415,7 @@ export const eventSchemas = {
       .array(z.string().url('詳細圖片網址格式不正確'))
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
+    reservation: reservationSchema.optional().nullable(),
   }),
 };
 

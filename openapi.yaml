@@ -43,9 +43,11 @@ paths:
           schema: { type: string }
         - in: query
           name: startTimeFrom
+          description: ISO 8601 字串（查詢參數走 URL，非 Firestore Timestamp 物件）
           schema: { type: string, format: date-time }
         - in: query
           name: startTimeTo
+          description: ISO 8601 字串（查詢參數走 URL，非 Firestore Timestamp 物件）
           schema: { type: string, format: date-time }
         - in: query
           name: page
@@ -87,7 +89,10 @@ paths:
             schema: { $ref: '#/components/schemas/CreateEventData' }
       responses:
         '201': { description: 建立成功 }
-        '400': { description: 缺少必填欄位 }
+        '400':
+          description: >-
+            缺少必填欄位，或 reservation.startAt 有值但 reservation.url
+            未填（錯誤訊息掛在 reservation.url）
 
   /events/map-data:
     get:
@@ -143,6 +148,10 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateEventData' }
       responses:
         '200': { description: 更新後的活動 }
+        '400':
+          description: >-
+            reservation.startAt 有值但 reservation.url 未填（錯誤訊息掛在
+            reservation.url）
     delete:
       tags: [events]
       summary: 刪除活動
@@ -529,6 +538,16 @@ components:
       description: 'Firebase ID Token，帶在 `Authorization: Bearer {token}`'
 
   schemas:
+    FirestoreTimestamp:
+      type: object
+      description: >-
+        Firestore Timestamp 物件（非 ISO 字串）。API 目前不接受/回傳
+        ISO 8601 字串，一律是這個形狀。
+      required: [_seconds, _nanoseconds]
+      properties:
+        _seconds: { type: integer }
+        _nanoseconds: { type: integer }
+
     CoffeeEvent:
       type: object
       properties:
@@ -561,8 +580,8 @@ components:
         datetime:
           type: object
           properties:
-            start: { type: string, format: date-time }
-            end: { type: string, format: date-time }
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
         socialMedia:
           type: object
           properties:
@@ -571,6 +590,12 @@ components:
             threads: { type: string }
         mainImage: { type: string }
         detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          description: 選填。舊活動（投稿於此欄位上線前）沒有此欄位，前端視為未填寫即可。
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
         status: { type: string, enum: [pending, approved, rejected] }
         rejectedReason: { type: string }
         viewCount: { type: integer }
@@ -598,8 +623,8 @@ components:
         datetime:
           type: object
           properties:
-            start: { type: string, format: date-time }
-            end: { type: string, format: date-time }
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
         socialMedia:
           type: object
           properties:
@@ -608,11 +633,56 @@ components:
             threads: { type: string }
         mainImage: { type: string }
         detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          description: '選填。url 需以 http:// 或 https:// 開頭；startAt 有值時 url 必填（否則 400）。'
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
 
     UpdateEventData:
-      allOf:
-        - $ref: '#/components/schemas/CreateEventData'
-      description: 與 CreateEventData 相同，但不含 artistIds
+      type: object
+      description: >-
+        欄位與 CreateEventData 相同但皆為選填（局部更新，未傳入的欄位不變動既有值）。
+        不繼承 CreateEventData（allOf 疊加覆寫在部分 validator 下無法正確表達
+        reservation 的 nullable 語意），改為完整重新定義。
+      properties:
+        artistIds: { type: array, items: { type: string } }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        location:
+          type: object
+          required: [name, coordinates]
+          properties:
+            name: { type: string }
+            address: { type: string }
+            city: { type: string }
+            coordinates:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            placeId: { type: string }
+        datetime:
+          type: object
+          properties:
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
+        socialMedia:
+          type: object
+          properties:
+            instagram: { type: string }
+            x: { type: string }
+            threads: { type: string }
+        mainImage: { type: string }
+        detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          nullable: true
+          description: 傳入 null 或 {} 代表清除既有預約資訊；省略此欄位則不變動既有值。
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
 
     VenueRegion:
       type: string

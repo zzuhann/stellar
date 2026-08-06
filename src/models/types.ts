@@ -59,6 +59,10 @@ export interface CoffeeEvent {
   };
   mainImage?: string; // 新增：主要圖片 URL
   detailImage?: string[]; // 新增：詳細圖片 URL 陣列
+  reservation?: {
+    url?: string;
+    startAt?: Timestamp;
+  };
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   viewCount?: number;
@@ -294,6 +298,10 @@ export interface CreateEventData {
   };
   mainImage?: string; // 主要圖片 URL
   detailImage?: string[]; // 詳細圖片 URL 陣列
+  reservation?: {
+    url?: string;
+    startAt?: Date | string | { _seconds: number; _nanoseconds: number };
+  };
 }
 
 // 編輯活動資料（不包含 artistIds）
@@ -321,6 +329,10 @@ export interface UpdateEventData {
   };
   mainImage?: string; // 主要圖片 URL
   detailImage?: string[]; // 詳細圖片 URL 陣列
+  reservation?: {
+    url?: string;
+    startAt?: Date | string | { _seconds: number; _nanoseconds: number };
+  } | null; // null = 明確清除整個 reservation
 }
 
 // 新增篩選參數介面
