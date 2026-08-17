@@ -60,6 +60,12 @@ describe('toPublicEvent', () => {
     expect(result).not.toHaveProperty('createdByEmail');
     expect(result.isFavorited).toBe(true);
   });
+
+  it('回傳型別不含 createdByEmail（compile-time 防退步：若實作退回 as T 蓋型別，這裡會編譯失敗）', () => {
+    const result = toPublicEvent(baseEvent());
+    // @ts-expect-error createdByEmail 不應存在於回傳型別上
+    void result.createdByEmail;
+  });
 });
 
 describe('toPublicEvents', () => {
