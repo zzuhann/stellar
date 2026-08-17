@@ -10,6 +10,7 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
+import { toPublicEvent } from '../utils/eventSanitizer';
 
 export class UserService {
   private collection = hasFirebaseConfig && db ? db.collection('users') : null;
@@ -259,10 +260,13 @@ export class UserService {
       );
 
       eventsSnapshot.docs.forEach(doc => {
-        eventsMap.set(doc.id, {
-          id: doc.id,
-          ...doc.data(),
-        } as CoffeeEvent);
+        eventsMap.set(
+          doc.id,
+          toPublicEvent({
+            id: doc.id,
+            ...doc.data(),
+          } as CoffeeEvent)
+        );
       });
     }
 
