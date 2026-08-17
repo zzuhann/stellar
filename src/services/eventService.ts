@@ -18,6 +18,7 @@ import { UserService } from './userService';
 import { Timestamp, FieldValue, DocumentReference } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
+import { toPublicEvent, toPublicEvents } from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 
 export class EventService {
@@ -248,7 +249,7 @@ export class EventService {
     const sortedEvents = this.sortEvents(events, filters.sortBy, filters.sortOrder);
 
     // 分頁處理
-    const finalPaginatedEvents = sortedEvents.slice(skip, skip + limit);
+    const finalPaginatedEvents = toPublicEvents(sortedEvents.slice(skip, skip + limit));
 
     // 如果需要檢查收藏狀態
     if (userId) {
@@ -471,9 +472,10 @@ export class EventService {
   }
 
   private async prepareEventForResponse(
-    event: CoffeeEvent,
+    rawEvent: CoffeeEvent,
     userId?: string
   ): Promise<CoffeeEvent | CoffeeEventWithFavorite> {
+    const event = toPublicEvent(rawEvent);
     const eventWithSlugs = await this.backfillArtistSlugs(event);
     const venueId = eventWithSlugs.location.venueId;
     let eventWithVenueStatus = eventWithSlugs;
@@ -1268,7 +1270,9 @@ export class EventService {
       );
     }
 
-    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+    const result = toPublicEvents(
+      events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis())
+    );
 
     // 設定 4 小時快取
     cache.set(cacheKey, result, 240);
@@ -1373,9 +1377,11 @@ export class EventService {
       `events:trending:${clampedLimit}`,
       async () => {
         const activeEvents = await this.getApprovedActiveEventsBase();
-        return [...activeEvents]
-          .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
-          .slice(0, clampedLimit);
+        return toPublicEvents(
+          [...activeEvents]
+            .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
+            .slice(0, clampedLimit)
+        );
       },
       360 // 6 小時 TTL
     );
