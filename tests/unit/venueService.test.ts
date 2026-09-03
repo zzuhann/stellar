@@ -543,3 +543,268 @@ describe('VenueService.getVenues — 分頁', () => {
     expect(getWithLockSpy).toHaveBeenCalledWith('venues:all', expect.any(Function), 1440);
   });
 });
+
+// --- Phase 2.8 場地綜合排序 -------------------------------------------------
+
+type ScoredVenueFixture = Omit<VenueFixture, 'createdAt'> & {
+  compositeScore: number;
+  createdAt?: { toMillis: () => number };
+};
+
+const buildScoredVenue = (overrides: Partial<ScoredVenueFixture>): ScoredVenueFixture => ({
+  ...makeBaseVenue(),
+  compositeScore: 0,
+  ...overrides,
+});
+
+describe('VenueService.getVenues — composite 排序 tie-break', () => {
+  let getWithLockSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('compositeScore 相同時，依 createdAt desc 排序（較新上架排前面）', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'old', compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+      buildScoredVenue({ id: 'new', compositeScore: 0.5, createdAt: { toMillis: () => 2000 } }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['new', 'old']);
+  });
+
+  it('compositeScore 與 createdAt 皆相同（理論邊界）時，依 id 排序，確保排序具決定性', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'b', compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+      buildScoredVenue({ id: 'a', compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['a', 'b']);
+  });
+
+  it('三筆以上同分同 createdAt 場地跨分頁查詢（limit=1）時，不因排序不穩定而重複或漏出資料', async () => {
+    const venues = ['c', 'a', 'b'].map(id =>
+      buildScoredVenue({ id, compositeScore: 0.5, createdAt: { toMillis: () => 1000 } })
+    );
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const service = new VenueService();
+    const page1 = await service.getVenues({ limit: 1, page: 1 });
+    const page2 = await service.getVenues({ limit: 1, page: 2 });
+    const page3 = await service.getVenues({ limit: 1, page: 3 });
+    if (Array.isArray(page1) || Array.isArray(page2) || Array.isArray(page3)) {
+      throw new Error('expected paginated result');
+    }
+
+    const ids = [...page1.venues, ...page2.venues, ...page3.venues].map(v => v.id);
+    expect(ids).toEqual(['a', 'b', 'c']); // id asc tie-break：跨頁不重複、不遺漏
+  });
+
+  it('getVenues() 回傳的每筆 venue 物件不含 compositeScore 欄位', async () => {
+    const venues = [buildScoredVenue({ id: 'v1', compositeScore: 0.7 })];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues[0]).not.toHaveProperty('compositeScore');
+  });
+});
+
+describe('VenueService.getVenues — sort 參數與 fallback', () => {
+  let getWithLockSpy: jest.SpyInstance;
+
+  const venues = [
+    buildScoredVenue({
+      id: 'low',
+      compositeScore: 0.2,
+      eventCount: 5,
+      name: 'B',
+      createdAt: { toMillis: () => 1000 },
+    }),
+    buildScoredVenue({
+      id: 'high',
+      compositeScore: 0.8,
+      eventCount: 1,
+      name: 'A',
+      createdAt: { toMillis: () => 2000 },
+    }),
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('未帶 sort 參數時，排序結果等同 sort=composite（新預設）', async () => {
+    const withoutSort = await new VenueService().getVenues({});
+    const withComposite = await new VenueService().getVenues({ sort: 'composite' });
+    if (Array.isArray(withoutSort) || Array.isArray(withComposite)) {
+      throw new Error('expected paginated result');
+    }
+    expect(withoutSort.venues.map(v => v.id)).toEqual(['high', 'low']); // compositeScore 0.8 > 0.2
+    expect(withoutSort.venues.map(v => v.id)).toEqual(withComposite.venues.map(v => v.id));
+  });
+
+  it('sort=eventCount 明確指定時，維持 fetchAll() 既有的 eventCount desc 自然順序，不受 compositeScore 影響', async () => {
+    // fetchAll() 底層用 Firestore orderBy('eventCount','desc')，這裡 fixture 陣列順序
+    // 本身就代表該自然順序（'low' eventCount=5 在前，'high' eventCount=1 在後）
+    const result = await new VenueService().getVenues({ sort: 'eventCount' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['low', 'high']);
+  });
+
+  it('sort=newest 行為與現況不變，不受 composite 分支影響', async () => {
+    const result = await new VenueService().getVenues({ sort: 'newest' });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['high', 'low']); // createdAt desc: 2000 > 1000
+  });
+
+  it('sort=random 行為與現況不變，不受本次改動影響（不含 pagination）', async () => {
+    const result = await new VenueService().getVenues({ sort: 'random', limit: 2 });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).not.toHaveProperty('pagination');
+  });
+
+  it('sort=composite 與 region/page/limit 疊加使用時，先完成 filter 再套用綜合排序，分頁結果正確', async () => {
+    const mixedVenues = [
+      buildScoredVenue({ id: 'v1', region: '台北', compositeScore: 0.9 }),
+      buildScoredVenue({ id: 'v2', region: '新北', compositeScore: 0.95 }),
+      buildScoredVenue({ id: 'v3', region: '台北', compositeScore: 0.1 }),
+    ];
+    getWithLockSpy.mockResolvedValue(mixedVenues);
+
+    const result = await new VenueService().getVenues({
+      region: ['台北'],
+      sort: 'composite',
+      limit: 1,
+      page: 1,
+    });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    // v2 是新北，被 region filter 排除；台北中 v1(0.9) > v3(0.1)
+    expect(result.venues.map(v => v.id)).toEqual(['v1']);
+    expect(result.pagination).toEqual({ page: 1, limit: 1, total: 2, totalPages: 2 });
+  });
+});
+
+describe('VenueService.getVenues — fetchAll 效能設計與 cold start（避免 N+1）', () => {
+  let service: VenueService;
+  const mockVenuesGet = jest.fn();
+  const mockViewsGet = jest.fn();
+
+  const fakeTimestamp = (ms: number) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
+  const venueDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'venueViewDaily') {
+        return { where: jest.fn().mockReturnValue({ get: mockViewsGet }) };
+      }
+      return { orderBy: jest.fn().mockReturnValue({ get: mockVenuesGet }) };
+    });
+    (firebase.db.getAll as jest.Mock).mockResolvedValue([]);
+    mockViewsGet.mockResolvedValue({ docs: [] });
+    mockVenuesGet.mockResolvedValue({ docs: [] });
+    service = new VenueService();
+  });
+
+  it('活躍週數計算對 eventRefs 使用單次 db.getAll batch get，不逐場地個別查詢（呼叫次數與場地數無關）', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    const venues = Array.from({ length: 5 }, (_, i) =>
+      venueDoc(`v${i}`, {
+        name: `場地${i}`,
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [{ id: `event-${i}` }],
+        createdAt: fakeTimestamp(0),
+      })
+    );
+    mockVenuesGet.mockResolvedValue({ docs: venues });
+
+    await service.getVenues({});
+
+    expect(firebase.db.getAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('瀏覽數聚合使用單一 venueViewDaily range query，呼叫次數固定為 1 次，不隨場地數增加', async () => {
+    const venues = Array.from({ length: 8 }, (_, i) =>
+      venueDoc(`v${i}`, { name: `場地${i}`, status: 'active', eventCount: 0, eventRefs: [] })
+    );
+    mockVenuesGet.mockResolvedValue({ docs: venues });
+
+    await service.getVenues({});
+
+    expect(mockViewsGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('venues:all cache 有效期間內，重複呼叫不重新觸發活躍週數 batch get 或瀏覽數 query', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    const venues = [
+      venueDoc('v1', {
+        name: '場地1',
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [{ id: 'event-1' }],
+        createdAt: fakeTimestamp(0),
+      }),
+    ];
+    mockVenuesGet.mockResolvedValue({ docs: venues });
+
+    await service.getVenues({});
+    await service.getVenues({ page: 2 });
+
+    expect(mockVenuesGet).toHaveBeenCalledTimes(1);
+    expect(firebase.db.getAll).toHaveBeenCalledTimes(1);
+    expect(mockViewsGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('venueViewDaily 為空（cold start）時，viewScore 一律為 0，不 fallback 到 viewCount 累計數，且不報錯', async () => {
+    const venues = [
+      venueDoc('v-high-viewcount', {
+        name: '高 viewCount 但無 daily bucket',
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        viewCount: 99999, // 不應被拿來當 fallback
+        createdAt: fakeTimestamp(1000),
+      }),
+      venueDoc('v-newer', {
+        name: '較新場地，viewCount 為 0',
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        viewCount: 0,
+        createdAt: fakeTimestamp(2000),
+      }),
+    ];
+    mockVenuesGet.mockResolvedValue({ docs: venues });
+    mockViewsGet.mockResolvedValue({ docs: [] }); // cold start
+
+    const result = await service.getVenues({});
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+
+    // 若錯誤地 fallback 到 viewCount，'v-high-viewcount' 分數會遠高於 'v-newer' 而排前面；
+    // 正確行為是兩者 viewScore 皆為 0（近 26 週活躍週數也皆為 0），
+    // 僅靠 createdAt desc tie-break 排序，'v-newer' 應排前面。
+    expect(result.venues.map(v => v.id)).toEqual(['v-newer', 'v-high-viewcount']);
+  });
+});
