@@ -148,11 +148,24 @@ export interface VenueFilterParams {
   region?: string[];
   capacityRange?: CapacityRange;
   search?: string;
-  sort?: 'eventCount' | 'name' | 'newest' | 'random';
+  sort?: 'composite' | 'eventCount' | 'name' | 'newest' | 'random'; // 'composite' 為新增值；省略時等同 'composite'
   limit?: number;
   page?: number;
   status?: VenueStatus | 'all';
 }
+
+// venueViewDaily collection 的 document schema
+// doc id 格式：`{venueId}_{date}`（例：`abc123_2026-09-02`），同一場地同一天寫入同一 doc，靠 doc id 天然去重
+export interface VenueViewDailyDoc {
+  venueId: string;
+  date: string; // UTC 日期字串 YYYY-MM-DD，與 doc id 後綴一致，用於 range query
+  count: number;
+  expireAt: Timestamp; // 寫入當下 + 90 天；供 Firestore TTL policy 自動清除，不影響查詢正確性
+}
+
+// venueService 內部用於排序計算，不對外回傳、不進入公開 Venue 型別，
+// 避免污染既有 API response 形狀（getVenues() 回傳前會被去除）
+export type VenueWithScore = Venue & { compositeScore: number };
 
 export interface VenuePagination {
   page: number;
