@@ -1,12 +1,20 @@
+import express from 'express';
+import request from 'supertest';
 import { Timestamp } from 'firebase-admin/firestore';
-import { EventService } from '../../src/services/eventService';
+import eventRoutes from '../../src/routes/eventRoutes';
 import { cache } from '../../src/utils/cache';
 
 /**
  * Regression test for the createdByEmail leak (F-01, fixed in d83d96c).
- * Exercises the actual EventService.getEventById call path — not just the
- * toPublicEvent utility in isolation — so a future refactor that drops the
- * sanitizer call from prepareEventForResponse fails a test instead of shipping.
+ * Drives the real Express route — router → optionalAuthenticate → controller
+ * → service → res.json() — via supertest, instead of calling EventService
+ * directly. This exercises the actual HTTP response body, which is where F-01
+ * was observed (an anonymous request reading createdByEmail), so a future
+ * call site that bypasses toPublicEvent() and writes straight into the
+ * response fails this test instead of shipping.
+ *
+ * GET /events/:id uses optionalAuthenticate (not authenticateToken), so the
+ * anonymous case below is a plain request with no Authorization header.
  */
 
 const makeTimestamp = (isoDate: string): Timestamp =>
@@ -16,6 +24,7 @@ const mockEventGet = jest.fn();
 
 jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
+  auth: { verifyIdToken: jest.fn() },
   db: {
     collection: jest.fn(() => ({
       doc: jest.fn(() => ({ get: mockEventGet })),
@@ -27,7 +36,13 @@ jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
 
-describe('GET /events/:id（匿名）回應不含 createdByEmail', () => {
+const buildApp = () => {
+  const app = express();
+  app.use('/api/events', eventRoutes);
+  return app;
+};
+
+describe('GET /api/events/:id（匿名，未帶 Authorization header）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     cache.clear();
@@ -47,10 +62,10 @@ describe('GET /events/:id（匿名）回應不含 createdByEmail', () => {
     });
   });
 
-  it('未帶 Authorization header 呼叫 getEventById，回應不含 createdByEmail', async () => {
-    const event = await new EventService().getEventById('event-1');
+  it('回應 body 不含 createdByEmail', async () => {
+    const response = await request(buildApp()).get('/api/events/event-1');
 
-    expect(event).not.toBeNull();
-    expect(event).not.toHaveProperty('createdByEmail');
+    expect(response.status).toBe(200);
+    expect(response.body).not.toHaveProperty('createdByEmail');
   });
 });
