@@ -200,8 +200,8 @@ export const venueSchemas = {
           return trimmed && trimmed.length > 0 ? trimmed : undefined;
         }),
       sort: z
-        .enum(['eventCount', 'name', 'newest', 'random'], {
-          error: 'sort must be "eventCount", "name", "newest", or "random"',
+        .enum(['composite', 'eventCount', 'name', 'newest', 'random'], {
+          error: 'sort must be "composite", "eventCount", "name", "newest", or "random"',
         })
         .optional(),
       limit: venueLimitQuerySchema,

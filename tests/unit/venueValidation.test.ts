@@ -129,7 +129,7 @@ describe('GET /venues query validation (venueSchemas.getVenues)', () => {
     }
   });
 
-  it.each(['eventCount', 'name', 'newest', 'random'])('accepts sort=%s', value => {
+  it.each(['composite', 'eventCount', 'name', 'newest', 'random'])('accepts sort=%s', value => {
     // random 模式下 limit 為必填，補上以孤立測試 sort 本身的合法性
     expect(parse({ sort: value, limit: value === 'random' ? '10' : undefined }).success).toBe(true);
   });
@@ -139,7 +139,7 @@ describe('GET /venues query validation (venueSchemas.getVenues)', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0].message).toBe(
-        'sort must be "eventCount", "name", "newest", or "random"'
+        'sort must be "composite", "eventCount", "name", "newest", or "random"'
       );
     }
   });

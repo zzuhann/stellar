@@ -245,7 +245,16 @@ paths:
           schema: { type: string }
         - in: query
           name: sort
-          schema: { type: string, enum: [eventCount, name, newest, random], default: eventCount }
+          description: >-
+            未帶時等同 composite（綜合排序：活躍週數 50% + 瀏覽數 30% + 新場地加分 20%，
+            同分依 createdAt desc 再依 id asc 排序）。sort=eventCount 明確指定時維持既有的
+            eventCount desc 排序，行為不變。
+          schema:
+            {
+              type: string,
+              enum: [composite, eventCount, name, newest, random],
+              default: composite,
+            }
         - in: query
           name: limit
           description: >-
