@@ -93,6 +93,10 @@ paths:
           description: >-
             缺少必填欄位，或 reservation.startAt 有值但 reservation.url
             未填（錯誤訊息掛在 reservation.url）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: 'title is required', code: VALIDATION_ERROR, field: title }
 
   /events/map-data:
     get:
@@ -136,6 +140,10 @@ paths:
               schema: { $ref: '#/components/schemas/CoffeeEvent' }
         '404':
           description: 找不到活動
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Event not found', code: EVENT_NOT_FOUND }
     put:
       tags: [events]
       summary: 編輯活動
@@ -152,6 +160,15 @@ paths:
           description: >-
             reservation.startAt 有值但 reservation.url 未填（錯誤訊息掛在
             reservation.url）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example:
+                {
+                  error: '請填寫預約網址，或清空預約日期／時間',
+                  code: VALIDATION_ERROR,
+                  field: reservation.url,
+                }
     delete:
       tags: [events]
       summary: 刪除活動
@@ -169,8 +186,22 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '204': { description: 紀錄成功（含去重命中） }
-        '404': { description: 找不到活動 }
-        '429': { description: 超過 rate limit }
+        '404':
+          description: 找不到活動
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Event not found', code: EVENT_NOT_FOUND }
+        '429':
+          description: 超過 rate limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /events/{id}/resubmit:
     patch:
@@ -215,9 +246,25 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/CoffeeEvent' }
-        '400': { description: updates 為空或格式錯誤 }
-        '404': { description: 其中一筆活動不存在 }
-        '500': { description: 批次審核失敗 }
+        '400':
+          description: updates 為空或格式錯誤
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example:
+                { error: 'Updates array is required', code: VALIDATION_ERROR, field: updates }
+        '404':
+          description: 其中一筆活動不存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '活動不存在: abc123', code: EVENT_NOT_FOUND }
+        '500':
+          description: 批次審核失敗
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Internal server error, code: INTERNAL_ERROR }
 
   /venues:
     get:
@@ -290,7 +337,17 @@ paths:
                       limit: { type: integer }
                       total: { type: integer }
                       totalPages: { type: integer }
-        '400': { description: sort 或 limit 參數組合不合法 }
+        '400':
+          description: sort 或 limit 參數組合不合法
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example:
+                {
+                  error: 'limit is required when sort is "random"',
+                  code: VALIDATION_ERROR,
+                  field: limit,
+                }
     post:
       tags: [venues]
       summary: 新增場地（僅 admin）
@@ -339,8 +396,22 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '204': { description: 紀錄成功（含去重命中） }
-        '404': { description: 找不到場地 }
-        '429': { description: 超過 rate limit }
+        '404':
+          description: 找不到場地
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Venue not found', code: VENUE_NOT_FOUND }
+        '429':
+          description: 超過 rate limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /venues/batch-review:
     patch:
@@ -387,8 +458,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VenueDetail' }
-        '400': { description: 輸入格式錯誤 }
-        '429': { description: 每 IP 每 60 分鐘最多 5 次 }
+        '400':
+          description: 輸入格式錯誤
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '場地名稱不能為空', code: VALIDATION_ERROR, field: name }
+        '429':
+          description: 每 IP 每 60 分鐘最多 5 次
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /venue-submissions/images:
     post:
@@ -408,8 +493,22 @@ paths:
                   description: JPEG、PNG 或 WebP，最大 5MB
       responses:
         '200': { description: 上傳成功 }
-        '400': { description: 格式、大小或欄位錯誤 }
-        '429': { description: 每 IP 每 15 分鐘最多 60 次成功上傳 }
+        '400':
+          description: 格式、大小或欄位錯誤
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '圖片大小不能超過 5MB', code: VALIDATION_ERROR, field: file }
+        '429':
+          description: 每 IP 每 15 分鐘最多 60 次成功上傳
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /venue-submissions/places/autocomplete:
     post:
@@ -426,7 +525,16 @@ paths:
                 input: { type: string }
       responses:
         '200': { description: Places 預測結果 }
-        '429': { description: 每 IP 每 15 分鐘最多 300 次 }
+        '429':
+          description: 每 IP 每 15 分鐘最多 300 次
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /venue-submissions/places/{placeId}:
     get:
@@ -439,7 +547,16 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Place detail }
-        '429': { description: 每 IP 每 15 分鐘最多 300 次 }
+        '429':
+          description: 每 IP 每 15 分鐘最多 300 次
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                {
+                  error: 'Too many requests, please try again later',
+                  code: RATE_LIMITED,
+                }
 
   /artists:
     get:
@@ -466,6 +583,12 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Artist' }
+        '403':
+          description: 帶 createdBy 查詢他人投稿，且非本人也非 admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Permission denied', code: FORBIDDEN }
     post:
       tags: [artists]
       summary: 新增藝人投稿
@@ -476,13 +599,29 @@ paths:
             schema: { $ref: '#/components/schemas/CreateArtistData' }
       responses:
         '201': { description: 建立成功 }
+        '400':
+          description: 缺少必填欄位或格式錯誤（見 artistSchemas.create）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '藝名為必填欄位', code: VALIDATION_ERROR, field: stageName }
 
   /artists/top:
     get:
       tags: [artists]
       summary: 熱門藝人排行
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
       responses:
         '200': { description: 熱門藝人列表 }
+        '400':
+          description: limit 非數字或小於 1
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: 'Invalid limit parameter', code: VALIDATION_ERROR, field: limit }
 
   /artists/{id}:
     get:
@@ -496,6 +635,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Artist' }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Artist not found', code: ARTIST_NOT_FOUND }
     put:
       tags: [artists]
       summary: 編輯藝人資料
@@ -504,6 +649,24 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '200': { description: 更新成功 }
+        '400':
+          description: 格式錯誤（見 artistSchemas.update，所有欄位皆為 optional）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '生日格式錯誤', code: VALIDATION_ERROR, field: birthday }
+        '403':
+          description: 非本人投稿也非 admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '權限不足', code: ARTIST_EDIT_FORBIDDEN }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在', code: ARTIST_NOT_FOUND }
     delete:
       tags: [artists]
       summary: 刪除藝人（僅 admin）
@@ -512,6 +675,18 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '200': { description: 刪除成功 }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在', code: ARTIST_NOT_FOUND }
+        '409':
+          description: 該藝人仍有關聯的生咖活動，不能刪除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '不能刪除已經有生咖活動的藝人', code: ARTIST_HAS_EVENTS }
 
   /artists/{id}/resubmit:
     patch:
@@ -522,14 +697,82 @@ paths:
         - $ref: '#/components/parameters/idPath'
       responses:
         '200': { description: 送審成功 }
+        '403':
+          description: 非本人投稿，只有創建者可以重新送審
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '權限不足: 只能重新送審自己的投稿', code: ARTIST_RESUBMIT_FORBIDDEN }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在', code: ARTIST_NOT_FOUND }
+        '409':
+          description: 藝人目前狀態不是 rejected，只有被拒絕的藝人可以重新送審
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { error: '只能重新送審已拒絕的藝人', code: ARTIST_RESUBMIT_INVALID_STATE }
 
   /artists/batch-review:
     post:
       tags: [artists]
       summary: 批次審核藝人（僅 admin）
       security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updates]
+              properties:
+                updates:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [artistId, status]
+                    properties:
+                      artistId: { type: string }
+                      status: { type: string, enum: [approved, rejected, exists] }
+                      reason:
+                        type: string
+                        description: 拒絕原因；status 為 rejected 時使用
+                      groupNames:
+                        type: array
+                        items: { type: string }
+                        description: 審核通過時可一併更新團名
       responses:
-        '200': { description: 審核完成 }
+        '200':
+          description: 審核完成
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Artist' }
+        '400':
+          description: updates 為空或格式錯誤（缺少 artistId／status，或 status 不是合法值）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example:
+                { error: 'Updates array is required', code: VALIDATION_ERROR, field: updates }
+        '404':
+          description: 其中一筆藝人不存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在: abc123', code: ARTIST_NOT_FOUND }
+        '500':
+          description: 批次審核失敗
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Internal server error, code: INTERNAL_ERROR }
 
 components:
   parameters:
@@ -547,6 +790,30 @@ components:
       description: 'Firebase ID Token，帶在 `Authorization: Bearer {token}`'
 
   schemas:
+    Error:
+      type: object
+      description: >-
+        統一錯誤回應格式（見 src/utils/AppError.ts 與全域錯誤處理 middleware）。
+      required: [error, code]
+      properties:
+        error: { type: string, description: 人類可讀的錯誤訊息 }
+        code:
+          type: string
+          description: >-
+            機器可讀的錯誤代碼，例如 EVENT_NOT_FOUND、ARTIST_NOT_FOUND、VENUE_NOT_FOUND、
+            FORBIDDEN、VALIDATION_ERROR、SERVICE_UNAVAILABLE、RATE_LIMITED、
+            ROUTE_NOT_FOUND、INTERNAL_ERROR 等，實際值請以拋出的 AppError 為準。
+
+    ValidationError:
+      description: VALIDATION_ERROR 的回應（400），部分情境會額外帶 field。
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            field:
+              type: string
+              description: 驗證失敗的欄位名稱（optional，並非所有 VALIDATION_ERROR 都會帶此欄位）
+
     FirestoreTimestamp:
       type: object
       description: >-
