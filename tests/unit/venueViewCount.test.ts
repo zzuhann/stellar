@@ -60,26 +60,25 @@ describe('VenueController.recordView', () => {
     expect(mockIncrementViewCount).toHaveBeenCalledTimes(2);
   });
 
-  it('場地不存在回 404，其他錯誤回 500', async () => {
+  it('場地不存在拋出 VENUE_NOT_FOUND，其他錯誤原樣往外丟', async () => {
     const controller = new VenueController();
     const missingRes = createResponseMock();
     const failedRes = createResponseMock();
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     mockIncrementViewCount.mockRejectedValueOnce(new Error('No document to update'));
-    await controller.recordView(
-      { params: { id: 'missing' }, ip: '10.0.0.1' } as never,
-      missingRes as never
-    );
+    await expect(
+      controller.recordView(
+        { params: { id: 'missing' }, ip: '10.0.0.1' } as never,
+        missingRes as never
+      )
+    ).rejects.toMatchObject({ statusCode: 404, code: 'VENUE_NOT_FOUND' });
 
     mockIncrementViewCount.mockRejectedValueOnce(new Error('Firestore unavailable'));
-    await controller.recordView(
-      { params: { id: 'failed' }, ip: '10.0.0.1' } as never,
-      failedRes as never
-    );
-
-    expect(missingRes.status).toHaveBeenCalledWith(404);
-    expect(failedRes.status).toHaveBeenCalledWith(500);
-    errorSpy.mockRestore();
+    await expect(
+      controller.recordView(
+        { params: { id: 'failed' }, ip: '10.0.0.1' } as never,
+        failedRes as never
+      )
+    ).rejects.toThrow('Firestore unavailable');
   });
 });
