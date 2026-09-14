@@ -27,5 +27,5 @@ export const restrictToWhitelistedIp = (req: Request, res: Response, next: NextF
   }
 
   console.warn(`/api/docs blocked: req.ip=${req.ip || ''}, normalized=${normalizedIp}`);
-  res.status(404).json({ error: 'Route not found' });
+  res.status(404).json({ error: 'Route not found', code: 'ROUTE_NOT_FOUND' });
 };

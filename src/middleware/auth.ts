@@ -19,7 +19,7 @@ export const authenticateToken = async (
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-      res.status(401).json({ error: 'Access token required' });
+      res.status(401).json({ error: 'Access token required', code: 'AUTH_TOKEN_MISSING' });
       return;
     }
 
@@ -38,7 +38,7 @@ export const authenticateToken = async (
     next();
   } catch (error) {
     console.error('Token verification failed:', error);
-    res.status(403).json({ error: 'Invalid token' });
+    res.status(401).json({ error: 'Invalid token', code: 'AUTH_TOKEN_INVALID' });
   }
 };
 
@@ -48,7 +48,7 @@ export const requireAdmin = (
   next: NextFunction
 ): void => {
   if (!req.user || req.user.role !== 'admin') {
-    res.status(403).json({ error: 'Admin access required' });
+    res.status(403).json({ error: 'Admin access required', code: 'ADMIN_REQUIRED' });
     return;
   }
   next();

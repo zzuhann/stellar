@@ -7,7 +7,7 @@ const DOCS_REALM = 'STELLAR API Docs';
 
 const sendUnauthorized = (res: Response): void => {
   res.setHeader('WWW-Authenticate', `Basic realm="${DOCS_REALM}"`);
-  res.status(401).json({ error: 'Unauthorized' });
+  res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
 };
 
 export const requireDocsAuth = (req: Request, res: Response, next: NextFunction): void => {

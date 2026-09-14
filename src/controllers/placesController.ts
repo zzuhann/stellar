@@ -78,15 +78,13 @@ export class PlacesController {
   // Google Places Autocomplete API 代理
   autocomplete = async (req: Request, res: Response): Promise<void> => {
     if (!this.apiKey) {
-      res.status(500).json({ error: 'Google Maps API key not configured' });
-      return;
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Maps service unavailable');
     }
 
     const { input } = req.body;
 
     if (!input || typeof input !== 'string') {
-      res.status(400).json({ error: 'Input is required' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Input is required', 'input');
     }
 
     const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -129,22 +127,24 @@ export class PlacesController {
         referer,
         data,
       });
-      res.status(response.status).json(data || { error: 'Failed to fetch predictions' });
+      res.status(response.status).json({
+        error: 'Failed to fetch predictions',
+        code: 'PLACES_API_ERROR',
+        details: data,
+      });
     }
   };
 
   // Google Places Details API 代理
   placeDetails = async (req: Request, res: Response): Promise<void> => {
     if (!this.apiKey) {
-      res.status(500).json({ error: 'Google Maps API key not configured' });
-      return;
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Maps service unavailable');
     }
 
     const { placeId } = req.params;
 
     if (!placeId) {
-      res.status(400).json({ error: 'Place ID is required' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Place ID is required', 'placeId');
     }
 
     const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -184,7 +184,12 @@ export class PlacesController {
       res.json(result);
     } else {
       const errorData = (await response.json()) as { error?: string };
-      res.status(response.status).json(errorData || { error: 'Failed to fetch place details' });
+      res.status(response.status).json({
+        error: 'Failed to fetch place details',
+        code: 'PLACES_API_ERROR',
+        details: errorData,
+      });
     }
   };
 }
+import { AppError } from '../utils/AppError';

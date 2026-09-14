@@ -11,6 +11,7 @@ import {
 } from '../models/types';
 import { sendVenueSubmissionNotification } from '../services/emailService';
 import { cache } from '../utils/cache';
+import { AppError } from '../utils/AppError';
 
 // req.validatedQuery 在 route 層由 validateRequest({ query: venueSchemas.getVenues })
 // 寫入，已完成格式驗證與型別轉換（limit/page 已是 number、region 已正規化為合法地區）；
@@ -95,8 +96,7 @@ export class VenueController {
     const venue = await this.venueService.getVenueById(id);
 
     if (!venue) {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
+      throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
     }
 
     res.json(venue);
@@ -117,11 +117,9 @@ export class VenueController {
       res.status(204).send();
     } catch (error) {
       if (error instanceof Error && error.message.includes('No document to update')) {
-        res.status(404).json({ error: 'Venue not found' });
-        return;
+        throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
       }
-      console.error('Error recording venue view:', error);
-      res.status(500).json({ error: 'Failed to record venue view' });
+      throw error;
     }
   };
 
@@ -130,8 +128,7 @@ export class VenueController {
     const updated = await this.venueService.updateVenue(id as string, req.body);
 
     if (!updated) {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
+      throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
     }
 
     res.json({ message: 'Venue updated' });
@@ -142,8 +139,7 @@ export class VenueController {
     const found = await this.venueService.deactivateVenue(id as string);
 
     if (!found) {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
+      throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
     }
 
     res.status(200).json({ message: 'Venue deactivated' });
@@ -154,8 +150,7 @@ export class VenueController {
     const venue = await this.venueService.getAdminVenueById(id as string);
 
     if (!venue) {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
+      throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
     }
 
     res.json(venue);
@@ -178,14 +173,13 @@ export class VenueController {
     const result = await this.venueService.permanentDeleteVenue(id as string);
 
     if (result === 'not_found') {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
+      throw new AppError(404, 'VENUE_NOT_FOUND', 'Venue not found');
     }
-
     if (result === 'has_events') {
       res.status(400).json({
         error:
           'Cannot permanently delete a venue that has associated events. Remove event associations first.',
+        code: 'VENUE_HAS_EVENTS',
       });
       return;
     }

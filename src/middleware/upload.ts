@@ -36,6 +36,8 @@ export const uploadSingle: RequestHandler = (req, res, next) => {
           error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
             ? '圖片大小不能超過 5MB'
             : error.message,
+        code: 'VALIDATION_ERROR',
+        field: 'file',
       });
       return;
     }
