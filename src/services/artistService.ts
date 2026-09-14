@@ -346,6 +346,16 @@ export class ArtistService {
     const allArtistDocs = await Promise.all(
       updates.map(u => withTimeoutAndRetry(() => this.collection.doc(u.artistId).get()))
     );
+
+    // 檢查所有 artists 是否存在
+    const missingArtists = allArtistDocs
+      .map((doc, index) => (!doc.exists ? updates[index].artistId : null))
+      .filter((id): id is string => id !== null);
+
+    if (missingArtists.length > 0) {
+      throw new AppError(404, 'ARTIST_NOT_FOUND', `藝人不存在: ${missingArtists.join(', ')}`);
+    }
+
     const allArtistsData: Artist[] = allArtistDocs
       .filter(doc => doc.exists)
       .map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
