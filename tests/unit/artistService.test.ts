@@ -116,13 +116,16 @@ describe('ArtistService.updateArtistStatus', () => {
     service = new ArtistService();
   });
 
-  it('artistId 不存在時，丟出 404 ARTIST_NOT_FOUND', async () => {
+  it('artistId 不存在時，丟出 404 ARTIST_NOT_FOUND，且不呼叫 docRef.update()', async () => {
     mockGet.mockResolvedValue({ exists: false });
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    (mockDocRef as unknown as { update: jest.Mock }).update = mockUpdate;
 
     await expect(service.updateArtistStatus('artist-missing', 'approved')).rejects.toMatchObject({
       statusCode: 404,
       code: 'ARTIST_NOT_FOUND',
     });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });
 
