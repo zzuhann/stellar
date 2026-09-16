@@ -3,18 +3,8 @@ import { z, ZodSchema, ZodError } from 'zod';
 
 // 錯誤碼定義
 export const ERROR_CODES = {
-  VALIDATION_FAILED: 'VALIDATION_FAILED',
-  REQUIRED_FIELD: 'REQUIRED_FIELD',
-  INVALID_FORMAT: 'INVALID_FORMAT',
-  INVALID_LENGTH: 'INVALID_LENGTH',
-  INVALID_URL: 'INVALID_URL',
-  INVALID_ENUM: 'INVALID_ENUM',
-  INVALID_DATE: 'INVALID_DATE',
-  TOO_MANY_ITEMS: 'TOO_MANY_ITEMS',
-  TOO_FEW_ITEMS: 'TOO_FEW_ITEMS',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
 } as const;
-
-type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 // 通用驗證中間件
 export const validateRequest = (schema: {
@@ -49,42 +39,9 @@ export const validateRequest = (schema: {
         // 只取第一個錯誤
         const firstError = error.issues[0];
 
-        // 將 Zod 錯誤碼轉換為我們的錯誤碼
-        let errorCode: ErrorCode = ERROR_CODES.VALIDATION_FAILED;
-
-        switch (firstError.code) {
-          case 'invalid_type':
-            if (
-              firstError.message.includes('received undefined') ||
-              firstError.message.includes('received null')
-            ) {
-              errorCode = ERROR_CODES.REQUIRED_FIELD;
-            }
-            break;
-          case 'too_small':
-            errorCode =
-              firstError.minimum === 1 ? ERROR_CODES.REQUIRED_FIELD : ERROR_CODES.INVALID_LENGTH;
-            break;
-          case 'too_big':
-            errorCode = ERROR_CODES.INVALID_LENGTH;
-            break;
-          case 'invalid_format':
-            if ('format' in firstError && firstError.format === 'url') {
-              errorCode = ERROR_CODES.INVALID_URL;
-            } else if ('format' in firstError && firstError.format === 'datetime') {
-              errorCode = ERROR_CODES.INVALID_DATE;
-            } else {
-              errorCode = ERROR_CODES.INVALID_FORMAT;
-            }
-            break;
-          case 'invalid_value':
-            errorCode = ERROR_CODES.INVALID_ENUM;
-            break;
-        }
-
         return res.status(400).json({
           error: firstError.message,
-          code: errorCode,
+          code: ERROR_CODES.VALIDATION_ERROR,
           field: firstError.path.join('.'),
         });
       }
@@ -97,13 +54,22 @@ export const validateRequest = (schema: {
   };
 };
 
+// Firestore 文件 id：this.collection.doc() 產生的自動 id 固定是 20 碼英數字，
+// 這裡放寬到含 -_ 保留彈性，但排除 / 等會被誤判為 Firestore path 分隔符的字元，
+// 避免帶 "/" 的畸形 id 一路穿過 schema 驗證，直到 Firestore 查詢時才炸成未預期的 500
+const firestoreDocIdSchema = (label: string) =>
+  z
+    .string()
+    .min(1, `${label} 不能為空`)
+    .regex(/^[A-Za-z0-9_-]+$/, `${label} 格式錯誤`);
+
 // Artist 相關的 schema
 export const artistSchemas = {
   create: z.object({
     stageName: z.string().min(1, '藝名為必填欄位').max(100, '藝名長度不能超過100個字元').trim(),
     stageNameZh: z.string().max(100, '中文藝名長度不能超過100個字元').trim().optional(),
     groupNames: z
-      .array(z.string().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元').trim())
+      .array(z.string().trim().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元'))
       .max(5, '最多只能選擇5個團體')
       .optional(),
     realName: z.string().max(100, '本名長度不能超過100個字元').trim().optional(),
@@ -123,7 +89,7 @@ export const artistSchemas = {
       .optional(),
     stageNameZh: z.string().max(100, '中文藝名長度不能超過100個字元').trim().optional(),
     groupNames: z
-      .array(z.string().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元').trim())
+      .array(z.string().trim().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元'))
       .max(5, '最多只能選擇5個團體')
       .optional(),
     realName: z.string().max(100, '本名長度不能超過100個字元').trim().optional(),
@@ -133,6 +99,38 @@ export const artistSchemas = {
       .optional(),
     profileImage: z.string().url('藝人圖片網址格式錯誤').optional(),
   }),
+
+  batchReview: z
+    .object({
+      updates: z
+        .array(
+          z.object({
+            artistId: firestoreDocIdSchema('artistId'),
+            status: z.enum(['approved', 'rejected', 'exists']),
+            reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+            groupNames: z
+              .array(z.string().trim().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元'))
+              .max(5, '最多只能選擇5個團體')
+              .optional(),
+          })
+        )
+        .min(1, 'updates 不能為空')
+        .max(50, '一次最多更新 50 筆'),
+    })
+    // 同一批 updates 裡不能有重複的 artistId，否則 service 會依序套用矛盾的狀態、寄出矛盾通知
+    .superRefine((data, ctx) => {
+      const seen = new Set<string>();
+      data.updates.forEach((update, index) => {
+        if (seen.has(update.artistId)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `updates 中 artistId 重複：${update.artistId}`,
+            path: ['updates', index, 'artistId'],
+          });
+        }
+        seen.add(update.artistId);
+      });
+    }),
 };
 
 // Venue 相關的 schema
@@ -417,6 +415,34 @@ export const eventSchemas = {
       .optional(),
     reservation: reservationSchema.optional().nullable(),
   }),
+
+  batchReview: z
+    .object({
+      updates: z
+        .array(
+          z.object({
+            eventId: firestoreDocIdSchema('eventId'),
+            status: z.enum(['approved', 'rejected']),
+            reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+          })
+        )
+        .min(1, 'updates 不能為空')
+        .max(50, '一次最多更新 50 筆'),
+    })
+    // 同一批 updates 裡不能有重複的 eventId，否則 service 會依序套用矛盾的狀態、寄出矛盾通知
+    .superRefine((data, ctx) => {
+      const seen = new Set<string>();
+      data.updates.forEach((update, index) => {
+        if (seen.has(update.eventId)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `updates 中 eventId 重複：${update.eventId}`,
+            path: ['updates', index, 'eventId'],
+          });
+        }
+        seen.add(update.eventId);
+      });
+    }),
 };
 
 // Import（貼文半自動匯入）相關的 schema

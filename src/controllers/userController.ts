@@ -22,8 +22,7 @@ export class UserController {
     const user = await this.userService.getUserById(userId);
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
     res.json(user);
@@ -31,25 +30,18 @@ export class UserController {
 
   // 更新用戶資料
   updateUserProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const { displayName } = req.body;
+    const userId = req.user?.uid;
+    const { displayName } = req.body;
 
-      if (displayName !== undefined && typeof displayName !== 'string') {
-        res.status(400).json({ error: 'DisplayName must be a string' });
-        return;
-      }
-
-      const user = await this.userService.updateUser(userId, {
-        displayName,
-      });
-
-      res.json(user);
-    } catch (error) {
-      console.error('Error updating user profile:', error);
-      const message = error instanceof Error ? error.message : 'Failed to update user profile';
-      res.status(400).json({ error: message });
+    if (displayName !== undefined && typeof displayName !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'DisplayName must be a string', 'displayName');
     }
+
+    const user = await this.userService.updateUser(userId, {
+      displayName,
+    });
+
+    res.json(user);
   };
 
   // ==================== 我的投稿（分頁） ====================
@@ -57,8 +49,7 @@ export class UserController {
   getMySubmittedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user?.uid;
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(401, 'AUTH_REQUIRED', 'Authentication required');
     }
 
     const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -75,8 +66,7 @@ export class UserController {
   getMySubmittedArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user?.uid;
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(401, 'AUTH_REQUIRED', 'Authentication required');
     }
 
     const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -110,37 +100,29 @@ export class UserController {
 
   // 新增收藏
   addFavorite = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const { eventId } = req.body;
+    const userId = req.user?.uid;
+    const { eventId } = req.body;
 
-      if (!eventId || typeof eventId !== 'string') {
-        res.status(400).json({ error: 'eventId is required and must be a string' });
-        return;
-      }
-
-      const favorite = await this.userService.addFavorite(userId, eventId);
-      res.status(201).json(favorite);
-    } catch (error) {
-      console.error('Error adding favorite:', error);
-      const message = error instanceof Error ? error.message : 'Failed to add favorite';
-      res.status(400).json({ error: message });
+    if (!eventId || typeof eventId !== 'string') {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'eventId is required and must be a string',
+        'eventId'
+      );
     }
+
+    const favorite = await this.userService.addFavorite(userId, eventId);
+    res.status(201).json(favorite);
   };
 
   // 取消收藏
   removeFavorite = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.uid;
-      const eventId = req.params.eventId as string;
+    const userId = req.user?.uid;
+    const eventId = req.params.eventId as string;
 
-      await this.userService.removeFavorite(userId, eventId);
-      res.json({ message: 'Favorite removed successfully' });
-    } catch (error) {
-      console.error('Error removing favorite:', error);
-      const message = error instanceof Error ? error.message : 'Failed to remove favorite';
-      res.status(400).json({ error: message });
-    }
+    await this.userService.removeFavorite(userId, eventId);
+    res.json({ message: 'Favorite removed successfully' });
   };
 
   // 檢查是否已收藏
@@ -157,8 +139,7 @@ export class UserController {
   getMyClaimedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user?.uid;
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(401, 'AUTH_REQUIRED', 'Authentication required');
     }
 
     const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -172,3 +153,4 @@ export class UserController {
     res.json(result);
   };
 }
+import { AppError } from '../utils/AppError';

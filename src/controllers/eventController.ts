@@ -30,8 +30,7 @@ export class EventController {
     // 檢查權限：用戶只能查看自己的投稿或公開的資料
     if (filters.createdBy && req.user) {
       if (filters.createdBy !== req.user.uid && req.user.role !== 'admin') {
-        res.status(403).json({ error: 'Permission denied' });
-        return;
+        throw new AppError(403, 'FORBIDDEN', 'Permission denied');
       }
     }
 
@@ -69,8 +68,7 @@ export class EventController {
     const event = await this.eventService.getEventById(id, userId, userRole);
 
     if (!event) {
-      res.status(404).json({ error: 'Event not found' });
-      return;
+      throw new AppError(404, 'EVENT_NOT_FOUND', 'Event not found');
     }
 
     res.json(event);
@@ -86,15 +84,18 @@ export class EventController {
     const requiredFields = ['artistIds', 'title', 'location', 'datetime'];
     for (const field of requiredFields) {
       if (!eventData[field]) {
-        res.status(400).json({ error: `${field} is required` });
-        return;
+        throw new AppError(400, 'VALIDATION_ERROR', `${field} is required`, field);
       }
     }
 
     // 驗證 artistIds 是陣列且不為空
     if (!Array.isArray(eventData.artistIds) || eventData.artistIds.length === 0) {
-      res.status(400).json({ error: 'artistIds must be a non-empty array' });
-      return;
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'artistIds must be a non-empty array',
+        'artistIds'
+      );
     }
 
     const event = await this.eventService.createEvent(eventData, userId, userEmail);
@@ -103,38 +104,23 @@ export class EventController {
 
   // 編輯活動
   updateEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const id = req.params.id as string;
-      const updateData: UpdateEventData = req.body;
-      const userId = req.user?.uid;
-      const userRole = req.user?.role;
+    const id = req.params.id as string;
+    const updateData: UpdateEventData = req.body;
+    const userId = req.user?.uid;
+    const userRole = req.user?.role;
 
-      // 驗證時間資料格式（如果提供）
-      if (updateData.datetime) {
-        if (!updateData.datetime.start || !updateData.datetime.end) {
-          res
-            .status(400)
-            .json({ error: 'Both start and end datetime are required when updating datetime' });
-          return;
-        }
-      }
-
-      const event = await this.eventService.updateEvent(id, updateData, userId, userRole);
-      res.json(event);
-    } catch (error) {
-      console.error('Error updating event:', error);
-      if (error instanceof Error) {
-        if (error.message === 'Event not found') {
-          res.status(404).json({ error: 'Event not found' });
-        } else if (error.message === 'Permission denied') {
-          res.status(403).json({ error: 'Permission denied' });
-        } else {
-          res.status(500).json({ error: 'Failed to update event' });
-        }
-      } else {
-        res.status(500).json({ error: 'Failed to update event' });
+    // 驗證時間資料格式（如果提供）
+    if (updateData.datetime) {
+      if (!updateData.datetime.start || !updateData.datetime.end) {
+        res
+          .status(400)
+          .json({ error: 'Both start and end datetime are required when updating datetime' });
+        return;
       }
     }
+
+    const event = await this.eventService.updateEvent(id, updateData, userId, userRole);
+    res.json(event);
   };
 
   // 審核活動（僅管理員）
@@ -143,8 +129,7 @@ export class EventController {
     const { status, reason } = req.body; // 加入 reason 參數
 
     if (!['approved', 'rejected'].includes(status)) {
-      res.status(400).json({ error: 'Invalid status' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Invalid status', 'status');
     }
 
     const event = await this.eventService.updateEventStatus(id, status, reason);
@@ -168,41 +153,11 @@ export class EventController {
 
   // 批次審核活動（僅管理員）
   batchReviewEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const { updates } = req.body;
+    const { updates } = req.body;
 
-      if (!Array.isArray(updates) || updates.length === 0) {
-        res.status(400).json({ error: 'Updates array is required' });
-        return;
-      }
+    const events = await this.eventService.batchUpdateEventStatus(updates);
 
-      // 驗證每個更新項目
-      for (const update of updates) {
-        if (!update.eventId || !update.status) {
-          res.status(400).json({ error: 'Each update must have eventId and status' });
-          return;
-        }
-        if (!['approved', 'rejected'].includes(update.status)) {
-          res.status(400).json({ error: `Invalid status: ${update.status}` });
-          return;
-        }
-      }
-
-      const events = await this.eventService.batchUpdateEventStatus(updates);
-
-      res.json(events);
-    } catch (error) {
-      console.error('Error batch reviewing events:', error);
-      if (error instanceof Error) {
-        if (error.message.includes('活動不存在')) {
-          res.status(404).json({ error: error.message });
-        } else {
-          res.status(500).json({ error: 'Failed to batch review events' });
-        }
-      } else {
-        res.status(500).json({ error: 'Failed to batch review events' });
-      }
-    }
+    res.json(events);
   };
 
   // 刪除活動（僅管理員或活動創建者）
@@ -217,17 +172,11 @@ export class EventController {
 
   // 重新送審活動
   resubmitEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const id = req.params.id as string;
-      const userId = req.user?.uid;
+    const id = req.params.id as string;
+    const userId = req.user?.uid;
 
-      const event = await this.eventService.resubmitEvent(id, userId);
-      res.json(event);
-    } catch (error) {
-      console.error('Error resubmitting event:', error);
-      const message = error instanceof Error ? error.message : 'Failed to resubmit event';
-      res.status(400).json({ error: message });
-    }
+    const event = await this.eventService.resubmitEvent(id, userId);
+    res.json(event);
   };
 
   // 搜尋活動
@@ -258,11 +207,9 @@ export class EventController {
       res.status(204).send();
     } catch (error) {
       if (error instanceof Error && error.message.includes('No document to update')) {
-        res.status(404).json({ error: 'Event not found' });
-        return;
+        throw new AppError(404, 'EVENT_NOT_FOUND', 'Event not found');
       }
-      console.error('Error recording view:', error);
-      res.status(500).json({ error: 'Failed to record view' });
+      throw error;
     }
   };
 
@@ -290,3 +237,4 @@ export class EventController {
     res.json(result);
   };
 }
+import { AppError } from '../utils/AppError';

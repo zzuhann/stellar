@@ -185,3 +185,48 @@ describe('ImageService.uploadImageFromUrl', () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 });
+
+// R2 未設定時，uploadImage()/deleteImage() 過去曾把 checkR2Config() 丟出的
+// AppError(503) 包在 try/catch 裡吞掉，轉成通用的 { success:false, error:'上傳失敗' }，
+// 讓 R2 設定錯誤和一般上傳失敗無法區分。修復後 checkR2Config() 移到 try 外面，
+// AppError 應該原封不動往外傳，交給 controller 的 next(error) 處理。
+describe('ImageService — R2 未設定時的錯誤處理', () => {
+  let service: ImageService;
+  const r2ConfigMock = jest.requireMock('../../src/config/r2-client') as { hasR2Config: boolean };
+
+  const fakeFile = {
+    buffer: fakePngBuffer(),
+    mimetype: 'image/png',
+    size: 2048,
+    originalname: 'test.png',
+  } as Express.Multer.File;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new ImageService();
+  });
+
+  afterEach(() => {
+    r2ConfigMock.hasR2Config = true; // 還原成其他測試預期的預設值
+  });
+
+  it('uploadImage：R2 未設定時，AppError(503, SERVICE_UNAVAILABLE) 原封不動往外傳，不被吞成 { success: false }', async () => {
+    r2ConfigMock.hasR2Config = false;
+
+    await expect(service.uploadImage(fakeFile)).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
+
+  it('deleteImage：R2 未設定時，AppError(503, SERVICE_UNAVAILABLE) 原封不動往外傳，不被吞成 { success: false }', async () => {
+    r2ConfigMock.hasR2Config = false;
+
+    await expect(
+      service.deleteImage('https://cdn.example.com/images/test.jpg')
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
+});

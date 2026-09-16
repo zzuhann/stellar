@@ -24,7 +24,7 @@ export class UserService {
       !this.favoritesCollection ||
       !this.eventsCollection
     ) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Database service unavailable');
     }
   }
 
@@ -48,7 +48,7 @@ export class UserService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('用戶不存在');
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
     const updateData = {
@@ -90,7 +90,11 @@ export class UserService {
     // 檢查活動是否存在
     const eventDoc = await withTimeoutAndRetry(() => this.eventsCollection.doc(eventId).get());
     if (!eventDoc.exists) {
-      throw new Error('活動不存在');
+      throw new AppError(404, 'EVENT_NOT_FOUND', 'Event not found');
+    }
+
+    if (eventDoc.data()?.status !== 'approved') {
+      throw new AppError(400, 'EVENT_NOT_FAVORITABLE', 'Only approved events can be favorited');
     }
 
     // 檢查是否已經收藏
@@ -99,7 +103,7 @@ export class UserService {
     );
 
     if (!existingFavorite.empty) {
-      throw new Error('已經收藏過此活動');
+      throw new AppError(400, 'FAVORITE_ALREADY_EXISTS', 'Event is already favorited');
     }
 
     const now = Timestamp.now();
@@ -130,7 +134,7 @@ export class UserService {
     );
 
     if (snapshot.empty) {
-      throw new Error('收藏不存在');
+      throw new AppError(404, 'FAVORITE_NOT_FOUND', 'Favorite not found');
     }
 
     // 刪除找到的收藏記錄
@@ -393,3 +397,4 @@ export class UserService {
     });
   }
 }
+import { AppError } from '../utils/AppError';

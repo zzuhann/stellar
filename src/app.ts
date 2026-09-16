@@ -13,6 +13,7 @@ import YAML from 'yaml';
 import swaggerUi from 'swagger-ui-express';
 import routes from './routes';
 import { requireDocsAuth } from './middleware/docsAuth';
+import { AppError, normalizeError } from './utils/AppError';
 
 const app = express();
 
@@ -49,7 +50,7 @@ app.use(
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
   max: 1000, // 提高到 1000 次請求 (平均 67/分鐘)
-  message: { error: 'Too many requests, please try again later' },
+  message: { error: 'Too many requests, please try again later', code: 'RATE_LIMITED' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -58,7 +59,10 @@ const limiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
   max: 30, // 提高到 30 次登入嘗試
-  message: { error: 'Too many authentication attempts, please try again later' },
+  message: {
+    error: 'Too many authentication attempts, please try again later',
+    code: 'RATE_LIMITED',
+  },
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // 成功的請求不計入限制
@@ -68,7 +72,7 @@ const authLimiter = rateLimit({
 const placesLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
   max: 2000, // 提高到 2000 次請求
-  message: { error: 'Too many places requests, please try again later' },
+  message: { error: 'Too many places requests, please try again later', code: 'RATE_LIMITED' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -145,6 +149,16 @@ Sentry.setupExpressErrorHandler(app);
 
 // 全域錯誤處理
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const appError = normalizeError(err);
+  if (err instanceof AppError || appError.code !== 'INTERNAL_ERROR') {
+    res.status(appError.statusCode).json({
+      error: appError.message,
+      code: appError.code,
+      ...(appError.field ? { field: appError.field } : {}),
+    });
+    return;
+  }
+
   // 詳細的錯誤日誌記錄，幫助識別真正的問題
   console.error('=== Unhandled Error ===', {
     timestamp: new Date().toISOString(),
@@ -176,12 +190,13 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
     error: 'Internal server error',
     message: isProduction ? 'Something went wrong' : err.message,
     ...(isProduction ? {} : { stack: err.stack }), // 開發環境才顯示 stack trace
+    code: 'INTERNAL_ERROR',
   });
 });
 
 // 404 處理
 app.use('/{*splat}', (_req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+  res.status(404).json({ error: 'Route not found', code: 'ROUTE_NOT_FOUND' });
 });
 
 // 傳統模式導出（開發用）

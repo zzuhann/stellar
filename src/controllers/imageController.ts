@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { NextFunction, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ImageService } from '../services/imageService';
 
@@ -10,13 +10,19 @@ export class ImageController {
   }
 
   // 上傳圖片
-  uploadImage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  uploadImage = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
     try {
       // 檢查是否有上傳檔案
       if (!req.file) {
         res.status(400).json({
           success: false,
           error: '未提供圖片檔案',
+          code: 'VALIDATION_ERROR',
+          field: 'file',
         });
         return;
       }
@@ -34,26 +40,20 @@ export class ImageController {
         res.status(400).json({
           success: false,
           error: result.error,
+          code: 'IMAGE_UPLOAD_FAILED',
         });
       }
     } catch (error) {
-      console.error('Error in uploadImage controller:', error);
-      if (error instanceof Error && error.message === 'R2 not configured') {
-        res.status(503).json({
-          success: false,
-          error: '圖片上傳服務未設定',
-        });
-      } else {
-        res.status(500).json({
-          success: false,
-          error: '上傳失敗',
-        });
-      }
+      next(error);
     }
   };
 
   // 刪除圖片
-  deleteImage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  deleteImage = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
     try {
       const { imageUrl } = req.body;
 
@@ -62,6 +62,8 @@ export class ImageController {
         res.status(400).json({
           success: false,
           error: '未提供圖片 URL',
+          code: 'VALIDATION_ERROR',
+          field: 'imageUrl',
         });
         return;
       }
@@ -77,21 +79,11 @@ export class ImageController {
         res.status(400).json({
           success: false,
           error: result.error,
+          code: 'IMAGE_DELETE_FAILED',
         });
       }
     } catch (error) {
-      console.error('Error in deleteImage controller:', error);
-      if (error instanceof Error && error.message === 'R2 not configured') {
-        res.status(503).json({
-          success: false,
-          error: '圖片刪除服務未設定',
-        });
-      } else {
-        res.status(500).json({
-          success: false,
-          error: '刪除失敗',
-        });
-      }
+      next(error);
     }
   };
 
@@ -104,6 +96,7 @@ export class ImageController {
       res.status(500).json({
         available: false,
         message: 'Service check failed',
+        code: 'SERVICE_UNAVAILABLE',
       });
     }
   };
@@ -114,7 +107,7 @@ export class ImageController {
     if (result.reachable) {
       res.json({ reachable: true });
     } else {
-      res.status(502).json({ reachable: false, error: result.error });
+      res.status(502).json({ reachable: false, error: result.error, code: 'R2_UNREACHABLE' });
     }
   };
 }

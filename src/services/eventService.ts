@@ -20,6 +20,7 @@ import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
 import { toPublicEvent, toPublicEvents } from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
+import { AppError } from '../utils/AppError';
 
 export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
@@ -47,7 +48,7 @@ export class EventService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -72,7 +73,7 @@ export class EventService {
     if (typeof dateValue === 'number') {
       return Timestamp.fromMillis(dateValue);
     }
-    throw new Error('Invalid date value');
+    throw new AppError(400, 'VALIDATION_ERROR', 'Invalid date value', 'datetime');
   }
 
   // 根據 zoom 級別計算緯度範圍（度數）
@@ -567,7 +568,7 @@ export class EventService {
     this.checkFirebaseConfig();
 
     if (!db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
 
     // 驗證所有藝人是否存在且已審核（並行查詢）
@@ -585,7 +586,7 @@ export class EventService {
       const artistId = eventData.artistIds[i];
 
       if (!artistDoc.exists || artistDoc.data()?.status !== 'approved') {
-        throw new Error(`此藝人不存在或未通過審核`);
+        throw new AppError(400, 'VALIDATION_ERROR', '此藝人不存在或未通過審核', 'artistIds');
       }
 
       const artistData = artistDoc.data();
@@ -601,7 +602,12 @@ export class EventService {
 
     // 驗證座標資料
     if (!eventData.location?.coordinates?.lat || !eventData.location?.coordinates?.lng) {
-      throw new Error('活動地點必須包含有效的座標資料');
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        '活動地點必須包含有效的座標資料',
+        'location.coordinates'
+      );
     }
 
     const now = Timestamp.now();
@@ -677,7 +683,7 @@ export class EventService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('活動不存在');
+      throw new AppError(404, 'EVENT_NOT_FOUND', '活動不存在');
     }
 
     const eventData = doc.data() as CoffeeEvent;
@@ -685,7 +691,7 @@ export class EventService {
     // 檢查權限：管理員、投稿者、已認領主辦可以編輯
     const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
     if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
-      throw new Error('權限不足');
+      throw new AppError(403, 'EVENT_EDIT_FORBIDDEN', '權限不足');
     }
 
     // 準備更新資料
@@ -699,7 +705,12 @@ export class EventService {
     if (updateData.location !== undefined) {
       // 驗證座標資料
       if (!updateData.location?.coordinates?.lat || !updateData.location?.coordinates?.lng) {
-        throw new Error('活動地點必須包含有效的座標資料');
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          '活動地點必須包含有效的座標資料',
+          'location.coordinates'
+        );
       }
       updates.location = updateData.location;
     }
@@ -761,7 +772,7 @@ export class EventService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('活動不存在');
+      throw new AppError(404, 'EVENT_NOT_FOUND', '活動不存在');
     }
 
     const existingData = doc.data() as CoffeeEvent;
@@ -836,7 +847,7 @@ export class EventService {
     }
 
     if (!db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
 
     // 先讀取所有需要更新的 events，以便取得 artists 資訊
@@ -850,7 +861,7 @@ export class EventService {
       .filter((id): id is string => id !== null);
 
     if (missingEvents.length > 0) {
-      throw new Error(`活動不存在: ${missingEvents.join(', ')}`);
+      throw new AppError(404, 'EVENT_NOT_FOUND', `活動不存在: ${missingEvents.join(', ')}`);
     }
 
     // 使用 Firestore 的 batch 操作批次更新 events
@@ -940,7 +951,7 @@ export class EventService {
     const results: CoffeeEvent[] = updates.map(update => {
       const doc = eventDocs.find(d => d.id === update.eventId);
       if (!doc || !doc.exists) {
-        throw new Error(`活動不存在: ${update.eventId}`);
+        throw new AppError(404, 'EVENT_NOT_FOUND', `活動不存在: ${update.eventId}`);
       }
       return {
         id: doc.id,
@@ -1067,19 +1078,19 @@ export class EventService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('活動不存在');
+      throw new AppError(404, 'EVENT_NOT_FOUND', '活動不存在');
     }
 
     const existingData = doc.data() as CoffeeEvent;
 
     // 檢查權限：只有創建者可以重新送審
     if (existingData.createdBy !== userId) {
-      throw new Error('權限不足: 只能重新送審自己的投稿');
+      throw new AppError(403, 'EVENT_RESUBMIT_FORBIDDEN', '權限不足: 只能重新送審自己的投稿');
     }
 
     // 只有 rejected 狀態可以重新送審
     if (existingData.status !== 'rejected') {
-      throw new Error('只能重新送審已拒絕的活動');
+      throw new AppError(409, 'EVENT_RESUBMIT_INVALID_STATE', '只能重新送審已拒絕的活動');
     }
 
     const updateData = {
@@ -1151,7 +1162,7 @@ export class EventService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('活動不存在');
+      throw new AppError(404, 'EVENT_NOT_FOUND', '活動不存在');
     }
 
     const eventData = doc.data() as CoffeeEvent;
@@ -1159,7 +1170,7 @@ export class EventService {
     // 檢查權限：管理員、投稿者、已認領主辦可以刪除
     const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
     if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
-      throw new Error('權限不足');
+      throw new AppError(403, 'EVENT_DELETE_FORBIDDEN', '權限不足');
     }
 
     // 刪除所有用戶對此活動的收藏
@@ -1345,7 +1356,7 @@ export class EventService {
     );
 
     if (!db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
 
     if (expiredEvents.size === 0) {

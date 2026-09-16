@@ -2,6 +2,7 @@ import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import { Artist, CoffeeEvent, Venue, VenueStatus } from '../models/types';
 import { cache } from '../utils/cache';
+import { AppError } from '../utils/AppError';
 
 const ADMIN_CACHE_TTL_MINUTES = 24 * 60;
 
@@ -38,7 +39,7 @@ export class AdminService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !db) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
   }
 

@@ -35,8 +35,7 @@ export class ArtistController {
     // 檢查權限：用戶只能查看自己的投稿或公開的資料
     if (filters.createdBy && req.user) {
       if (filters.createdBy !== req.user.uid && req.user.role !== 'admin') {
-        res.status(403).json({ error: 'Permission denied' });
-        return;
+        throw new AppError(403, 'FORBIDDEN', 'Permission denied');
       }
     }
 
@@ -70,8 +69,7 @@ export class ArtistController {
     const userEmail = req.user.email || submitterEmail || '';
 
     if (!stageName) {
-      res.status(400).json({ error: 'Stage name is required' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Stage name is required', 'stageName');
     }
 
     const artist = await this.artistService.createArtist(
@@ -96,8 +94,7 @@ export class ArtistController {
     const { status, reason, adminUpdate } = req.body;
 
     if (!['approved', 'rejected', 'exists'].includes(status)) {
-      res.status(400).json({ error: 'Invalid status' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Invalid status', 'status');
     }
 
     const artist = await this.artistService.updateArtistStatus(id, status, reason, adminUpdate);
@@ -121,23 +118,6 @@ export class ArtistController {
   batchReviewArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { updates } = req.body;
 
-    if (!Array.isArray(updates) || updates.length === 0) {
-      res.status(400).json({ error: 'Updates array is required' });
-      return;
-    }
-
-    // 驗證每個更新項目
-    for (const update of updates) {
-      if (!update.artistId || !update.status) {
-        res.status(400).json({ error: 'Each update must have artistId and status' });
-        return;
-      }
-      if (!['approved', 'rejected', 'exists'].includes(update.status)) {
-        res.status(400).json({ error: `Invalid status: ${update.status}` });
-        return;
-      }
-    }
-
     const artists = await this.artistService.batchUpdateArtistStatus(updates);
 
     res.json(artists);
@@ -157,8 +137,7 @@ export class ArtistController {
     const artist = await this.artistService.getArtistById(id);
 
     if (!artist) {
-      res.status(404).json({ error: 'Artist not found' });
-      return;
+      throw new AppError(404, 'ARTIST_NOT_FOUND', 'Artist not found');
     }
 
     res.json(artist);
@@ -166,47 +145,35 @@ export class ArtistController {
 
   // 編輯藝人
   updateArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const id = req.params.id as string;
-      const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
-      const userId = req.user.uid;
-      const userRole = req.user.role;
+    const id = req.params.id as string;
+    const { stageName, stageNameZh, groupNames, realName, birthday, profileImage } = req.body;
+    const userId = req.user.uid;
+    const userRole = req.user.role;
 
-      const artist = await this.artistService.updateArtist(
-        id,
-        {
-          stageName,
-          stageNameZh,
-          groupNames,
-          realName,
-          birthday,
-          profileImage,
-        },
-        userId,
-        userRole
-      );
+    const artist = await this.artistService.updateArtist(
+      id,
+      {
+        stageName,
+        stageNameZh,
+        groupNames,
+        realName,
+        birthday,
+        profileImage,
+      },
+      userId,
+      userRole
+    );
 
-      res.json(artist);
-    } catch (error) {
-      console.error('Error updating artist:', error);
-      const message = error instanceof Error ? error.message : 'Failed to update artist';
-      res.status(400).json({ error: message });
-    }
+    res.json(artist);
   };
 
   // 重新送審藝人
   resubmitArtist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const id = req.params.id as string;
-      const userId = req.user.uid;
+    const id = req.params.id as string;
+    const userId = req.user.uid;
 
-      const artist = await this.artistService.resubmitArtist(id, userId);
-      res.json(artist);
-    } catch (error) {
-      console.error('Error resubmitting artist:', error);
-      const message = error instanceof Error ? error.message : 'Failed to resubmit artist';
-      res.status(400).json({ error: message });
-    }
+    const artist = await this.artistService.resubmitArtist(id, userId);
+    res.json(artist);
   };
 
   // 刪除藝人（僅管理員）
@@ -222,11 +189,11 @@ export class ArtistController {
     const limit = limitParam ? parseInt(limitParam as string, 10) : 10;
 
     if (isNaN(limit) || limit < 1) {
-      res.status(400).json({ error: 'Invalid limit parameter' });
-      return;
+      throw new AppError(400, 'VALIDATION_ERROR', 'Invalid limit parameter', 'limit');
     }
 
     const artists = await this.artistService.getTopArtistsByUpcomingEvents(limit);
     res.json(artists);
   };
 }
+import { AppError } from '../utils/AppError';

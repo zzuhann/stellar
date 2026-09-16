@@ -25,7 +25,11 @@ export class ImportController {
     next: NextFunction
   ): Promise<void> => {
     if (!process.env.GEMINI_API_KEY) {
-      res.status(503).json({ success: false, error: 'AI 解析服務未設定' });
+      res.status(503).json({
+        success: false,
+        error: 'AI parsing service unavailable',
+        code: 'SERVICE_UNAVAILABLE',
+      });
       return;
     }
 
@@ -47,7 +51,11 @@ export class ImportController {
     next: NextFunction
   ): Promise<void> => {
     if (!hasR2Config) {
-      res.status(503).json({ success: false, error: '圖片上傳服務未設定' });
+      res.status(503).json({
+        success: false,
+        error: 'Image upload service unavailable',
+        code: 'SERVICE_UNAVAILABLE',
+      });
       return;
     }
 
@@ -66,6 +74,7 @@ export class ImportController {
           success: false,
           error: result.error,
           reason: result.reason,
+          code: 'IMAGE_IMPORT_FAILED',
         });
       }
     } catch (error) {

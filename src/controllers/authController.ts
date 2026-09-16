@@ -29,7 +29,7 @@ export class AuthController {
 
     // 從 query string 取得並驗證 token
     if (!token || typeof token !== 'string') {
-      res.status(401).json({ error: 'Access token required' });
+      res.status(401).json({ error: 'Access token required', code: 'AUTH_TOKEN_MISSING' });
       return;
     }
 
@@ -38,26 +38,28 @@ export class AuthController {
       const decodedToken = await auth.verifyIdToken(token);
       userId = decodedToken.uid;
     } catch {
-      res.status(403).json({ error: 'Invalid token' });
+      res.status(401).json({ error: 'Invalid token', code: 'AUTH_TOKEN_INVALID' });
       return;
     }
 
     if (!eventId || typeof eventId !== 'string') {
-      res.status(400).json({ error: 'eventId is required' });
+      res
+        .status(400)
+        .json({ error: 'eventId is required', code: 'VALIDATION_ERROR', field: 'eventId' });
       return;
     }
 
     // 驗證活動存在
     const event = (await eventService.getEventById(eventId)) as CoffeeEvent | null;
     if (!event) {
-      res.status(404).json({ error: 'Event not found' });
+      res.status(404).json({ error: 'Event not found', code: 'EVENT_NOT_FOUND' });
       return;
     }
 
     // 檢查是否已認領
     const hasClaimed = await eventService.hasUserClaimedEvent(eventId, userId);
     if (hasClaimed) {
-      res.status(400).json({ error: 'Already claimed' });
+      res.status(400).json({ error: 'Already claimed', code: 'EVENT_ALREADY_CLAIMED' });
       return;
     }
 

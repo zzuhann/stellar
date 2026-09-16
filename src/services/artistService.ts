@@ -15,6 +15,7 @@ type ArtistWithEventCount = Artist & { coffeeEventCount: number };
 import { cache } from '../utils/cache';
 import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
 import { UserService } from './userService';
+import { AppError } from '../utils/AppError';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
@@ -22,7 +23,7 @@ export class ArtistService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
   }
 
@@ -288,14 +289,14 @@ export class ArtistService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('藝人不存在');
+      throw new AppError(404, 'ARTIST_NOT_FOUND', '藝人不存在');
     }
 
     const existingData = doc.data();
 
     // 檢查權限：管理員可以編輯任何藝人，一般用戶只能編輯自己的投稿
     if (userRole !== 'admin' && existingData?.createdBy !== userId) {
-      throw new Error('權限不足');
+      throw new AppError(403, 'ARTIST_EDIT_FORBIDDEN', '權限不足');
     }
 
     const updateData: UpdateArtistData & { updatedAt: Timestamp } = {
@@ -345,6 +346,16 @@ export class ArtistService {
     const allArtistDocs = await Promise.all(
       updates.map(u => withTimeoutAndRetry(() => this.collection.doc(u.artistId).get()))
     );
+
+    // 檢查所有 artists 是否存在
+    const missingArtists = allArtistDocs
+      .map((doc, index) => (!doc.exists ? updates[index].artistId : null))
+      .filter((id): id is string => id !== null);
+
+    if (missingArtists.length > 0) {
+      throw new AppError(404, 'ARTIST_NOT_FOUND', `藝人不存在: ${missingArtists.join(', ')}`);
+    }
+
     const allArtistsData: Artist[] = allArtistDocs
       .filter(doc => doc.exists)
       .map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
@@ -428,19 +439,19 @@ export class ArtistService {
     const doc = await withTimeoutAndRetry(() => docRef.get());
 
     if (!doc.exists) {
-      throw new Error('藝人不存在');
+      throw new AppError(404, 'ARTIST_NOT_FOUND', '藝人不存在');
     }
 
     const existingData = doc.data();
 
     // 檢查權限：只有創建者可以重新送審
     if (existingData?.createdBy !== userId) {
-      throw new Error('權限不足: 只能重新送審自己的投稿');
+      throw new AppError(403, 'ARTIST_RESUBMIT_FORBIDDEN', '權限不足: 只能重新送審自己的投稿');
     }
 
     // 只有 rejected 狀態可以重新送審
     if (existingData?.status !== 'rejected') {
-      throw new Error('只能重新送審已拒絕的藝人');
+      throw new AppError(409, 'ARTIST_RESUBMIT_INVALID_STATE', '只能重新送審已拒絕的藝人');
     }
 
     const updateData = {
@@ -486,14 +497,14 @@ export class ArtistService {
     const artistDoc = await withTimeoutAndRetry(() => this.collection.doc(artistId).get());
 
     if (!artistDoc.exists) {
-      throw new Error('藝人不存在');
+      throw new AppError(404, 'ARTIST_NOT_FOUND', '藝人不存在');
     }
 
     const artistData = artistDoc.data();
     const hasActiveEvents = (artistData?.activeEventIds?.length ?? 0) > 0;
 
     if (hasActiveEvents) {
-      throw new Error('不能刪除已經有生咖活動的藝人');
+      throw new AppError(409, 'ARTIST_HAS_EVENTS', '不能刪除已經有生咖活動的藝人');
     }
 
     await withTimeoutAndRetry(() => this.collection.doc(artistId).delete());

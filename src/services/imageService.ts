@@ -1,6 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { r2Client, hasR2Config, R2_BUCKET_NAME, R2_PUBLIC_URL } from '../config/r2-client';
 import { fetchWithSsrfGuard } from '../utils/ssrfGuard';
+import { AppError } from '../utils/AppError';
 import crypto from 'crypto';
 import path from 'path';
 
@@ -81,7 +82,7 @@ export interface R2HealthResult {
 export class ImageService {
   private checkR2Config() {
     if (!hasR2Config || !r2Client) {
-      throw new Error('R2 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Image storage service unavailable');
     }
   }
 
@@ -196,8 +197,8 @@ export class ImageService {
 
   // 上傳圖片到 R2（使用者本機檔案）
   async uploadImage(file: Express.Multer.File): Promise<UploadResult> {
+    this.checkR2Config(); // AppError 直接往外拋，不包在 try 裡，避免被下方 catch 吞掉變成通用 400
     try {
-      this.checkR2Config();
       return await this.persistValidatedFile(file);
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -283,9 +284,8 @@ export class ImageService {
 
   // 從 R2 刪除圖片
   async deleteImage(imageUrl: string): Promise<DeleteResult> {
+    this.checkR2Config(); // AppError 直接往外拋，不包在 try 裡，避免被下方 catch 吞掉變成通用 400
     try {
-      this.checkR2Config();
-
       // 從 URL 解析檔案路徑
       const filename = this.extractFilenameFromUrl(imageUrl);
       if (!filename) {
