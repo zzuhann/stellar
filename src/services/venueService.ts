@@ -1,5 +1,6 @@
 import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
+import { AppError } from '../utils/AppError';
 import {
   CreateVenueData,
   PaginatedVenues,
@@ -115,7 +116,7 @@ export class VenueService {
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
-      throw new Error('Firebase 問題，請檢查環境變數');
+      throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Firebase 問題，請檢查環境變數');
     }
   }
 
