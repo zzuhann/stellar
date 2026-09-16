@@ -17,7 +17,9 @@ describe('artistSchemas.batchReview', () => {
   });
 
   it('rejects an artistId containing "/" instead of letting it reach Firestore as a bad path', () => {
-    const result = artistSchemas.batchReview.safeParse(build([{ artistId: 'a/b', status: 'approved' }]));
+    const result = artistSchemas.batchReview.safeParse(
+      build([{ artistId: 'a/b', status: 'approved' }])
+    );
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0].path.join('.')).toBe('updates.0.artistId');
@@ -70,7 +72,9 @@ describe('eventSchemas.batchReview', () => {
   });
 
   it('rejects an eventId containing "/" instead of letting it reach Firestore as a bad path', () => {
-    const result = eventSchemas.batchReview.safeParse(build([{ eventId: 'a/b', status: 'approved' }]));
+    const result = eventSchemas.batchReview.safeParse(
+      build([{ eventId: 'a/b', status: 'approved' }])
+    );
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0].path.join('.')).toBe('updates.0.eventId');
