@@ -104,6 +104,28 @@ describe('ArtistService.deleteArtist', () => {
   });
 });
 
+describe('ArtistService.updateArtistStatus', () => {
+  let service: ArtistService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => mockDocRef),
+    });
+    service = new ArtistService();
+  });
+
+  it('artistId 不存在時，丟出 404 ARTIST_NOT_FOUND', async () => {
+    mockGet.mockResolvedValue({ exists: false });
+
+    await expect(service.updateArtistStatus('artist-missing', 'approved')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'ARTIST_NOT_FOUND',
+    });
+  });
+});
+
 describe('ArtistService.batchUpdateArtistStatus', () => {
   let service: ArtistService;
   const mockBatchDoc = jest.fn();
