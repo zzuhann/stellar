@@ -158,6 +158,7 @@ describe('EventService.createEvent — 座標驗證', () => {
 
 describe('EventService — 狀態變更清除收藏快取', () => {
   let service: EventService;
+  const favoriteCacheKey = 'favorite:user-1:event-1';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -173,21 +174,29 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     service = new EventService();
   });
 
-  it('updateEventStatus 核准活動後，會清除 favorite 相關快取（避免 isFavorited 命中審核前的舊快取）', async () => {
+  afterEach(() => {
+    cache.delete(favoriteCacheKey);
+  });
+
+  it('updateEventStatus 核准活動後，isFavorited 快取住的舊值會被清除，下次查詢能拿到新結果', async () => {
+    // 模擬 check 端點在審核前快取住 false（例如活動當時是 rejected）
+    cache.set(favoriteCacheKey, false, 1440);
     const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
 
     await service.updateEventStatus('event-1', 'approved');
 
     expect(clearPatternSpy).toHaveBeenCalledWith('favorite');
+    expect(cache.get(favoriteCacheKey)).toBeNull();
     clearPatternSpy.mockRestore();
   });
 
-  it('batchUpdateEventStatus 批次核准活動後，同樣會清除 favorite 相關快取', async () => {
+  it('batchUpdateEventStatus 批次核准活動後，isFavorited 快取住的舊值會被清除，下次查詢能拿到新結果', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
     (firebase.db.batch as jest.Mock).mockReturnValue({
       update: jest.fn(),
       commit: jest.fn().mockResolvedValue(undefined),
     });
+    cache.set(favoriteCacheKey, false, 1440);
     const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
 
     mockGet.mockResolvedValue({
@@ -199,6 +208,34 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     await service.batchUpdateEventStatus([{ eventId: 'event-1', status: 'approved' }]);
 
     expect(clearPatternSpy).toHaveBeenCalledWith('favorite');
+    expect(cache.get(favoriteCacheKey)).toBeNull();
     clearPatternSpy.mockRestore();
+  });
+
+  it('updateEventStatus 場地同步失敗仍會拋出例外，但 favorite 快取在拋錯前已被清除', async () => {
+    // 場地同步（linkEventToVenue）發生在快取清除之後，這裡驗證即使它失敗，
+    // 快取清除的順序保證不受影響（狀態已成功寫入 DB，快取必須先清）
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'venues') {
+        return {
+          where: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          get: jest.fn().mockRejectedValue(new Error('venue sync failed')),
+        };
+      }
+      return { doc: jest.fn(() => mockDocRef) };
+    });
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ status: 'rejected', location: { placeId: 'place-1' } }),
+    });
+    cache.set(favoriteCacheKey, false, 1440);
+
+    await expect(service.updateEventStatus('event-1', 'approved')).rejects.toThrow(
+      'venue sync failed'
+    );
+
+    expect(cache.get(favoriteCacheKey)).toBeNull();
   });
 });
