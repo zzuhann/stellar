@@ -156,6 +156,20 @@ describe('EventService.createEvent — 座標驗證', () => {
   });
 });
 
+// Resolves manually so a test can pause a Firestore mock mid-flight and
+// assert on cache state before letting the awaited call proceed.
+function createDeferred<T = void>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+// Drains the microtask queue so pending `await`s inside the service method
+// (chained on already-resolved or still-pending mocks) settle before we assert.
+const flushMicrotasks = () => new Promise<void>(resolve => setImmediate(resolve));
+
 describe('EventService — 狀態變更清除收藏快取', () => {
   let service: EventService;
   const favoriteCacheKey = 'favorite:user-1:event-1';
@@ -237,5 +251,116 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     );
 
     expect(cache.get(favoriteCacheKey)).toBeNull();
+  });
+
+  it('updateEventStatus 快取清除時序：DB 寫入完成才清 favorite，artists 同步完成才清其餘快取', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+
+    // Controls when the Firestore status write "completes".
+    const writeDeferred = createDeferred<void>();
+    mockUpdate.mockImplementation(() => writeDeferred.promise);
+
+    // Controls when the downstream artists sync (updateArtistsActiveEventIds) "completes".
+    const syncDeferred = createDeferred<void>();
+    const mockArtistDocRef = {
+      get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ activeEventIds: [] }) }),
+    };
+    const mockArtistBatch = { update: jest.fn(), commit: jest.fn(() => syncDeferred.promise) };
+
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'artists') {
+        return { doc: jest.fn(() => mockArtistDocRef) };
+      }
+      return { doc: jest.fn(() => mockDocRef) };
+    });
+    (firebase.db.batch as jest.Mock).mockReturnValue(mockArtistBatch);
+
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ status: 'rejected', artists: [{ id: 'artist-1' }] }),
+    });
+
+    cache.set(favoriteCacheKey, false, 1440);
+    cache.set('artists:approved', ['stale'], 1440);
+
+    const resultPromise = service.updateEventStatus('event-1', 'approved');
+
+    // Checkpoint 1: DB 寫入尚未完成，favorite 快取還沒被清
+    await flushMicrotasks();
+    expect(cache.get(favoriteCacheKey)).toEqual(false);
+
+    writeDeferred.resolve();
+
+    // Checkpoint 2: DB 寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取還在
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(cache.get(favoriteCacheKey)).toBeNull();
+    expect(cache.get('artists:approved')).toEqual(['stale']);
+
+    syncDeferred.resolve();
+
+    // Checkpoint 3: 同步完成後，其餘快取才被清除
+    await resultPromise;
+    expect(cache.get('artists:approved')).toBeNull();
+
+    cache.delete('artists:approved');
+  });
+
+  it('batchUpdateEventStatus 快取清除時序：DB 批次寫入完成才清 favorite，artists 同步完成才清其餘快取', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+
+    // First db.batch() call is the event status batch, second is the artists sync batch.
+    const writeDeferred = createDeferred<void>();
+    const eventBatchMock = { update: jest.fn(), commit: jest.fn(() => writeDeferred.promise) };
+
+    const syncDeferred = createDeferred<void>();
+    const artistBatchMock = { update: jest.fn(), commit: jest.fn(() => syncDeferred.promise) };
+
+    (firebase.db.batch as jest.Mock)
+      .mockImplementationOnce(() => eventBatchMock)
+      .mockImplementationOnce(() => artistBatchMock);
+
+    const mockArtistDocRef = {
+      get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ activeEventIds: [] }) }),
+    };
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'artists') {
+        return { doc: jest.fn(() => mockArtistDocRef) };
+      }
+      return { doc: jest.fn(() => mockDocRef) };
+    });
+
+    mockGet.mockResolvedValue({
+      id: 'event-1',
+      exists: true,
+      data: () => ({ status: 'rejected', artists: [{ id: 'artist-1' }] }),
+    });
+
+    cache.set(favoriteCacheKey, false, 1440);
+    cache.set('artists:approved', ['stale'], 1440);
+
+    const resultPromise = service.batchUpdateEventStatus([
+      { eventId: 'event-1', status: 'approved' },
+    ]);
+
+    // Checkpoint 1: DB 批次寫入尚未完成，favorite 快取還沒被清
+    await flushMicrotasks();
+    expect(cache.get(favoriteCacheKey)).toEqual(false);
+
+    writeDeferred.resolve();
+
+    // Checkpoint 2: DB 批次寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取還在
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(cache.get(favoriteCacheKey)).toBeNull();
+    expect(cache.get('artists:approved')).toEqual(['stale']);
+
+    syncDeferred.resolve();
+
+    // Checkpoint 3: 同步完成後，其餘快取才被清除
+    await resultPromise;
+    expect(cache.get('artists:approved')).toBeNull();
+
+    cache.delete('artists:approved');
   });
 });
