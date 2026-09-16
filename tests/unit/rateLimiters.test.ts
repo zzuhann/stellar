@@ -32,6 +32,7 @@ describe('eventViewLimiter', () => {
     expect(blockedResponse.status).toBe(429);
     expect(blockedResponse.body).toEqual({
       error: 'Too many event view requests, please try again later',
+      code: 'RATE_LIMITED',
     });
   });
 
@@ -80,6 +81,7 @@ describe('venueViewLimiter', () => {
     expect(blockedResponse.status).toBe(429);
     expect(blockedResponse.body).toEqual({
       error: 'Too many venue view requests, please try again later',
+      code: 'RATE_LIMITED',
     });
   });
 });

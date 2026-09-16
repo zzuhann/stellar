@@ -5,7 +5,7 @@ export const venuesListLimiter = rateLimit({
   max: 180,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many venue list requests, please try again later' },
+  message: { error: 'Too many venue list requests, please try again later', code: 'RATE_LIMITED' },
 });
 
 export const venueDetailLimiter = rateLimit({
@@ -13,7 +13,10 @@ export const venueDetailLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many venue detail requests, please try again later' },
+  message: {
+    error: 'Too many venue detail requests, please try again later',
+    code: 'RATE_LIMITED',
+  },
 });
 
 export const eventViewLimiter = rateLimit({
@@ -21,7 +24,7 @@ export const eventViewLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many event view requests, please try again later' },
+  message: { error: 'Too many event view requests, please try again later', code: 'RATE_LIMITED' },
 });
 
 export const venueViewLimiter = rateLimit({
@@ -29,7 +32,7 @@ export const venueViewLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many venue view requests, please try again later' },
+  message: { error: 'Too many venue view requests, please try again later', code: 'RATE_LIMITED' },
 });
 
 export const venueSubmissionImageLimiter = rateLimit({
@@ -38,7 +41,7 @@ export const venueSubmissionImageLimiter = rateLimit({
   skipFailedRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many image uploads, please try again later' },
+  message: { error: 'Too many image uploads, please try again later', code: 'RATE_LIMITED' },
 });
 
 export const venueSubmissionLimiter = rateLimit({
@@ -47,7 +50,7 @@ export const venueSubmissionLimiter = rateLimit({
   skipFailedRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many venue submissions, please try again later' },
+  message: { error: 'Too many venue submissions, please try again later', code: 'RATE_LIMITED' },
 });
 
 export const venueSubmissionPlacesLimiter = rateLimit({
@@ -55,7 +58,7 @@ export const venueSubmissionPlacesLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many place searches, please try again later' },
+  message: { error: 'Too many place searches, please try again later', code: 'RATE_LIMITED' },
 });
 
 // 貼文匯入輔助（僅限 admin）：非規則強制要求（端點本身已需要登入），
@@ -65,7 +68,10 @@ export const importParseCaptionLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many caption parse requests, please try again later' },
+  message: {
+    error: 'Too many caption parse requests, please try again later',
+    code: 'RATE_LIMITED',
+  },
 });
 
 export const importFetchImageLimiter = rateLimit({
@@ -73,5 +79,5 @@ export const importFetchImageLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many image fetch requests, please try again later' },
+  message: { error: 'Too many image fetch requests, please try again later', code: 'RATE_LIMITED' },
 });
