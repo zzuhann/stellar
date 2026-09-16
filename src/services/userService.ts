@@ -171,8 +171,9 @@ export class UserService {
     let result = false;
 
     if (!snapshot.empty) {
-      // userFavorites 文件存在，仍需確認活動本身是否為 approved
-      // （活動可能已被刪除或狀態變更），避免與收藏列表的過濾結果不一致
+      // A userFavorites doc existing isn't enough — re-check the event is
+      // still approved (it may have been deleted or unapproved since favoriting)
+      // to stay consistent with the filtering applied in getFavorites.
       const eventDoc = await withTimeoutAndRetry(() => this.eventsCollection.doc(eventId).get());
       result = eventDoc.exists && eventDoc.data()?.status === 'approved';
     }

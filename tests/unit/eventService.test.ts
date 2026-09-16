@@ -1,15 +1,19 @@
 import { EventService } from '../../src/services/eventService';
 import { UpdateEventData, CreateEventData } from '../../src/models/types';
+import { cache } from '../../src/utils/cache';
 
 const mockGet = jest.fn();
+const mockUpdate = jest.fn();
 const mockDocRef = {
   get: mockGet,
+  update: mockUpdate,
 };
 
 jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
   db: {
     collection: jest.fn(),
+    batch: jest.fn(),
   },
 }));
 
@@ -149,5 +153,52 @@ describe('EventService.createEvent — 座標驗證', () => {
       code: 'VALIDATION_ERROR',
       field: 'location.coordinates',
     });
+  });
+});
+
+describe('EventService — 狀態變更清除收藏快取', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => mockDocRef),
+    });
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ status: 'rejected' }),
+    });
+    mockUpdate.mockResolvedValue(undefined);
+    service = new EventService();
+  });
+
+  it('updateEventStatus 核准活動後，會清除 favorite 相關快取（避免 isFavorited 命中審核前的舊快取）', async () => {
+    const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
+
+    await service.updateEventStatus('event-1', 'approved');
+
+    expect(clearPatternSpy).toHaveBeenCalledWith('favorite');
+    clearPatternSpy.mockRestore();
+  });
+
+  it('batchUpdateEventStatus 批次核准活動後，同樣會清除 favorite 相關快取', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.batch as jest.Mock).mockReturnValue({
+      update: jest.fn(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    });
+    const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
+
+    mockGet.mockResolvedValue({
+      id: 'event-1',
+      exists: true,
+      data: () => ({ status: 'rejected' }),
+    });
+
+    await service.batchUpdateEventStatus([{ eventId: 'event-1', status: 'approved' }]);
+
+    expect(clearPatternSpy).toHaveBeenCalledWith('favorite');
+    clearPatternSpy.mockRestore();
   });
 });

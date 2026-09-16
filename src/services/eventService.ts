@@ -812,6 +812,8 @@ export class EventService {
     cache.delete(`event:${eventId}`);
     if (existingData.slug) cache.delete(`event:${existingData.slug}`);
     cache.clearPattern('admin:events:');
+    // 清除收藏快取，因為 isFavorited 會快取活動審核狀態
+    cache.clearPattern('favorite');
 
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
@@ -930,6 +932,8 @@ export class EventService {
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.clearPattern('admin:events:');
+    // 清除收藏快取，因為 isFavorited 會快取活動審核狀態
+    cache.clearPattern('favorite');
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
     // 清除熱門藝人快取，因為活動數量改變會影響排名
