@@ -206,11 +206,11 @@ export class ArtistService {
     const docRef = this.collection.doc(artistId);
 
     // 讀取 artist 資料（用於寄信及清除 slug 快取）
-    let artistData: Artist | null = null;
     const doc = await withTimeoutAndRetry(() => docRef.get());
-    if (doc.exists) {
-      artistData = { id: doc.id, ...doc.data() } as Artist;
+    if (!doc.exists) {
+      throw new AppError(404, 'ARTIST_NOT_FOUND', `藝人不存在: ${artistId}`);
     }
+    const artistData: Artist = { id: doc.id, ...doc.data() } as Artist;
 
     const updateData: Record<string, unknown> = {
       status,
@@ -234,13 +234,12 @@ export class ArtistService {
       }
     }
 
-    // 直接更新，前端已處理存在性和權限檢查
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
     // 清除相關快取
     cache.delete('artists:approved');
     cache.delete(`artist:${artistId}`);
-    if (artistData?.slug) cache.delete(`artist:slug:${artistData.slug}`);
+    if (artistData.slug) cache.delete(`artist:slug:${artistData.slug}`);
     // 清除篩選快取（因為藝人狀態改變會影響篩選結果）
     cache.clearPattern('artists:filters:');
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
@@ -252,7 +251,7 @@ export class ArtistService {
     }
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
-    if (status === 'approved' && artistData?.createdByEmail) {
+    if (status === 'approved' && artistData.createdByEmail) {
       this.sendApprovalEmailAsync([artistData]);
     }
 
