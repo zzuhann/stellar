@@ -793,19 +793,9 @@ export class EventService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
-    // 狀態一旦成功寫入，立即清除相關快取，不受後續 artists/venue 同步流程成功與否影響
-    cache.clearPattern('events:');
-    cache.clearPattern('map-data:');
-    cache.delete(`event:${eventId}`);
-    if (existingData.slug) cache.delete(`event:${existingData.slug}`);
-    cache.clearPattern('admin:events:');
+    // 狀態一旦成功寫入，立即清除收藏快取，不受後續 artists/venue 同步流程成功與否影響
     // Clear favorite cache since isFavorited caches the event's approval status
     cache.clearPattern('favorite');
-
-    // 清除基礎快取，因為 activeEventIds 改變會影響統計
-    cache.delete('artists:approved');
-    // 清除熱門藝人快取，因為活動數量改變會影響排名
-    cache.clearPattern('artists:top:');
 
     // 更新相關 artists 的 activeEventIds（只有 approved 時才加入）
     if (status === 'approved' && existingData.artists && Array.isArray(existingData.artists)) {
@@ -819,6 +809,18 @@ export class EventService {
     if (status === 'approved' && existingData.location?.placeId) {
       await this.linkEventToVenue(eventId, existingData.location.placeId);
     }
+
+    // 清除相關快取
+    cache.clearPattern('events:');
+    cache.clearPattern('map-data:');
+    cache.delete(`event:${eventId}`);
+    if (existingData.slug) cache.delete(`event:${existingData.slug}`);
+    cache.clearPattern('admin:events:');
+
+    // 清除基礎快取，因為 activeEventIds 改變會影響統計
+    cache.delete('artists:approved');
+    // 清除熱門藝人快取，因為活動數量改變會影響排名
+    cache.clearPattern('artists:top:');
 
     const updatedDoc = await withTimeoutAndRetry(() => docRef.get());
     const updatedEvent = {
@@ -918,13 +920,24 @@ export class EventService {
     // 執行批次更新 events
     await withTimeoutAndRetry(() => eventBatch.commit());
 
-    // 狀態一旦成功寫入，立即清除相關快取（只清一次，大幅減少 DB 負擔），
-    // 不受後續 artists/venue 同步流程成功與否影響
+    // 狀態一旦成功寫入，立即清除收藏快取，不受後續 artists/venue 同步流程成功與否影響
+    // Clear favorite cache since isFavorited caches the event's approval status
+    cache.clearPattern('favorite');
+
+    // 批次更新所有相關 artists 的 activeEventIds
+    if (approvedEvents.length > 0) {
+      await this.batchUpdateArtistsActiveEventIds(approvedEvents);
+    }
+
+    // 批次更新所有相關 venue 的 eventRefs + eventCount
+    if (approvedVenueLinks.length > 0) {
+      await this.batchUpdateVenueEventRefs(approvedVenueLinks);
+    }
+
+    // 清除相關快取（只清一次，大幅減少 DB 負擔）
     cache.clearPattern('events:');
     cache.clearPattern('map-data:');
     cache.clearPattern('admin:events:');
-    // Clear favorite cache since isFavorited caches the event's approval status
-    cache.clearPattern('favorite');
     // 清除基礎快取，因為 activeEventIds 改變會影響統計
     cache.delete('artists:approved');
     // 清除熱門藝人快取，因為活動數量改變會影響排名
@@ -935,16 +948,6 @@ export class EventService {
       cache.delete(`event:${updates[i].eventId}`);
       const slug = (eventDocs[i].data() as CoffeeEvent)?.slug;
       if (slug) cache.delete(`event:${slug}`);
-    }
-
-    // 批次更新所有相關 artists 的 activeEventIds
-    if (approvedEvents.length > 0) {
-      await this.batchUpdateArtistsActiveEventIds(approvedEvents);
-    }
-
-    // 批次更新所有相關 venue 的 eventRefs + eventCount
-    if (approvedVenueLinks.length > 0) {
-      await this.batchUpdateVenueEventRefs(approvedVenueLinks);
     }
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
