@@ -118,25 +118,6 @@ export class ArtistController {
   batchReviewArtists = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { updates } = req.body;
 
-    if (!Array.isArray(updates) || updates.length === 0) {
-      throw new AppError(400, 'VALIDATION_ERROR', 'Updates array is required', 'updates');
-    }
-
-    // 驗證每個更新項目
-    for (const update of updates) {
-      if (!update.artistId || !update.status) {
-        throw new AppError(
-          400,
-          'VALIDATION_ERROR',
-          'Each update must have artistId and status',
-          'updates'
-        );
-      }
-      if (!['approved', 'rejected', 'exists'].includes(update.status)) {
-        throw new AppError(400, 'VALIDATION_ERROR', `Invalid status: ${update.status}`, 'updates');
-      }
-    }
-
     const artists = await this.artistService.batchUpdateArtistStatus(updates);
 
     res.json(artists);

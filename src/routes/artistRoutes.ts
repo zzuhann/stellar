@@ -32,7 +32,13 @@ router.patch('/:id/resubmit', authenticateToken, artistController.resubmitArtist
 router.patch('/:id/review', authenticateToken, requireAdmin, artistController.reviewArtist);
 router.put('/:id/approve', authenticateToken, requireAdmin, artistController.approveArtist);
 router.put('/:id/reject', authenticateToken, requireAdmin, artistController.rejectArtist);
-router.post('/batch-review', authenticateToken, requireAdmin, artistController.batchReviewArtists);
+router.post(
+  '/batch-review',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: artistSchemas.batchReview }),
+  artistController.batchReviewArtists
+);
 router.delete('/:id', authenticateToken, requireAdmin, artistController.deleteArtist);
 
 export default router;

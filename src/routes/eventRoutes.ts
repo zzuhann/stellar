@@ -53,8 +53,12 @@ router.put('/:id/approve', authenticateToken, requireAdmin, (req, res) =>
 router.put('/:id/reject', authenticateToken, requireAdmin, (req, res) =>
   eventController.rejectEvent(req, res)
 );
-router.post('/batch-review', authenticateToken, requireAdmin, (req, res) =>
-  eventController.batchReviewEvents(req, res)
+router.post(
+  '/batch-review',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: eventSchemas.batchReview }),
+  (req, res) => eventController.batchReviewEvents(req, res)
 );
 
 export default router;

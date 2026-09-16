@@ -90,6 +90,23 @@ export const artistSchemas = {
       .optional(),
     profileImage: z.string().url('藝人圖片網址格式錯誤').optional(),
   }),
+
+  batchReview: z.object({
+    updates: z
+      .array(
+        z.object({
+          artistId: z.string().min(1, 'artistId 不能為空'),
+          status: z.enum(['approved', 'rejected', 'exists']),
+          reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+          groupNames: z
+            .array(z.string().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元').trim())
+            .max(5, '最多只能選擇5個團體')
+            .optional(),
+        })
+      )
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
+  }),
 };
 
 // Venue 相關的 schema
@@ -373,6 +390,19 @@ export const eventSchemas = {
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
     reservation: reservationSchema.optional().nullable(),
+  }),
+
+  batchReview: z.object({
+    updates: z
+      .array(
+        z.object({
+          eventId: z.string().min(1, 'eventId 不能為空'),
+          status: z.enum(['approved', 'rejected']),
+          reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+        })
+      )
+      .min(1, 'updates 不能為空')
+      .max(50, '一次最多更新 50 筆'),
   }),
 };
 
