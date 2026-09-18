@@ -23,7 +23,7 @@ bun run dev:node   # tsx watch，無需 build，hot reload
 
 `bun run dev` 只有單一 document 讀取（`.doc(id).get()`）的 endpoint 才能正常使用。
 
-生產環境（Zeabur）的 `start` script 是 `node dist/server.js`，不受此問題影響。
+生產環境（GCP Cloud Run，Zeabur 僅備援）的 `start` script 是 `node dist/server.js`，不受此問題影響。
 
 單一 document 讀取（`.doc(id).get()`）走的是 gRPC unary call，Bun 支援正常，auth middleware 不受影響。
 
