@@ -15,6 +15,7 @@ import {
   VenueWithScore,
 } from '../models/types';
 import { cache } from '../utils/cache';
+import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
 import {
   DocumentData,
@@ -532,27 +533,7 @@ export class VenueService {
     const approvedEvents = snapshot.docs.filter(doc => doc.data().status === 'approved');
 
     for (const eventDoc of approvedEvents) {
-      const eventId = eventDoc.id;
-      const venueRef = db!.collection('venues').doc(venueId);
-
-      await db!.runTransaction(async tx => {
-        const venueDoc = await tx.get(venueRef);
-        if (!venueDoc.exists) return;
-
-        const existingRefs = venueDoc.data()?.eventRefs ?? [];
-        const alreadyLinked = existingRefs.some((ref: DocumentReference) => ref.id === eventId);
-        if (!alreadyLinked) {
-          tx.update(venueRef, {
-            eventRefs: FieldValue.arrayUnion(db!.collection('coffeeEvents').doc(eventId)),
-            eventCount: FieldValue.increment(1),
-          });
-        }
-        tx.update(db!.collection('coffeeEvents').doc(eventId), {
-          'location.venueId': venueId,
-        });
-      });
-
-      cache.delete(`venue:detail:${venueId}`);
+      await syncEventVenue(eventDoc.id);
     }
 
     cache.delete('venues:all');

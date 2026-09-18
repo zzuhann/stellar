@@ -15,7 +15,8 @@ import {
   VerifiedOrganizer,
 } from '../models/types';
 import { UserService } from './userService';
-import { Timestamp, FieldValue, DocumentReference } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { syncEventVenue } from './eventVenueSync';
 import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
 import { toPublicEvent, toPublicEvents } from '../utils/eventSanitizer';
@@ -737,7 +738,7 @@ export class EventService {
       };
     }
 
-    await withTimeoutAndRetry(() => docRef.update(updates));
+    await syncEventVenue(eventId, updates);
 
     // 清除相關快取
     cache.clearPattern('events:');
@@ -807,7 +808,7 @@ export class EventService {
 
     // 更新 venue 的 eventRefs + eventCount，並回填 event 的 location.venueId
     if (status === 'approved' && existingData.location?.placeId) {
-      await this.linkEventToVenue(eventId, existingData.location.placeId);
+      await syncEventVenue(eventId);
     }
 
     // 清除相關快取
@@ -977,39 +978,7 @@ export class EventService {
     approvedVenueLinks: Array<{ eventId: string; placeId: string }>
   ): Promise<void> {
     if (approvedVenueLinks.length === 0) return;
-    await Promise.all(
-      approvedVenueLinks.map(({ eventId, placeId }) => this.linkEventToVenue(eventId, placeId))
-    );
-  }
-
-  private async linkEventToVenue(eventId: string, placeId: string): Promise<void> {
-    if (!db) return;
-
-    const snapshot = await withTimeoutAndRetry(() =>
-      db!.collection('venues').where('placeId', '==', placeId).limit(1).get()
-    );
-    if (snapshot.empty) return;
-
-    const venueRef = snapshot.docs[0].ref;
-    const venueId = snapshot.docs[0].id;
-
-    await db.runTransaction(async tx => {
-      const venueDoc = await tx.get(venueRef);
-      if (venueDoc.exists) {
-        const existingRefs: DocumentReference[] = venueDoc.data()?.eventRefs ?? [];
-        const alreadyLinked = existingRefs.some(ref => ref.id === eventId);
-        if (!alreadyLinked) {
-          tx.update(venueRef, {
-            eventRefs: FieldValue.arrayUnion(this.collection!.doc(eventId)),
-            eventCount: FieldValue.increment(1),
-          });
-        }
-        tx.update(this.collection!.doc(eventId), { 'location.venueId': venueId });
-      }
-    });
-
-    cache.delete(`venue:detail:${venueId}`);
-    cache.delete('venues:all');
+    await Promise.all(approvedVenueLinks.map(({ eventId }) => syncEventVenue(eventId)));
   }
 
   // 批次更新 artists 的 activeEventIds（優化版本，減少 DB 查詢）

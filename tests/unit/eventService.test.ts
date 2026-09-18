@@ -1,6 +1,7 @@
 import { EventService } from '../../src/services/eventService';
 import { UpdateEventData, CreateEventData } from '../../src/models/types';
 import { cache } from '../../src/utils/cache';
+import { syncEventVenue } from '../../src/services/eventVenueSync';
 
 const mockGet = jest.fn();
 const mockUpdate = jest.fn();
@@ -21,6 +22,99 @@ jest.mock('../../src/config/firebase', () => ({
 jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
+
+describe('syncEventVenue', () => {
+  const ref = (id: string) => ({ id, path: `venues/${id}` });
+  const eventRef = { id: 'e1', path: 'coffeeEvents/e1' };
+  let event: Record<string, any>;
+  let venues: Record<string, any>;
+  let writes: Array<[any, any]>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    event = { status: 'approved', location: { placeId: 'p1', venueId: 'v1' } };
+    venues = {
+      v1: { placeId: 'p1', status: 'inactive', eventRefs: [eventRef], eventCount: 1 },
+      v2: { placeId: 'p2', eventRefs: [], eventCount: 0 },
+    };
+    writes = [];
+    const firebase = jest.requireMock('../../src/config/firebase');
+    firebase.db.collection.mockImplementation((name: string) => ({
+      doc: (id: string) => (name === 'coffeeEvents' ? eventRef : ref(id)),
+      where: (field: string, _op: string, value: unknown) => ({
+        field,
+        value,
+        limit() {
+          return this;
+        },
+      }),
+    }));
+    firebase.db.runTransaction.mockImplementation(async (fn: (tx: any) => Promise<void>) => {
+      await fn({
+        get: async (target: any) => {
+          if (writes.length) throw new Error('Read after write');
+          if (target === eventRef) return { exists: true, data: () => event };
+          if (target.id)
+            return { exists: !!venues[target.id], ref: target, data: () => venues[target.id] };
+          const docs = Object.entries(venues)
+            .filter(([, v]) =>
+              target.field === 'placeId'
+                ? v.placeId === target.value
+                : v.eventRefs.some((r: any) => r.path === eventRef.path)
+            )
+            .map(([id, v]) => ({ id, ref: ref(id), data: () => v }));
+          return { docs, size: docs.length };
+        },
+        update: (target: any, data: any) => writes.push([target, data]),
+      });
+    });
+  });
+
+  it('preserves an inactive venue when editing the same place and clears both caches', async () => {
+    cache.set('venue:detail:v1', {}, 60);
+    cache.set('venue:admin:detail:v1', {}, 60);
+    await syncEventVenue('e1', { title: 'updated', location: { placeId: 'p1' } });
+    expect(writes[writes.length - 1]?.[1]).toEqual({
+      title: 'updated',
+      location: { placeId: 'p1', venueId: 'v1' },
+    });
+    expect(cache.get('venue:detail:v1')).toBeNull();
+    expect(cache.get('venue:admin:detail:v1')).toBeNull();
+  });
+
+  it.each(['p2', 'unknown', undefined])('moves away from the old venue for %s', async placeId => {
+    await syncEventVenue('e1', { location: { placeId } });
+    expect(writes).toContainEqual([ref('v1'), { eventRefs: [], eventCount: 0 }]);
+    expect(writes[writes.length - 1]?.[1].location.venueId).toBe(
+      placeId === 'p2' ? 'v2' : undefined
+    );
+  });
+
+  it('repairs a missing event link without counting an existing reference twice', async () => {
+    delete event.location.venueId;
+    await syncEventVenue('e1');
+    expect(writes).toContainEqual([ref('v1'), { eventRefs: [eventRef], eventCount: 1 }]);
+    expect(writes[writes.length - 1]?.[1]['location.venueId']).toBe('v1');
+    writes = [];
+    event.location.venueId = 'v1';
+    await syncEventVenue('e1');
+    expect(writes).toContainEqual([ref('v1'), { eventRefs: [eventRef], eventCount: 1 }]);
+  });
+
+  it('does not choose an arbitrary duplicate place or link a pending event', async () => {
+    delete event.location.venueId;
+    venues.v2.placeId = 'p1';
+    await syncEventVenue('e1');
+    expect(writes.some(([target, data]) => target.id === 'v2' && data.eventCount === 1)).toBe(
+      false
+    );
+    writes = [];
+    event.status = 'pending';
+    venues.v2.placeId = 'p2';
+    await syncEventVenue('e1');
+    expect(writes.some(([, data]) => data.eventCount === 1)).toBe(false);
+  });
+});
 
 describe('EventService.resubmitEvent', () => {
   let service: EventService;
@@ -247,6 +341,7 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     });
     cache.set(favoriteCacheKey, false, 1440);
 
+    firebase.db.runTransaction.mockRejectedValueOnce(new Error('venue sync failed'));
     await expect(service.updateEventStatus('event-1', 'approved')).rejects.toThrow(
       'venue sync failed'
     );
