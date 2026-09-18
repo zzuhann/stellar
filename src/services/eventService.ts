@@ -793,6 +793,10 @@ export class EventService {
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
+    // 狀態一旦成功寫入，立即清除收藏快取，不受後續 artists/venue 同步流程成功與否影響
+    // Clear favorite cache since isFavorited caches the event's approval status
+    cache.clearPattern('favorite');
+
     // 更新相關 artists 的 activeEventIds（只有 approved 時才加入）
     if (status === 'approved' && existingData.artists && Array.isArray(existingData.artists)) {
       await this.updateArtistsActiveEventIds(
@@ -915,6 +919,10 @@ export class EventService {
 
     // 執行批次更新 events
     await withTimeoutAndRetry(() => eventBatch.commit());
+
+    // 狀態一旦成功寫入，立即清除收藏快取，不受後續 artists/venue 同步流程成功與否影響
+    // Clear favorite cache since isFavorited caches the event's approval status
+    cache.clearPattern('favorite');
 
     // 批次更新所有相關 artists 的 activeEventIds
     if (approvedEvents.length > 0) {

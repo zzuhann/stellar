@@ -168,7 +168,15 @@ export class UserService {
         .get()
     );
 
-    const result = !snapshot.empty;
+    let result = false;
+
+    if (!snapshot.empty) {
+      // A userFavorites doc existing isn't enough — re-check the event is
+      // still approved (it may have been deleted or unapproved since favoriting)
+      // to stay consistent with the filtering applied in getFavorites.
+      const eventDoc = await withTimeoutAndRetry(() => this.eventsCollection.doc(eventId).get());
+      result = eventDoc.exists && eventDoc.data()?.status === 'approved';
+    }
 
     // 設定 24 小時快取
     cache.set(cacheKey, result, 1440);
