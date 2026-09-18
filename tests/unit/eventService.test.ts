@@ -14,6 +14,7 @@ jest.mock('../../src/config/firebase', () => ({
   db: {
     collection: jest.fn(),
     batch: jest.fn(),
+    runTransaction: jest.fn(),
   },
 }));
 
@@ -253,7 +254,7 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     expect(cache.get(favoriteCacheKey)).toBeNull();
   });
 
-  it('updateEventStatus 快取清除時序：DB 寫入完成才清 favorite，artists 同步完成才清其餘快取', async () => {
+  it('updateEventStatus 快取清除時序：DB 寫入完成才清 favorite，artists 與 venue 同步完成才清其餘快取', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
 
     // Controls when the Firestore status write "completes".
@@ -261,27 +262,48 @@ describe('EventService — 狀態變更清除收藏快取', () => {
     mockUpdate.mockImplementation(() => writeDeferred.promise);
 
     // Controls when the downstream artists sync (updateArtistsActiveEventIds) "completes".
-    const syncDeferred = createDeferred<void>();
+    const artistSyncDeferred = createDeferred<void>();
     const mockArtistDocRef = {
       get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ activeEventIds: [] }) }),
     };
-    const mockArtistBatch = { update: jest.fn(), commit: jest.fn(() => syncDeferred.promise) };
+    const mockArtistBatch = {
+      update: jest.fn(),
+      commit: jest.fn(() => artistSyncDeferred.promise),
+    };
+
+    // Controls when the downstream venue sync (linkEventToVenue's transaction) "completes".
+    const venueSyncDeferred = createDeferred<void>();
+    const mockVenueCollection = {
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ empty: false, docs: [{ id: 'venue-1', ref: {} }] }),
+    };
 
     (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
       if (name === 'artists') {
         return { doc: jest.fn(() => mockArtistDocRef) };
       }
+      if (name === 'venues') {
+        return mockVenueCollection;
+      }
       return { doc: jest.fn(() => mockDocRef) };
     });
     (firebase.db.batch as jest.Mock).mockReturnValue(mockArtistBatch);
+    (firebase.db.runTransaction as jest.Mock).mockImplementation(() => venueSyncDeferred.promise);
 
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ status: 'rejected', artists: [{ id: 'artist-1' }] }),
+      data: () => ({
+        status: 'rejected',
+        artists: [{ id: 'artist-1' }],
+        location: { placeId: 'place-1' },
+      }),
     });
 
     cache.set(favoriteCacheKey, false, 1440);
     cache.set('artists:approved', ['stale'], 1440);
+    cache.set('venue:detail:venue-1', { stale: true }, 1440);
+    cache.set('venues:all', ['stale'], 1440);
 
     const resultPromise = service.updateEventStatus('event-1', 'approved');
 
@@ -291,34 +313,62 @@ describe('EventService — 狀態變更清除收藏快取', () => {
 
     writeDeferred.resolve();
 
-    // Checkpoint 2: DB 寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取還在
+    // Checkpoint 2: DB 寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取（含 venue）還在
     await flushMicrotasks();
     await flushMicrotasks();
     expect(cache.get(favoriteCacheKey)).toBeNull();
     expect(cache.get('artists:approved')).toEqual(['stale']);
+    expect(cache.get('venue:detail:venue-1')).toEqual({ stale: true });
+    expect(cache.get('venues:all')).toEqual(['stale']);
 
-    syncDeferred.resolve();
+    artistSyncDeferred.resolve();
 
-    // Checkpoint 3: 同步完成後，其餘快取才被清除
+    // Checkpoint 3: artists 同步完成、venue 同步（transaction）尚未完成 → venue 快取仍在
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(cache.get('venue:detail:venue-1')).toEqual({ stale: true });
+    expect(cache.get('venues:all')).toEqual(['stale']);
+    expect(cache.get('artists:approved')).toEqual(['stale']);
+
+    venueSyncDeferred.resolve();
+
+    // Checkpoint 4: venue 同步完成後，venue 快取與其餘快取才被清除
     await resultPromise;
+    expect(cache.get('venue:detail:venue-1')).toBeNull();
+    expect(cache.get('venues:all')).toBeNull();
     expect(cache.get('artists:approved')).toBeNull();
 
     cache.delete('artists:approved');
+    cache.delete('venue:detail:venue-1');
+    cache.delete('venues:all');
   });
 
-  it('batchUpdateEventStatus 快取清除時序：DB 批次寫入完成才清 favorite，artists 同步完成才清其餘快取', async () => {
+  it('batchUpdateEventStatus 快取清除時序：DB 批次寫入完成才清 favorite，artists 與 venue 同步完成才清其餘快取', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
 
     // First db.batch() call is the event status batch, second is the artists sync batch.
     const writeDeferred = createDeferred<void>();
     const eventBatchMock = { update: jest.fn(), commit: jest.fn(() => writeDeferred.promise) };
 
-    const syncDeferred = createDeferred<void>();
-    const artistBatchMock = { update: jest.fn(), commit: jest.fn(() => syncDeferred.promise) };
+    const artistSyncDeferred = createDeferred<void>();
+    const artistBatchMock = {
+      update: jest.fn(),
+      commit: jest.fn(() => artistSyncDeferred.promise),
+    };
 
     (firebase.db.batch as jest.Mock)
       .mockImplementationOnce(() => eventBatchMock)
       .mockImplementationOnce(() => artistBatchMock);
+
+    // Controls when the downstream venue sync (linkEventToVenue's transaction) "completes".
+    const venueSyncDeferred = createDeferred<void>();
+    const mockVenueCollection = {
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ empty: false, docs: [{ id: 'venue-1', ref: {} }] }),
+    };
+    (firebase.db.runTransaction as jest.Mock).mockImplementation(() => venueSyncDeferred.promise);
 
     const mockArtistDocRef = {
       get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ activeEventIds: [] }) }),
@@ -327,17 +377,26 @@ describe('EventService — 狀態變更清除收藏快取', () => {
       if (name === 'artists') {
         return { doc: jest.fn(() => mockArtistDocRef) };
       }
+      if (name === 'venues') {
+        return mockVenueCollection;
+      }
       return { doc: jest.fn(() => mockDocRef) };
     });
 
     mockGet.mockResolvedValue({
       id: 'event-1',
       exists: true,
-      data: () => ({ status: 'rejected', artists: [{ id: 'artist-1' }] }),
+      data: () => ({
+        status: 'rejected',
+        artists: [{ id: 'artist-1' }],
+        location: { placeId: 'place-1' },
+      }),
     });
 
     cache.set(favoriteCacheKey, false, 1440);
     cache.set('artists:approved', ['stale'], 1440);
+    cache.set('venue:detail:venue-1', { stale: true }, 1440);
+    cache.set('venues:all', ['stale'], 1440);
 
     const resultPromise = service.batchUpdateEventStatus([
       { eventId: 'event-1', status: 'approved' },
@@ -349,18 +408,34 @@ describe('EventService — 狀態變更清除收藏快取', () => {
 
     writeDeferred.resolve();
 
-    // Checkpoint 2: DB 批次寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取還在
+    // Checkpoint 2: DB 批次寫入完成、artists 同步尚未完成 → favorite 已清，其餘快取（含 venue）還在
     await flushMicrotasks();
     await flushMicrotasks();
     expect(cache.get(favoriteCacheKey)).toBeNull();
     expect(cache.get('artists:approved')).toEqual(['stale']);
+    expect(cache.get('venue:detail:venue-1')).toEqual({ stale: true });
+    expect(cache.get('venues:all')).toEqual(['stale']);
 
-    syncDeferred.resolve();
+    artistSyncDeferred.resolve();
 
-    // Checkpoint 3: 同步完成後，其餘快取才被清除
+    // Checkpoint 3: artists 同步完成、venue 同步（transaction）尚未完成 → venue 快取仍在
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(cache.get('venue:detail:venue-1')).toEqual({ stale: true });
+    expect(cache.get('venues:all')).toEqual(['stale']);
+    expect(cache.get('artists:approved')).toEqual(['stale']);
+
+    venueSyncDeferred.resolve();
+
+    // Checkpoint 4: venue 同步完成後，venue 快取與其餘快取才被清除
     await resultPromise;
+    expect(cache.get('venue:detail:venue-1')).toBeNull();
+    expect(cache.get('venues:all')).toBeNull();
     expect(cache.get('artists:approved')).toBeNull();
 
     cache.delete('artists:approved');
+    cache.delete('venue:detail:venue-1');
+    cache.delete('venues:all');
   });
 });
