@@ -26,6 +26,11 @@ const mockEventSet = jest.fn();
 const mockEventGet = jest.fn();
 const mockEventUpdate = jest.fn();
 
+// Reservation tests inspect the update payload; venue transactions are covered separately.
+jest.mock('../../src/services/eventVenueSync', () => ({
+  syncEventVenue: (_eventId: string, updates: Record<string, unknown>) => mockEventUpdate(updates),
+}));
+
 const approvedArtistDoc = {
   exists: true,
   data: () => ({ status: 'approved', stageName: 'Test Artist', slug: 'test-artist' }),
