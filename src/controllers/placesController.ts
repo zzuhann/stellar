@@ -99,7 +99,6 @@ export class PlacesController {
         input,
         languageCode: 'zh-TW', // 繁體中文回應
         includedRegionCodes: ['tw'], // 限制台灣地區（不限制地理範圍）
-        includedPrimaryTypes: ['establishment'], // 只回傳商家記錄，過濾掉純地址記錄，降低同址不同 placeId 的機率
       }),
     });
 

@@ -47,7 +47,6 @@ export async function resolveLocation(text: string): Promise<ParsedLocation | nu
         input: trimmed,
         languageCode: 'zh-TW',
         includedRegionCodes: ['tw'],
-        includedPrimaryTypes: ['establishment'], // 只回傳商家記錄，過濾掉純地址記錄，降低同址不同 placeId 的機率
       }),
     });
   } catch (error) {
