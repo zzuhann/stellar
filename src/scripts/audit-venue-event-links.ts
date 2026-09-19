@@ -26,7 +26,7 @@ dotenv.config();
 
 import { db, hasFirebaseConfig } from '../config/firebase';
 import { DocumentReference } from 'firebase-admin/firestore';
-import { determineBackfillAction } from './backfill-venue-event-links';
+import { determineBackfillAction, BackfillAction } from './backfill-venue-event-links';
 
 export interface DuplicatePlaceIdGroup {
   placeId: string;
@@ -77,6 +77,62 @@ interface EventCandidate {
   linkedVenueId?: string;
 }
 
+export interface VenueRecord {
+  id: string;
+  name: string;
+  placeId?: string;
+  eventRefIds: string[];
+}
+
+export type EventVenueLinkStatus =
+  | BackfillAction // 'skip' | 'link-both' | 'repair-event'（有明確目標場地，重用 backfill 判斷邏輯）
+  | 'no-matching-venue' // placeId 找不到任何場地
+  | 'ambiguous-duplicate-placeid' // 活動尚無 venueId，但 placeId 被多個場地共用，無法自動判定該連哪一個
+  | 'inconsistent-venue-link'; // 活動已有 venueId，但該場地不存在、或其 placeId 跟活動自己的 placeId 對不上
+
+export interface EventVenueLinkResult {
+  status: EventVenueLinkStatus;
+  targetVenueId?: string;
+}
+
+/**
+ * 判定一筆活動與場地的連結狀態。
+ *
+ * 修正重點（見 backlog）：不能單純用 placeId 反查表裡「隨便一筆」場地來判斷對錯——
+ * 若活動已經有既有 venueId，要直接核對它實際指向的場地是否存在、placeId 是否對得上；
+ * 若活動還沒有連結、又落在重複 placeId 群組裡，標記為需人工判斷，不要預設連到第一筆。
+ */
+export function classifyEventVenueLink(
+  candidate: { eventId: string; placeId: string; linkedVenueId?: string },
+  venuesById: Map<string, VenueRecord>,
+  venuesByPlaceId: Map<string, VenueRecord[]>
+): EventVenueLinkResult {
+  let targetVenue: VenueRecord | undefined;
+
+  if (candidate.linkedVenueId) {
+    const linkedVenue = venuesById.get(candidate.linkedVenueId);
+    if (!linkedVenue || linkedVenue.placeId !== candidate.placeId) {
+      return { status: 'inconsistent-venue-link' };
+    }
+    targetVenue = linkedVenue;
+  } else {
+    const group = venuesByPlaceId.get(candidate.placeId) ?? [];
+    if (group.length > 1) {
+      return { status: 'ambiguous-duplicate-placeid' };
+    }
+    targetVenue = group[0];
+  }
+
+  if (!targetVenue) {
+    return { status: 'no-matching-venue' };
+  }
+
+  const hasVenueRef = targetVenue.eventRefIds.includes(candidate.eventId);
+  const action = determineBackfillAction(hasVenueRef, candidate.linkedVenueId, targetVenue.id);
+
+  return { status: action, targetVenueId: targetVenue.id };
+}
+
 async function main(): Promise<void> {
   if (!hasFirebaseConfig || !db) {
     console.error('缺少 Firebase 環境變數，請確認 .env 設定');
@@ -125,11 +181,9 @@ async function main(): Promise<void> {
     eventCount: number;
     eventRefsLength: number;
   }[] = [];
-  // 同一個 placeId 若被多個 venue 共用，比對時只取第一筆代表；重複本身已在 findDuplicatePlaceIds 另外列出
-  const venueByPlaceId = new Map<
-    string,
-    { id: string; name: string; eventRefs: DocumentReference[] }
-  >();
+  // 保留每個 placeId 底下「所有」場地（不只第一筆），精確匹配檢查才能正確處理重複 placeId 的情況
+  const venuesById = new Map<string, VenueRecord>();
+  const venuesByPlaceId = new Map<string, VenueRecord[]>();
 
   for (const doc of venuesSnapshot.docs) {
     const data = doc.data();
@@ -141,8 +195,17 @@ async function main(): Promise<void> {
     venueList.push({ id: doc.id, name, placeId });
     venueEventCountList.push({ id: doc.id, name, eventCount, eventRefsLength: eventRefs.length });
 
-    if (placeId && !venueByPlaceId.has(placeId)) {
-      venueByPlaceId.set(placeId, { id: doc.id, name, eventRefs });
+    const venueRecord: VenueRecord = {
+      id: doc.id,
+      name,
+      placeId,
+      eventRefIds: eventRefs.map(ref => ref.id),
+    };
+    venuesById.set(doc.id, venueRecord);
+    if (placeId) {
+      const group = venuesByPlaceId.get(placeId) ?? [];
+      group.push(venueRecord);
+      venuesByPlaceId.set(placeId, group);
     }
   }
 
@@ -175,54 +238,64 @@ async function main(): Promise<void> {
     console.log('');
   }
 
-  // 3. 重跑既有 backfill 腳本的匹配檢查邏輯（唯讀，直接複用 determineBackfillAction）
+  // 3. 重跑既有 backfill 腳本的匹配檢查邏輯（唯讀，直接複用 classifyEventVenueLink / determineBackfillAction）
   let matched = 0;
   let alreadyLinked = 0;
   let needsRepairEvent = 0;
   let needsLinkBoth = 0;
   let noMatchingVenue = 0;
-
-  // 記錄本次掃描內已「視為連結」的活動，避免同一場地底下多筆待修活動互相干擾判斷
-  const linkedEventIdsByPlaceId = new Map<string, Set<string>>();
+  let needsManualReview = 0;
 
   console.log('=== 精確匹配檢查（複用 backfill 腳本邏輯） ===');
   for (const candidate of candidates) {
-    const venue = venueByPlaceId.get(candidate.placeId);
-    if (!venue) {
-      noMatchingVenue++;
-      continue;
-    }
-    matched++;
+    const result = classifyEventVenueLink(candidate, venuesById, venuesByPlaceId);
 
-    if (!linkedEventIdsByPlaceId.has(candidate.placeId)) {
-      linkedEventIdsByPlaceId.set(candidate.placeId, new Set(venue.eventRefs.map(ref => ref.id)));
-    }
-    const linkedEventIds = linkedEventIdsByPlaceId.get(candidate.placeId)!;
+    switch (result.status) {
+      case 'no-matching-venue':
+        noMatchingVenue++;
+        break;
 
-    const action = determineBackfillAction(
-      linkedEventIds.has(candidate.eventId),
-      candidate.linkedVenueId,
-      venue.id
-    );
+      case 'ambiguous-duplicate-placeid':
+        needsManualReview++;
+        console.log(
+          `[需人工判斷：placeId 被多個場地共用，活動尚無連結，無法自動判定應連到哪一個] 活動「${candidate.eventTitle}」(${candidate.eventId})，placeId=${candidate.placeId}`
+        );
+        break;
 
-    if (action === 'skip') {
-      alreadyLinked++;
-      continue;
-    }
+      case 'inconsistent-venue-link':
+        needsManualReview++;
+        console.log(
+          `[需人工判斷：活動的 location.venueId 指向的場地不存在，或該場地 placeId 與活動不一致] 活動「${candidate.eventTitle}」(${candidate.eventId})`
+        );
+        break;
 
-    if (action === 'repair-event') {
-      needsRepairEvent++;
-      console.log(
-        `[待修：僅活動端 venueId 缺失] 活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.name}」(${venue.id})`
-      );
-    } else {
-      needsLinkBoth++;
-      console.log(
-        `[待修：雙向都未連結] 活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.name}」(${venue.id})`
-      );
+      case 'skip':
+        matched++;
+        alreadyLinked++;
+        break;
+
+      case 'repair-event': {
+        matched++;
+        needsRepairEvent++;
+        const venue = venuesById.get(result.targetVenueId!)!;
+        console.log(
+          `[待修：僅活動端 venueId 缺失] 活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.name}」(${venue.id})`
+        );
+        break;
+      }
+
+      case 'link-both': {
+        matched++;
+        needsLinkBoth++;
+        const venue = venuesById.get(result.targetVenueId!)!;
+        console.log(
+          `[待修：雙向都未連結] 活動「${candidate.eventTitle}」(${candidate.eventId}) → 場地「${venue.name}」(${venue.id})`
+        );
+        break;
+      }
     }
   }
-  if (needsRepairEvent === 0 && needsLinkBoth === 0) {
+  if (needsRepairEvent === 0 && needsLinkBoth === 0 && needsManualReview === 0) {
     console.log('（無）');
   }
   console.log('');
@@ -239,6 +312,7 @@ async function main(): Promise<void> {
   console.log(`  僅活動端 venueId 缺失（待修）：${needsRepairEvent}`);
   console.log(`  雙向都未連結（待修）：${needsLinkBoth}`);
   console.log(`  找不到對應場地：${noMatchingVenue}`);
+  console.log(`  需人工判斷（venueId 與場地不一致，或 placeId 重複無法判定）：${needsManualReview}`);
 }
 
 if (require.main === module) {
