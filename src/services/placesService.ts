@@ -43,7 +43,11 @@ export async function resolveLocation(text: string): Promise<ParsedLocation | nu
     autocompleteRes = await fetchWithRetry('https://places.googleapis.com/v1/places:autocomplete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey, Referer: referer },
-      body: JSON.stringify({ input: trimmed, languageCode: 'zh-TW', includedRegionCodes: ['tw'] }),
+      body: JSON.stringify({
+        input: trimmed,
+        languageCode: 'zh-TW',
+        includedRegionCodes: ['tw'],
+      }),
     });
   } catch (error) {
     console.warn('Places autocomplete 呼叫失敗:', error);
