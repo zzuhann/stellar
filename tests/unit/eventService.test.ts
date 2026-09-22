@@ -1,5 +1,5 @@
 import { EventService } from '../../src/services/eventService';
-import { UpdateEventData, CreateEventData } from '../../src/models/types';
+import { UpdateEventData, CreateEventData, EventsResponse } from '../../src/models/types';
 import { cache } from '../../src/utils/cache';
 import { syncEventVenue } from '../../src/services/eventVenueSync';
 
@@ -22,6 +22,60 @@ jest.mock('../../src/config/firebase', () => ({
 jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
+
+const makeTimestamp = (isoDate: string) =>
+  ({
+    toDate: () => new Date(isoDate),
+    toMillis: () => new Date(isoDate).getTime(),
+  }) as unknown as import('firebase-admin/firestore').Timestamp;
+
+describe('EventService.getEventsWithFilters — datetime 序列化（GET /events）', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({
+        docs: [
+          {
+            id: 'event-1',
+            data: () => ({
+              title: '測試活動',
+              description: '',
+              artists: [],
+              location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+              datetime: {
+                start: makeTimestamp('2027-01-01T00:00:00.000Z'),
+                end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+              },
+              status: 'approved',
+              createdBy: 'uid-1',
+            }),
+          },
+        ],
+      }),
+    });
+    service = new EventService();
+  });
+
+  it('回傳的 datetime.start/end 是 ISO 8601 字串，不是 Firestore Timestamp（或 {_seconds,_nanoseconds}）物件', async () => {
+    const result = (await service.getEventsWithFilters({
+      status: 'approved',
+    })) as EventsResponse;
+
+    expect(result.events).toHaveLength(1);
+    const { start, end } = result.events[0].datetime as unknown as { start: string; end: string };
+
+    expect(typeof start).toBe('string');
+    expect(typeof end).toBe('string');
+    expect(new Date(start).toISOString()).toBe(start);
+    expect(new Date(end).toISOString()).toBe(end);
+    expect(start).toBe('2027-01-01T00:00:00.000Z');
+    expect(end).toBe('2027-01-02T00:00:00.000Z');
+  });
+});
 
 describe('syncEventVenue', () => {
   const ref = (id: string) => ({ id, path: `venues/${id}` });
