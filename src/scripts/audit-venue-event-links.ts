@@ -312,7 +312,9 @@ async function main(): Promise<void> {
   console.log(`  僅活動端 venueId 缺失（待修）：${needsRepairEvent}`);
   console.log(`  雙向都未連結（待修）：${needsLinkBoth}`);
   console.log(`  找不到對應場地：${noMatchingVenue}`);
-  console.log(`  需人工判斷（venueId 與場地不一致，或 placeId 重複無法判定）：${needsManualReview}`);
+  console.log(
+    `  需人工判斷（venueId 與場地不一致，或 placeId 重複無法判定）：${needsManualReview}`
+  );
 }
 
 if (require.main === module) {
