@@ -75,7 +75,7 @@ paths:
                 properties:
                   events:
                     type: array
-                    items: { $ref: '#/components/schemas/CoffeeEvent' }
+                    items: { $ref: '#/components/schemas/PublicEventListItem' }
                   total: { type: integer }
                   page: { type: integer }
     post:
@@ -105,6 +105,34 @@ paths:
       responses:
         '200':
           description: 地圖資料
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        slug: { type: string, nullable: true }
+                        title: { type: string }
+                        mainImage: { type: string }
+                        location:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            address: { type: string }
+                            city: { type: string }
+                            coordinates:
+                              type: object
+                              properties:
+                                lat: { type: number }
+                                lng: { type: number }
+                        datetime: { $ref: '#/components/schemas/EventDatetimeIso' }
+                        isFavorited: { type: boolean }
+                  total: { type: integer }
 
   /events/search:
     get:
@@ -861,12 +889,22 @@ components:
     FirestoreTimestamp:
       type: object
       description: >-
-        Firestore Timestamp 物件（非 ISO 字串）。API 目前不接受/回傳
-        ISO 8601 字串，一律是這個形狀。
+        Firestore Timestamp 物件（非 ISO 字串）。多數 events 端點（詳情、建立、更新、搜尋、熱門、
+        收藏）一律是這個形狀；例外見 EventDatetimeIso。
       required: [_seconds, _nanoseconds]
       properties:
         _seconds: { type: integer }
         _nanoseconds: { type: integer }
+
+    EventDatetimeIso:
+      type: object
+      description: >-
+        ISO 8601 字串形式的 datetime（非 FirestoreTimestamp）。僅 GET /events 與
+        GET /events/map-data 這兩個列表端點的回應使用此格式；其餘 events 端點仍回傳
+        FirestoreTimestamp。
+      properties:
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
 
     CoffeeEvent:
       type: object
@@ -919,6 +957,16 @@ components:
         status: { type: string, enum: [pending, approved, rejected] }
         rejectedReason: { type: string }
         viewCount: { type: integer }
+
+    PublicEventListItem:
+      description: >-
+        GET /events 回應中的活動項目。與 CoffeeEvent 相同，但 datetime 為 EventDatetimeIso
+        （ISO 8601 字串），不是 FirestoreTimestamp。
+      allOf:
+        - $ref: '#/components/schemas/CoffeeEvent'
+        - type: object
+          properties:
+            datetime: { $ref: '#/components/schemas/EventDatetimeIso' }
 
     CreateEventData:
       type: object
