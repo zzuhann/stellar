@@ -51,7 +51,7 @@ describe('syncEventVenue', () => {
     }));
     firebase.db.runTransaction.mockImplementation(async (fn: (tx: any) => Promise<void>) => {
       await fn({
-        get: async (target: any) => {
+        get: (target: any) => {
           if (writes.length) throw new Error('Read after write');
           if (target === eventRef) return { exists: true, data: () => event };
           if (target.id)

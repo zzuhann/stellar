@@ -119,7 +119,7 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
   <div class="footer">
     <p>如果有任何問題，也歡迎和我們聯繫</p>
     <p>
-      Threads: <a href="https://www.threads.net/@_stellar.tw">@_stellar.tw</a><br>
+      Threads: <a href="https://www.threads.com/@_stellar.tw">@_stellar.tw</a><br>
       Instagram: <a href="https://www.instagram.com/_stellar.tw">@_stellar.tw</a><br>
       Email: <a href="mailto:stellar.taiwan.2025@gmail.com">stellar.taiwan.2025@gmail.com</a>
     </p>
@@ -264,7 +264,7 @@ export async function sendEventApprovalEmail(data: EventApprovalEmailData): Prom
   <div class="footer">
     <p>如果有任何問題，也歡迎和我們聯繫</p>
     <p>
-      Threads: <a href="https://www.threads.net/@_stellar.tw">@_stellar.tw</a><br>
+      Threads: <a href="https://www.threads.com/@_stellar.tw">@_stellar.tw</a><br>
       Instagram: <a href="https://www.instagram.com/_stellar.tw">@_stellar.tw</a><br>
       Email: <a href="mailto:stellar.taiwan.2025@gmail.com">stellar.taiwan.2025@gmail.com</a>
     </p>
@@ -443,7 +443,7 @@ export async function sendContactNotification(data: {
   </div>
   <div class="footer">
     <p>
-      Threads: <a href="https://www.threads.net/@_stellar.tw">@_stellar.tw</a><br>
+      Threads: <a href="https://www.threads.com/@_stellar.tw">@_stellar.tw</a><br>
       Instagram: <a href="https://www.instagram.com/_stellar.tw">@_stellar.tw</a><br>
       Email: <a href="mailto:stellar.taiwan.2025@gmail.com">stellar.taiwan.2025@gmail.com</a>
     </p>
