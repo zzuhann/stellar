@@ -126,8 +126,14 @@ describe('serializeEventsDatetime', () => {
 
   it('對陣列中每一筆都轉換 datetime', () => {
     const events = [
-      baseEvent({ id: 'e1', datetime: { start: makeTimestamp('2027-01-01'), end: makeTimestamp('2027-01-02') } }),
-      baseEvent({ id: 'e2', datetime: { start: makeTimestamp('2027-02-01'), end: makeTimestamp('2027-02-02') } }),
+      baseEvent({
+        id: 'e1',
+        datetime: { start: makeTimestamp('2027-01-01'), end: makeTimestamp('2027-01-02') },
+      }),
+      baseEvent({
+        id: 'e2',
+        datetime: { start: makeTimestamp('2027-02-01'), end: makeTimestamp('2027-02-02') },
+      }),
     ];
     const result = serializeEventsDatetime(events);
     expect(result.every(e => typeof e.datetime.start === 'string')).toBe(true);

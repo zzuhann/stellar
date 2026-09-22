@@ -368,9 +368,16 @@ export interface EventFilterParams {
   sortOrder?: 'asc' | 'desc'; // 排序順序，預設 desc
 }
 
-// 活動列表回應格式
+// datetime 欄位的 API 回應格式（ISO 8601 字串），與 CoffeeEvent.datetime（Firestore Timestamp）分開，
+// 因為 CoffeeEvent 同時被內部服務邏輯使用，不能直接改動其欄位型別
+export interface EventDatetimeResponse {
+  start: string; // ISO timestamp
+  end: string; // ISO timestamp
+}
+
+// 活動列表回應格式（GET /events：datetime 為 ISO 字串，見 eventSanitizer.serializeEventsDatetime）
 export interface EventsResponse {
-  events: CoffeeEvent[];
+  events: (Omit<CoffeeEvent, 'datetime'> & { datetime: EventDatetimeResponse })[];
   pagination: {
     page: number;
     limit: number;
@@ -482,9 +489,9 @@ export interface CoffeeEventWithFavorite extends CoffeeEvent {
   isFavorited?: boolean;
 }
 
-// 活動列表回應格式（帶收藏狀態）
+// 活動列表回應格式（帶收藏狀態；GET /events?checkFavorite=true：datetime 為 ISO 字串）
 export interface EventsResponseWithFavorite {
-  events: CoffeeEventWithFavorite[];
+  events: (Omit<CoffeeEventWithFavorite, 'datetime'> & { datetime: EventDatetimeResponse })[];
   pagination: {
     page: number;
     limit: number;

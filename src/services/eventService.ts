@@ -19,7 +19,7 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { syncEventVenue } from './eventVenueSync';
 import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
-import { toPublicEvent, toPublicEvents } from '../utils/eventSanitizer';
+import { toPublicEvent, toPublicEvents, serializeEventsDatetime } from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 import { AppError } from '../utils/AppError';
 
@@ -250,15 +250,17 @@ export class EventService {
     // 排序處理
     const sortedEvents = this.sortEvents(events, filters.sortBy, filters.sortOrder);
 
-    // 分頁處理
-    const finalPaginatedEvents = toPublicEvents(sortedEvents.slice(skip, skip + limit));
+    // 分頁處理；datetime 序列化為 ISO 字串，統一 GET /events 與 /events/map-data 的回應格式
+    const finalPaginatedEvents = serializeEventsDatetime(
+      toPublicEvents(sortedEvents.slice(skip, skip + limit))
+    );
 
     // 如果需要檢查收藏狀態
     if (userId) {
       const eventIds = finalPaginatedEvents.map(e => e.id);
       const favoritedEventIds = await this.userService.checkFavoritesBatch(userId, eventIds);
 
-      const eventsWithFavorite: CoffeeEventWithFavorite[] = finalPaginatedEvents.map(event => ({
+      const eventsWithFavorite = finalPaginatedEvents.map(event => ({
         ...event,
         isFavorited: favoritedEventIds.has(event.id),
       }));
