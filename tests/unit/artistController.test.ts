@@ -168,7 +168,7 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     expect(jsonArg.status).toBe('rejected');
   });
 
-  it('查詢他人投稿、且已登入非該投稿人：回應仍不含 createdBy、createdByEmail、rejectedReason', async () => {
+  it('查詢他人投稿、且已登入非該投稿人：回應仍不含 createdBy、createdByEmail', async () => {
     const req = buildReq('artist-1', { uid: 'someone-else', email: 'x@test.com', role: 'user' });
 
     await controller.getArtistById(req, res as Response);
@@ -176,6 +176,25 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
     expect(jsonArg).not.toHaveProperty('createdBy');
     expect(jsonArg).not.toHaveProperty('createdByEmail');
+  });
+
+  it('資料缺少 createdBy（舊資料/髒資料）、未登入查詢：不因 undefined === undefined 誤判為本人，仍過濾 createdByEmail、rejectedReason', async () => {
+    mockGetArtistById.mockResolvedValue({
+      id: 'artist-3',
+      stageName: 'Legacy Artist',
+      status: 'rejected',
+      rejectedReason: '資料不完整，缺少官方帳號連結',
+      createdBy: undefined,
+      createdByEmail: 'legacy-owner@example.com',
+    });
+    const req = buildReq('artist-3');
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg).not.toHaveProperty('createdBy');
+    expect(jsonArg).not.toHaveProperty('createdByEmail');
+    expect(jsonArg).not.toHaveProperty('rejectedReason');
   });
 });
 

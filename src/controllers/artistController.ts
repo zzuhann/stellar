@@ -147,9 +147,10 @@ export class ArtistController {
     }
 
     // 管理員或本人查詢自己投稿的藝人屬於已授權讀取，保留 createdBy/createdByEmail/rejectedReason；
-    // 其餘（未登入或查他人）一律過濾，比照 getAllArtists 的授權判斷模式
+    // 其餘（未登入或查他人）一律過濾，比照 getAllArtists 的授權判斷模式。
+    // !!artist.createdBy 防止兩邊都是 undefined（缺 createdBy 的舊資料 x 未登入請求）誤判為本人
     const isAuthorizedForFullData =
-      req.user?.role === 'admin' || artist.createdBy === req.user?.uid;
+      req.user?.role === 'admin' || (!!artist.createdBy && artist.createdBy === req.user?.uid);
     res.json(isAuthorizedForFullData ? artist : toPublicArtist(artist));
   };
 
