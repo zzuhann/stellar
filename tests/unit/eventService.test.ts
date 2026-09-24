@@ -358,7 +358,7 @@ describe('EventService.updateEvent — 座標驗證', () => {
     });
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ createdBy: 'other-user', status: 'approved', verifiedOrganizers: [] }),
+      data: () => ({ createdBy: 'other-user', status: 'approved' }),
     });
     service = new EventService();
   });

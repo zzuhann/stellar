@@ -135,7 +135,6 @@ describe('EventService.updateEvent reservation handling', () => {
     createdBy: 'user-1',
     slug: 'existing-slug',
     artists: [],
-    verifiedOrganizers: [],
   };
 
   beforeEach(() => {

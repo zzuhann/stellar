@@ -11,8 +11,6 @@ import {
   MapDataParams,
   MapDataResponse,
   UserSubmissionsEventsListResponse,
-  UserClaimedEventsListResponse,
-  VerifiedOrganizer,
 } from '../models/types';
 import { UserService } from './userService';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
@@ -721,9 +719,8 @@ export class EventService {
 
     const eventData = doc.data() as CoffeeEvent;
 
-    // 檢查權限：管理員、投稿者、已認領主辦可以編輯
-    const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
-    if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
+    // 檢查權限：管理員、投稿者可以編輯
+    if (userRole !== 'admin' && eventData?.createdBy !== userId) {
       throw new AppError(403, 'EVENT_EDIT_FORBIDDEN', '權限不足');
     }
 
@@ -1176,9 +1173,8 @@ export class EventService {
 
     const eventData = doc.data() as CoffeeEvent;
 
-    // 檢查權限：管理員、投稿者、已認領主辦可以刪除
-    const isVerifiedOrganizer = eventData?.verifiedOrganizers?.some(o => o.userId === userId);
-    if (userRole !== 'admin' && eventData?.createdBy !== userId && !isVerifiedOrganizer) {
+    // 檢查權限：管理員、投稿者可以刪除
+    if (userRole !== 'admin' && eventData?.createdBy !== userId) {
       throw new AppError(403, 'EVENT_DELETE_FORBIDDEN', '權限不足');
     }
 
@@ -1446,74 +1442,4 @@ export class EventService {
     });
   }
 
-  async addVerifiedOrganizer(eventId: string, organizer: VerifiedOrganizer): Promise<void> {
-    this.checkFirebaseConfig();
-
-    const eventRef = this.collection.doc(eventId);
-    const eventDoc = await withTimeoutAndRetry(() => eventRef.get());
-    const eventData = eventDoc.exists ? (eventDoc.data() as CoffeeEvent) : null;
-
-    await eventRef.update({
-      verifiedOrganizers: FieldValue.arrayUnion(organizer),
-      claimedByUserIds: FieldValue.arrayUnion(organizer.userId),
-      updatedAt: Timestamp.now(),
-    });
-
-    // 清除相關快取
-    cache.clearPattern('events:');
-    cache.delete(`event:${eventId}`);
-    if (eventData?.slug) cache.delete(`event:${eventData.slug}`);
-  }
-
-  async hasUserClaimedEvent(eventId: string, userId: string): Promise<boolean> {
-    const event = (await this.getEventById(eventId)) as CoffeeEvent | null;
-    if (!event) return false;
-
-    return event.verifiedOrganizers?.some(o => o.userId === userId) ?? false;
-  }
-
-  async getUserClaimedEventsPaginated(
-    userId: string,
-    page = 1,
-    limit = 20
-  ): Promise<UserClaimedEventsListResponse> {
-    this.checkFirebaseConfig();
-
-    const safePage = Math.max(1, page);
-    const safeLimit = Math.min(Math.max(1, limit), 100);
-
-    // 直接用 claimedByUserIds 陣列欄位查詢，涵蓋所有狀態（包含已結束活動）
-    const snapshot = await withTimeoutAndRetry(() =>
-      this.collection
-        .where('claimedByUserIds', 'array-contains', userId)
-        .where('status', '==', 'approved')
-        .get()
-    );
-
-    const claimedEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
-
-    const sorted = [...claimedEvents].sort((a, b) => {
-      const aVerified = a.verifiedOrganizers?.find(o => o.userId === userId);
-      const bVerified = b.verifiedOrganizers?.find(o => o.userId === userId);
-      const aTime = aVerified?.verifiedAt?.toMillis() ?? 0;
-      const bTime = bVerified?.verifiedAt?.toMillis() ?? 0;
-      return bTime - aTime;
-    });
-
-    const total = sorted.length;
-    const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
-    const clampedPage = total === 0 ? 1 : Math.min(safePage, Math.max(1, totalPages));
-    const skip = (clampedPage - 1) * safeLimit;
-    const pageItems = sorted.slice(skip, skip + safeLimit);
-
-    return {
-      events: pageItems,
-      pagination: {
-        page: clampedPage,
-        limit: safeLimit,
-        total,
-        totalPages,
-      },
-    };
-  }
 }
