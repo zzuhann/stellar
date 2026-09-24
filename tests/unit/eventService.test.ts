@@ -34,6 +34,10 @@ describe('EventService.getEventsWithFilters — datetime 序列化（GET /events
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // getApprovedActiveEventsBase() filters out events whose datetime.end has
+    // already passed relative to Date.now(). Pin the clock so this test's
+    // fixture ('未過期') stays true regardless of when the suite actually runs.
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-01T00:00:00.000Z'));
     const firebase = jest.requireMock('../../src/config/firebase');
     (firebase.db.collection as jest.Mock).mockReturnValue({
       where: jest.fn().mockReturnThis(),
@@ -58,6 +62,10 @@ describe('EventService.getEventsWithFilters — datetime 序列化（GET /events
       }),
     });
     service = new EventService();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('回傳的 datetime.start/end 是 ISO 8601 字串，不是 Firestore Timestamp（或 {_seconds,_nanoseconds}）物件', async () => {
