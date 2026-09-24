@@ -1,6 +1,12 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { CoffeeEvent } from '../../src/models/types';
-import { toPublicEvent, toPublicEvents } from '../../src/utils/eventSanitizer';
+import {
+  toPublicEvent,
+  toPublicEvents,
+  serializeEventDatetime,
+  serializeEventsDatetime,
+  getInvalidEventDatetimeReason,
+} from '../../src/utils/eventSanitizer';
 
 const makeTimestamp = (isoDate: string): Timestamp =>
   ({ toDate: () => new Date(isoDate), toMillis: () => new Date(isoDate).getTime() }) as Timestamp;
@@ -80,6 +86,98 @@ describe('toPublicEvents', () => {
     ];
     const result = toPublicEvents(events);
     expect(result.every(e => !('createdByEmail' in e))).toBe(true);
+    expect(result.map(e => e.id)).toEqual(['e1', 'e2']);
+  });
+});
+
+describe('serializeEventDatetime', () => {
+  it('把 datetime.start/end 從 Timestamp 轉成 ISO 8601 字串', () => {
+    const event = baseEvent({
+      datetime: {
+        start: makeTimestamp('2027-03-01T00:00:00.000Z'),
+        end: makeTimestamp('2027-03-02T08:30:00.000Z'),
+      },
+    });
+
+    const result = serializeEventDatetime(event);
+
+    expect(result.datetime.start).toBe('2027-03-01T00:00:00.000Z');
+    expect(result.datetime.end).toBe('2027-03-02T08:30:00.000Z');
+  });
+
+  it('不修改其他欄位', () => {
+    const event = baseEvent({ title: '生日應援活動', id: 'event-42' });
+    const result = serializeEventDatetime(event);
+    expect(result.title).toBe('生日應援活動');
+    expect(result.id).toBe('event-42');
+  });
+
+  it('不修改原始物件的 datetime（避免共用快取被意外污染）', () => {
+    const event = baseEvent();
+    serializeEventDatetime(event);
+    expect(event.datetime.start).not.toBe('string');
+    expect(typeof event.datetime.start).toBe('object');
+  });
+});
+
+describe('getInvalidEventDatetimeReason', () => {
+  it('datetime 完整且有效時回傳 null', () => {
+    const event = baseEvent();
+    expect(getInvalidEventDatetimeReason(event)).toBeNull();
+  });
+
+  it('datetime 整個缺失時回傳含 datetime.start 的原因字串', () => {
+    expect(getInvalidEventDatetimeReason({ datetime: undefined })).toContain('datetime.start');
+  });
+
+  it('datetime.start 缺失時回傳含 datetime.start 的原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('datetime.start');
+  });
+
+  it('datetime.end 缺失時回傳含 datetime.end 的原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: makeTimestamp('2025-01-01') },
+    });
+    expect(reason).toContain('datetime.end');
+  });
+
+  it('datetime.start 不是 Firestore Timestamp（純字串）時回傳原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: '2025-01-01', end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('datetime.start');
+  });
+
+  it('toDate() 產生 Invalid Date 時回傳原因字串', () => {
+    const invalidTimestamp = { toDate: () => new Date('not-a-date') } as Timestamp;
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: invalidTimestamp, end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('Invalid Date');
+  });
+});
+
+describe('serializeEventsDatetime', () => {
+  it('空陣列回傳空陣列', () => {
+    expect(serializeEventsDatetime([])).toEqual([]);
+  });
+
+  it('對陣列中每一筆都轉換 datetime', () => {
+    const events = [
+      baseEvent({
+        id: 'e1',
+        datetime: { start: makeTimestamp('2027-01-01'), end: makeTimestamp('2027-01-02') },
+      }),
+      baseEvent({
+        id: 'e2',
+        datetime: { start: makeTimestamp('2027-02-01'), end: makeTimestamp('2027-02-02') },
+      }),
+    ];
+    const result = serializeEventsDatetime(events);
+    expect(result.every(e => typeof e.datetime.start === 'string')).toBe(true);
     expect(result.map(e => e.id)).toEqual(['e1', 'e2']);
   });
 });

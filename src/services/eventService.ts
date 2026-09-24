@@ -19,7 +19,13 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { syncEventVenue } from './eventVenueSync';
 import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
-import { toPublicEvent, toPublicEvents } from '../utils/eventSanitizer';
+import {
+  toPublicEvent,
+  toPublicEvents,
+  serializeEventDatetime,
+  serializeEventsDatetime,
+  getInvalidEventDatetimeReason,
+} from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 import { AppError } from '../utils/AppError';
 
@@ -39,12 +45,33 @@ export class EventService {
         );
 
         const now = Date.now();
-        return snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
-          .filter(event => event.datetime.end.toMillis() >= now);
+        const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
+        // Logged once per cache refresh, not per cache hit, since this runs
+        // inside getWithLock's fetchFn.
+        return this.filterOutCorruptedDatetime(events).filter(
+          event => event.datetime.end.toMillis() >= now
+        );
       },
       1440 // 24 小時 TTL
     );
+  }
+
+  // Guards against manually-corrupted Firestore data (bypasses the normal
+  // Zod-validated submit path) reaching downstream code that calls
+  // Timestamp.toMillis() (time filters, sorting, serialization). Shared by
+  // getApprovedActiveEventsBase and the createdBy/pending/rejected query
+  // branches in getEventsWithFilters, which otherwise skip that base layer.
+  private filterOutCorruptedDatetime(events: CoffeeEvent[]): CoffeeEvent[] {
+    return events.filter(event => {
+      const invalidReason = getInvalidEventDatetimeReason(event);
+      if (invalidReason) {
+        console.error(
+          `[events] skipping event ${event.id} with corrupted datetime: ${invalidReason}`
+        );
+        return false;
+      }
+      return true;
+    });
   }
 
   private checkFirebaseConfig() {
@@ -159,12 +186,14 @@ export class EventService {
     if (filters.createdBy) {
       const query = this.collection.where('createdBy', '==', filters.createdBy);
       const snapshot = await withTimeoutAndRetry(() => query.get());
-      events = snapshot.docs.map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
+      events = this.filterOutCorruptedDatetime(
+        snapshot.docs.map(
+          doc =>
+            ({
+              id: doc.id,
+              ...doc.data(),
+            }) as CoffeeEvent
+        )
       );
 
       // 審核狀態篩選
@@ -179,12 +208,14 @@ export class EventService {
       const snapshot = await withTimeoutAndRetry(() =>
         this.collection.where('status', '==', filters.status).get()
       );
-      events = snapshot.docs.map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
+      events = this.filterOutCorruptedDatetime(
+        snapshot.docs.map(
+          doc =>
+            ({
+              id: doc.id,
+              ...doc.data(),
+            }) as CoffeeEvent
+        )
       );
     }
 
@@ -250,15 +281,17 @@ export class EventService {
     // 排序處理
     const sortedEvents = this.sortEvents(events, filters.sortBy, filters.sortOrder);
 
-    // 分頁處理
-    const finalPaginatedEvents = toPublicEvents(sortedEvents.slice(skip, skip + limit));
+    // 分頁處理；datetime 序列化為 ISO 字串，統一 GET /events 與 /events/map-data 的回應格式
+    const finalPaginatedEvents = serializeEventsDatetime(
+      toPublicEvents(sortedEvents.slice(skip, skip + limit))
+    );
 
     // 如果需要檢查收藏狀態
     if (userId) {
       const eventIds = finalPaginatedEvents.map(e => e.id);
       const favoritedEventIds = await this.userService.checkFavoritesBatch(userId, eventIds);
 
-      const eventsWithFavorite: CoffeeEventWithFavorite[] = finalPaginatedEvents.map(event => ({
+      const eventsWithFavorite = finalPaginatedEvents.map(event => ({
         ...event,
         isFavorited: favoritedEventIds.has(event.id),
       }));
@@ -421,15 +454,14 @@ export class EventService {
 
     const mapEvents = filteredEvents.map(event => {
       return {
-        id: event.id,
-        slug: event.slug ?? null,
-        title: event.title,
-        mainImage: event.mainImage,
-        location: event.location, // 完整的 location 物件
-        datetime: {
-          start: event.datetime.start.toDate().toISOString(),
-          end: event.datetime.end.toDate().toISOString(),
-        },
+        ...serializeEventDatetime({
+          id: event.id,
+          slug: event.slug ?? null,
+          title: event.title,
+          mainImage: event.mainImage,
+          location: event.location, // 完整的 location 物件
+          datetime: event.datetime,
+        }),
         isFavorited: favoritedEventIds.has(event.id),
       };
     });

@@ -1,5 +1,5 @@
 import { EventService } from '../../src/services/eventService';
-import { UpdateEventData, CreateEventData } from '../../src/models/types';
+import { UpdateEventData, CreateEventData, EventsResponse } from '../../src/models/types';
 import { cache } from '../../src/utils/cache';
 import { syncEventVenue } from '../../src/services/eventVenueSync';
 
@@ -22,6 +22,197 @@ jest.mock('../../src/config/firebase', () => ({
 jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
+
+const makeTimestamp = (isoDate: string) =>
+  ({
+    toDate: () => new Date(isoDate),
+    toMillis: () => new Date(isoDate).getTime(),
+  }) as unknown as import('firebase-admin/firestore').Timestamp;
+
+describe('EventService.getEventsWithFilters — datetime 序列化（GET /events）', () => {
+  let service: EventService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // getApprovedActiveEventsBase() filters out events whose datetime.end has
+    // already passed relative to Date.now(). Pin the clock so this test's
+    // fixture ('未過期') stays true regardless of when the suite actually runs.
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-01T00:00:00.000Z'));
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({
+        docs: [
+          {
+            id: 'event-1',
+            data: () => ({
+              title: '測試活動',
+              description: '',
+              artists: [],
+              location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+              datetime: {
+                start: makeTimestamp('2027-01-01T00:00:00.000Z'),
+                end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+              },
+              status: 'approved',
+              createdBy: 'uid-1',
+            }),
+          },
+        ],
+      }),
+    });
+    service = new EventService();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('回傳的 datetime.start/end 是 ISO 8601 字串，不是 Firestore Timestamp（或 {_seconds,_nanoseconds}）物件', async () => {
+    const result = (await service.getEventsWithFilters({
+      status: 'approved',
+    })) as EventsResponse;
+
+    expect(result.events).toHaveLength(1);
+    const { start, end } = result.events[0].datetime as unknown as { start: string; end: string };
+
+    expect(typeof start).toBe('string');
+    expect(typeof end).toBe('string');
+    expect(new Date(start).toISOString()).toBe(start);
+    expect(new Date(end).toISOString()).toBe(end);
+    expect(start).toBe('2027-01-01T00:00:00.000Z');
+    expect(end).toBe('2027-01-02T00:00:00.000Z');
+  });
+});
+
+describe('EventService — 壞掉的 datetime 不應讓整批活動噴錯（GET /events、/events/map-data 共用的基礎資料層）', () => {
+  let service: EventService;
+  let consoleErrorSpy: jest.SpyInstance;
+
+  const goodEventDoc = {
+    id: 'event-good',
+    data: () => ({
+      title: '正常活動',
+      description: '',
+      artists: [],
+      location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+      datetime: {
+        start: makeTimestamp('2027-01-01T00:00:00.000Z'),
+        end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+      },
+      status: 'approved',
+      createdBy: 'uid-1',
+    }),
+  };
+
+  // Sets the Firestore mock and (re)constructs the service so its `collection`
+  // field (bound at construction time) picks up this test's mock return value.
+  const mockDocsWithBadEvent = (badDatetime: unknown) => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({
+        docs: [
+          goodEventDoc,
+          {
+            id: 'event-corrupted',
+            data: () => ({
+              title: '壞掉的活動',
+              description: '',
+              artists: [],
+              location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+              datetime: badDatetime,
+              status: 'approved',
+              createdBy: 'uid-2',
+            }),
+          },
+        ],
+      }),
+    });
+    service = new EventService();
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    cache.delete('events:approved:active');
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-01T00:00:00.000Z'));
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    consoleErrorSpy.mockRestore();
+    cache.delete('events:approved:active');
+  });
+
+  it.each([
+    ['datetime 整個缺失', undefined],
+    ['datetime.start 缺失', { end: makeTimestamp('2027-01-02T00:00:00.000Z') }],
+    [
+      'datetime.start 不是 Timestamp（純字串）',
+      { start: '2027-01-01', end: makeTimestamp('2027-01-02T00:00:00.000Z') },
+    ],
+    [
+      'datetime.start 是 Invalid Date',
+      {
+        start: { toDate: () => new Date('not-a-date'), toMillis: () => NaN },
+        end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+      },
+    ],
+  ])(
+    'GET /events：%s 時，該筆被跳過、其餘活動正常回傳，並記錄含活動 id 的 log',
+    async (_label, badDatetime) => {
+      mockDocsWithBadEvent(badDatetime);
+
+      const result = (await service.getEventsWithFilters({
+        status: 'approved',
+      })) as EventsResponse;
+
+      expect(result.events.map(e => e.id)).toEqual(['event-good']);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
+    }
+  );
+
+  it('GET /events/map-data：壞掉的 datetime 被跳過、其餘活動正常回傳，並記錄含活動 id 的 log', async () => {
+    mockDocsWithBadEvent(undefined);
+
+    // status: 'all' skips the additional active/upcoming window filter so this
+    // test only exercises the base-layer datetime validity filter under test.
+    const result = await service.getMapData({ status: 'all' });
+
+    expect(result.events.map(e => e.id)).toEqual(['event-good']);
+    expect(result.total).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
+  });
+
+  it('同一筆壞資料在快取命中期間（cache hit）不會重複記 log，只在真正抓到新鮮資料時記一次', async () => {
+    mockDocsWithBadEvent(undefined);
+
+    await service.getEventsWithFilters({ status: 'approved' });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+
+    await service.getEventsWithFilters({ status: 'approved' });
+    await service.getMapData({});
+
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, { createdBy?: string; status?: 'pending' | 'rejected' }]>([
+    ['filters.createdBy 分支', { createdBy: 'uid-1' }],
+    ['filters.status = pending 分支', { status: 'pending' }],
+    ['filters.status = rejected 分支', { status: 'rejected' }],
+  ])(
+    'GET /events：%s 撈到壞掉的 datetime 時，該筆被跳過、其餘活動正常回傳（不噴錯），並記錄含活動 id 的 log',
+    async (_label, filters) => {
+      mockDocsWithBadEvent(undefined);
+
+      const result = (await service.getEventsWithFilters(filters)) as EventsResponse;
+
+      expect(result.events.map(e => e.id)).toEqual(['event-good']);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
+    }
+  );
+});
 
 describe('syncEventVenue', () => {
   const ref = (id: string) => ({ id, path: `venues/${id}` });
