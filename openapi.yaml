@@ -901,7 +901,8 @@ components:
       description: >-
         ISO 8601 字串形式的 datetime（非 FirestoreTimestamp）。僅 GET /events 與
         GET /events/map-data 這兩個列表端點的回應使用此格式；其餘 events 端點仍回傳
-        FirestoreTimestamp。
+        FirestoreTimestamp。GET /events 不論帶什麼 status（approved/pending/rejected/all）
+        或 createdBy 查詢參數，datetime 一律是這個格式，並非只有公開（approved）列表才如此。
       properties:
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
@@ -959,14 +960,59 @@ components:
         viewCount: { type: integer }
 
     PublicEventListItem:
+      type: object
       description: >-
-        GET /events 回應中的活動項目。與 CoffeeEvent 相同，但 datetime 為 EventDatetimeIso
-        （ISO 8601 字串），不是 FirestoreTimestamp。
-      allOf:
-        - $ref: '#/components/schemas/CoffeeEvent'
-        - type: object
+        GET /events 回應中的活動項目。欄位與 CoffeeEvent 相同，但 datetime 為 EventDatetimeIso
+        （ISO 8601 字串），不是 FirestoreTimestamp；不論查詢帶的 status（approved/pending/
+        rejected/all）或 createdBy 為何皆是如此，不限於公開（approved）列表。
+        不繼承 CoffeeEvent（allOf 疊加無法正確覆寫 datetime 的形狀——CoffeeEvent.datetime
+        要求 FirestoreTimestamp，會與這裡的 EventDatetimeIso 互斥而永遠驗證失敗），改為完整
+        重新定義。
+      properties:
+        id: { type: string }
+        slug: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string }
+        artists:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              slug: { type: string }
+              profileImage: { type: string }
+        location:
+          type: object
           properties:
-            datetime: { $ref: '#/components/schemas/EventDatetimeIso' }
+            name: { type: string }
+            address: { type: string }
+            city: { type: string }
+            coordinates:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            placeId: { type: string }
+            venueId: { type: string }
+        datetime: { $ref: '#/components/schemas/EventDatetimeIso' }
+        socialMedia:
+          type: object
+          properties:
+            instagram: { type: string }
+            x: { type: string }
+            threads: { type: string }
+        mainImage: { type: string }
+        detailImage: { type: array, items: { type: string } }
+        reservation:
+          type: object
+          description: 選填。舊活動（投稿於此欄位上線前）沒有此欄位，前端視為未填寫即可。
+          properties:
+            url: { type: string, description: '需以 http:// 或 https:// 開頭' }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
+        status: { type: string, enum: [pending, approved, rejected] }
+        rejectedReason: { type: string }
+        viewCount: { type: integer }
 
     CreateEventData:
       type: object
