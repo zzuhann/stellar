@@ -24,6 +24,7 @@ import {
   toPublicEvents,
   serializeEventDatetime,
   serializeEventsDatetime,
+  getInvalidEventDatetimeReason,
 } from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 import { AppError } from '../utils/AppError';
@@ -46,7 +47,19 @@ export class EventService {
         const now = Date.now();
         return snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
-          .filter(event => event.datetime.end.toMillis() >= now);
+          .filter(event => {
+            // Guards against manually-corrupted Firestore data (bypasses the normal
+            // Zod-validated submit path). Logged once per cache refresh, not per
+            // cache hit, since this runs inside getWithLock's fetchFn.
+            const invalidReason = getInvalidEventDatetimeReason(event);
+            if (invalidReason) {
+              console.error(
+                `[events] skipping event ${event.id} with corrupted datetime: ${invalidReason}`
+              );
+              return false;
+            }
+            return event.datetime.end.toMillis() >= now;
+          });
       },
       1440 // 24 小時 TTL
     );

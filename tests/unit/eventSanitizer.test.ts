@@ -5,6 +5,7 @@ import {
   toPublicEvents,
   serializeEventDatetime,
   serializeEventsDatetime,
+  getInvalidEventDatetimeReason,
 } from '../../src/utils/eventSanitizer';
 
 const makeTimestamp = (isoDate: string): Timestamp =>
@@ -116,6 +117,46 @@ describe('serializeEventDatetime', () => {
     serializeEventDatetime(event);
     expect(event.datetime.start).not.toBe('string');
     expect(typeof event.datetime.start).toBe('object');
+  });
+});
+
+describe('getInvalidEventDatetimeReason', () => {
+  it('datetime 完整且有效時回傳 null', () => {
+    const event = baseEvent();
+    expect(getInvalidEventDatetimeReason(event)).toBeNull();
+  });
+
+  it('datetime 整個缺失時回傳含 datetime.start 的原因字串', () => {
+    expect(getInvalidEventDatetimeReason({ datetime: undefined })).toContain('datetime.start');
+  });
+
+  it('datetime.start 缺失時回傳含 datetime.start 的原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('datetime.start');
+  });
+
+  it('datetime.end 缺失時回傳含 datetime.end 的原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: makeTimestamp('2025-01-01') },
+    });
+    expect(reason).toContain('datetime.end');
+  });
+
+  it('datetime.start 不是 Firestore Timestamp（純字串）時回傳原因字串', () => {
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: '2025-01-01', end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('datetime.start');
+  });
+
+  it('toDate() 產生 Invalid Date 時回傳原因字串', () => {
+    const invalidTimestamp = { toDate: () => new Date('not-a-date') } as Timestamp;
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: invalidTimestamp, end: makeTimestamp('2025-01-02') },
+    });
+    expect(reason).toContain('Invalid Date');
   });
 });
 
