@@ -53,7 +53,12 @@ export class ArtistController {
 
     // 統一使用 getArtistsWithFilters（已包含統計資料）
     const artists = await this.artistService.getArtistsWithFilters(filters);
-    res.json(toPublicArtists(artists));
+
+    // 管理員或查詢自己投稿（createdBy 已通過上方權限檢查）屬於已授權讀取，
+    // 保留 createdBy/createdByEmail/rejectedReason；其餘（未登入或查他人）一律過濾
+    const isAuthorizedForFullData =
+      req.user?.role === 'admin' || (!!filters.createdBy && filters.createdBy === req.user?.uid);
+    res.json(isAuthorizedForFullData ? artists : toPublicArtists(artists));
   };
 
   // 取得待審核的藝人（僅管理員）

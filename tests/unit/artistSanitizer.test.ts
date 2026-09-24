@@ -71,15 +71,18 @@ describe('toPublicArtist', () => {
 });
 
 describe('toPublicArtists', () => {
-  it('對陣列中每一筆都移除 createdBy/createdByEmail/rejectedReason', () => {
+  it('對陣列中每一筆都移除 createdBy/createdByEmail/rejectedReason，且長度不變', () => {
     const artists = [
       baseArtist({ id: 'artist-1' }),
       baseArtist({ id: 'artist-2', status: 'rejected', rejectedReason: '資料不完整' }),
     ];
     const result = toPublicArtists(artists);
-    expect(result.every(a => !('createdBy' in a))).toBe(true);
-    expect(result.every(a => !('createdByEmail' in a))).toBe(true);
-    expect(result.every(a => !('rejectedReason' in a))).toBe(true);
+    expect(result).toHaveLength(2);
+    expect(result[0]).not.toHaveProperty('createdBy');
+    expect(result[0]).not.toHaveProperty('createdByEmail');
+    expect(result[1]).not.toHaveProperty('createdBy');
+    expect(result[1]).not.toHaveProperty('createdByEmail');
+    expect(result[1]).not.toHaveProperty('rejectedReason');
   });
 
   it('保留每筆其他欄位不受影響', () => {
@@ -87,5 +90,10 @@ describe('toPublicArtists', () => {
     const result = toPublicArtists(artists);
     expect(result[0]?.stageName).toBe('IU');
     expect(result[0]?.id).toBe('artist-1');
+  });
+
+  it('空陣列輸入回傳空陣列（避免 .every() 對空陣列恆真造成假陽性）', () => {
+    const result = toPublicArtists([]);
+    expect(result).toEqual([]);
   });
 });

@@ -203,11 +203,14 @@ describe('ArtistController.getAllArtists - 公開端點不洩漏投稿者資訊'
     };
   });
 
-  const buildReq = (): AuthenticatedRequest => {
-    return { query: {} } as unknown as AuthenticatedRequest;
+  const buildReq = (
+    query: Record<string, string> = {},
+    user?: { uid: string; email: string; role: 'user' | 'admin' }
+  ): AuthenticatedRequest => {
+    return { query, user } as unknown as AuthenticatedRequest;
   };
 
-  it('回應陣列每一筆都不含 createdBy、createdByEmail、rejectedReason，但保留其他欄位', async () => {
+  it('未登入：回應陣列每一筆都不含 createdBy、createdByEmail、rejectedReason，但保留其他欄位', async () => {
     const req = buildReq();
 
     await controller.getAllArtists(req, res as Response);
@@ -221,6 +224,46 @@ describe('ArtistController.getAllArtists - 公開端點不洩漏投稿者資訊'
     }
     expect(jsonArg[0]?.stageName).toBe('Test Artist');
     expect(jsonArg[1]?.status).toBe('rejected');
+  });
+
+  it('管理員查詢：保留 createdBy、createdByEmail、rejectedReason（既有 status=pending/rejected 授權範圍不應被這次修正縮小）', async () => {
+    const req = buildReq(
+      { status: 'pending' },
+      { uid: 'admin-1', email: 'admin@test.com', role: 'admin' }
+    );
+
+    await controller.getAllArtists(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
+    expect(jsonArg[0]?.createdBy).toBe('uid-owner');
+    expect(jsonArg[0]?.createdByEmail).toBe('owner@example.com');
+    expect(jsonArg[1]?.rejectedReason).toBe('資料不完整，缺少官方帳號連結');
+  });
+
+  it('本人以 createdBy=自己 UID 查詢：保留 createdBy、createdByEmail（既有授權查詢範圍不應被這次修正縮小）', async () => {
+    const req = buildReq(
+      { createdBy: 'uid-owner' },
+      { uid: 'uid-owner', email: 'owner@example.com', role: 'user' }
+    );
+
+    await controller.getAllArtists(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
+    expect(jsonArg[0]?.createdBy).toBe('uid-owner');
+    expect(jsonArg[0]?.createdByEmail).toBe('owner@example.com');
+  });
+
+  it('一般登入使用者、未帶 createdBy 篩選：回應仍不含 createdBy、createdByEmail、rejectedReason', async () => {
+    const req = buildReq({}, { uid: 'user-1', email: 'user@test.com', role: 'user' });
+
+    await controller.getAllArtists(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
+    for (const artist of jsonArg) {
+      expect(artist).not.toHaveProperty('createdBy');
+      expect(artist).not.toHaveProperty('createdByEmail');
+      expect(artist).not.toHaveProperty('rejectedReason');
+    }
   });
 });
 
@@ -237,6 +280,14 @@ describe('ArtistController.getTopArtists - 公開端點不洩漏投稿者資訊'
         id: 'artist-1',
         stageName: 'Test Artist',
         status: 'approved',
+        createdBy: 'uid-owner',
+        createdByEmail: 'owner@example.com',
+      },
+      {
+        id: 'artist-2',
+        stageName: 'Rejected Artist',
+        status: 'rejected',
+        rejectedReason: '資料不完整，缺少官方帳號連結',
         createdBy: 'uid-owner',
         createdByEmail: 'owner@example.com',
       },
@@ -257,15 +308,19 @@ describe('ArtistController.getTopArtists - 公開端點不洩漏投稿者資訊'
     return { query: {} } as unknown as AuthenticatedRequest;
   };
 
-  it('回應陣列每一筆都不含 createdBy、createdByEmail，但保留其他欄位', async () => {
+  it('回應陣列每一筆都不含 createdBy、createdByEmail、rejectedReason，但保留其他欄位（getTopArtists 無登入權限分支，無條件過濾）', async () => {
     const req = buildReq();
 
     await controller.getTopArtists(req, res as Response);
 
     const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
-    expect(jsonArg).toHaveLength(1);
-    expect(jsonArg[0]).not.toHaveProperty('createdBy');
-    expect(jsonArg[0]).not.toHaveProperty('createdByEmail');
+    expect(jsonArg).toHaveLength(2);
+    for (const artist of jsonArg) {
+      expect(artist).not.toHaveProperty('createdBy');
+      expect(artist).not.toHaveProperty('createdByEmail');
+      expect(artist).not.toHaveProperty('rejectedReason');
+    }
     expect(jsonArg[0]?.stageName).toBe('Test Artist');
+    expect(jsonArg[1]?.status).toBe('rejected');
   });
 });
