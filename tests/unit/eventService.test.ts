@@ -196,6 +196,22 @@ describe('EventService — 壞掉的 datetime 不應讓整批活動噴錯（GET 
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
   });
+
+  it.each<[string, { createdBy?: string; status?: 'pending' | 'rejected' }]>([
+    ['filters.createdBy 分支', { createdBy: 'uid-1' }],
+    ['filters.status = pending 分支', { status: 'pending' }],
+    ['filters.status = rejected 分支', { status: 'rejected' }],
+  ])(
+    'GET /events：%s 撈到壞掉的 datetime 時，該筆被跳過、其餘活動正常回傳（不噴錯），並記錄含活動 id 的 log',
+    async (_label, filters) => {
+      mockDocsWithBadEvent(undefined);
+
+      const result = (await service.getEventsWithFilters(filters)) as EventsResponse;
+
+      expect(result.events.map(e => e.id)).toEqual(['event-good']);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
+    }
+  );
 });
 
 describe('syncEventVenue', () => {
