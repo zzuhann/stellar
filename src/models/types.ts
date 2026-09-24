@@ -1,12 +1,5 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
-export interface VerifiedOrganizer {
-  userId: string;
-  platform: 'threads' | 'instagram';
-  username: string;
-  verifiedAt: Timestamp;
-}
-
 export interface Artist {
   id: string;
   slug?: string; // URL-friendly 唯一識別符，一旦設定不隨 stageName 更新
@@ -66,8 +59,6 @@ export interface CoffeeEvent {
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   viewCount?: number;
-  verifiedOrganizers?: VerifiedOrganizer[];
-  claimedByUserIds?: string[];
   createdBy: string;
   createdByEmail?: string;
   createdAt: Timestamp;
@@ -506,13 +497,3 @@ export interface EventsResponseWithFavorite {
   };
 }
 
-// 用戶已認領活動列表
-export interface UserClaimedEventsListResponse {
-  events: CoffeeEvent[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
