@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ArtistService } from '../services/artistService';
 import { ArtistFilterParams } from '../models/types';
-import { toPublicArtist } from '../utils/artistSanitizer';
+import { toPublicArtist, toPublicArtists } from '../utils/artistSanitizer';
 
 export class ArtistController {
   private artistService: ArtistService;
@@ -53,7 +53,7 @@ export class ArtistController {
 
     // 統一使用 getArtistsWithFilters（已包含統計資料）
     const artists = await this.artistService.getArtistsWithFilters(filters);
-    res.json(artists);
+    res.json(toPublicArtists(artists));
   };
 
   // 取得待審核的藝人（僅管理員）
@@ -194,7 +194,7 @@ export class ArtistController {
     }
 
     const artists = await this.artistService.getTopArtistsByUpcomingEvents(limit);
-    res.json(artists);
+    res.json(toPublicArtists(artists));
   };
 }
 import { AppError } from '../utils/AppError';

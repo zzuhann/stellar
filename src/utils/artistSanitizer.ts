@@ -21,3 +21,9 @@ export function toPublicArtist<T extends Artist>(
   } = artist;
   return publicArtist;
 }
+
+export function toPublicArtists<T extends Artist>(
+  artists: T[]
+): Omit<T, 'createdBy' | 'createdByEmail' | 'rejectedReason'>[] {
+  return artists.map(toPublicArtist);
+}

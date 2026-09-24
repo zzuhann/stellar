@@ -165,3 +165,107 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     expect(jsonArg.status).toBe('rejected');
   });
 });
+
+describe('ArtistController.getAllArtists - 公開端點不洩漏投稿者資訊', () => {
+  let controller: ArtistController;
+  let mockGetArtistsWithFilters: jest.Mock;
+  let res: Partial<Response>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockGetArtistsWithFilters = jest.fn().mockResolvedValue([
+      {
+        id: 'artist-1',
+        stageName: 'Test Artist',
+        status: 'approved',
+        createdBy: 'uid-owner',
+        createdByEmail: 'owner@example.com',
+      },
+      {
+        id: 'artist-2',
+        stageName: 'Rejected Artist',
+        status: 'rejected',
+        rejectedReason: '資料不完整，缺少官方帳號連結',
+        createdBy: 'uid-owner',
+        createdByEmail: 'owner@example.com',
+      },
+    ]);
+    (ArtistService as jest.Mock).mockImplementation(() => ({
+      getArtistsWithFilters: mockGetArtistsWithFilters,
+    }));
+
+    controller = new ArtistController();
+
+    res = {
+      json: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+    };
+  });
+
+  const buildReq = (): AuthenticatedRequest => {
+    return { query: {} } as unknown as AuthenticatedRequest;
+  };
+
+  it('回應陣列每一筆都不含 createdBy、createdByEmail、rejectedReason，但保留其他欄位', async () => {
+    const req = buildReq();
+
+    await controller.getAllArtists(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
+    expect(jsonArg).toHaveLength(2);
+    for (const artist of jsonArg) {
+      expect(artist).not.toHaveProperty('createdBy');
+      expect(artist).not.toHaveProperty('createdByEmail');
+      expect(artist).not.toHaveProperty('rejectedReason');
+    }
+    expect(jsonArg[0]?.stageName).toBe('Test Artist');
+    expect(jsonArg[1]?.status).toBe('rejected');
+  });
+});
+
+describe('ArtistController.getTopArtists - 公開端點不洩漏投稿者資訊', () => {
+  let controller: ArtistController;
+  let mockGetTopArtistsByUpcomingEvents: jest.Mock;
+  let res: Partial<Response>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockGetTopArtistsByUpcomingEvents = jest.fn().mockResolvedValue([
+      {
+        id: 'artist-1',
+        stageName: 'Test Artist',
+        status: 'approved',
+        createdBy: 'uid-owner',
+        createdByEmail: 'owner@example.com',
+      },
+    ]);
+    (ArtistService as jest.Mock).mockImplementation(() => ({
+      getTopArtistsByUpcomingEvents: mockGetTopArtistsByUpcomingEvents,
+    }));
+
+    controller = new ArtistController();
+
+    res = {
+      json: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+    };
+  });
+
+  const buildReq = (): AuthenticatedRequest => {
+    return { query: {} } as unknown as AuthenticatedRequest;
+  };
+
+  it('回應陣列每一筆都不含 createdBy、createdByEmail，但保留其他欄位', async () => {
+    const req = buildReq();
+
+    await controller.getTopArtists(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0] as Record<string, unknown>[];
+    expect(jsonArg).toHaveLength(1);
+    expect(jsonArg[0]).not.toHaveProperty('createdBy');
+    expect(jsonArg[0]).not.toHaveProperty('createdByEmail');
+    expect(jsonArg[0]?.stageName).toBe('Test Artist');
+  });
+});

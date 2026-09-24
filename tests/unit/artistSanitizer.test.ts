@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { Artist } from '../../src/models/types';
-import { toPublicArtist } from '../../src/utils/artistSanitizer';
+import { toPublicArtist, toPublicArtists } from '../../src/utils/artistSanitizer';
 
 const makeTimestamp = (isoDate: string): Timestamp =>
   ({ toDate: () => new Date(isoDate) }) as Timestamp;
@@ -67,5 +67,25 @@ describe('toPublicArtist', () => {
     void result.createdByEmail;
     // @ts-expect-error rejectedReason 不應存在於回傳型別上
     void result.rejectedReason;
+  });
+});
+
+describe('toPublicArtists', () => {
+  it('對陣列中每一筆都移除 createdBy/createdByEmail/rejectedReason', () => {
+    const artists = [
+      baseArtist({ id: 'artist-1' }),
+      baseArtist({ id: 'artist-2', status: 'rejected', rejectedReason: '資料不完整' }),
+    ];
+    const result = toPublicArtists(artists);
+    expect(result.every(a => !('createdBy' in a))).toBe(true);
+    expect(result.every(a => !('createdByEmail' in a))).toBe(true);
+    expect(result.every(a => !('rejectedReason' in a))).toBe(true);
+  });
+
+  it('保留每筆其他欄位不受影響', () => {
+    const artists = [baseArtist({ id: 'artist-1', stageName: 'IU' })];
+    const result = toPublicArtists(artists);
+    expect(result[0]?.stageName).toBe('IU');
+    expect(result[0]?.id).toBe('artist-1');
   });
 });
