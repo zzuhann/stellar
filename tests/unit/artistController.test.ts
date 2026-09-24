@@ -146,4 +146,22 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     expect(jsonArg.stageName).toBe('Test Artist');
     expect(jsonArg.id).toBe('artist-1');
   });
+
+  it('rejected 狀態的藝人：回應不含 rejectedReason（getArtistById 不依 status 過濾，需靠 sanitizer 擋下）', async () => {
+    mockGetArtistById.mockResolvedValue({
+      id: 'artist-2',
+      stageName: 'Rejected Artist',
+      status: 'rejected',
+      rejectedReason: '資料不完整，缺少官方帳號連結',
+      createdBy: 'uid-owner',
+      createdByEmail: 'owner@example.com',
+    });
+    const req = buildReq('artist-2');
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg).not.toHaveProperty('rejectedReason');
+    expect(jsonArg.status).toBe('rejected');
+  });
 });

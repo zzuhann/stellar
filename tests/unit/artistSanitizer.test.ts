@@ -33,6 +33,15 @@ describe('toPublicArtist', () => {
     expect(result).not.toHaveProperty('createdByEmail');
   });
 
+  it('移除 rejectedReason 欄位（管理員拒絕原因不應公開，getArtistById 未依 status 過濾）', () => {
+    const artist = baseArtist({
+      status: 'rejected',
+      rejectedReason: '資料不完整，缺少官方帳號連結',
+    });
+    const result = toPublicArtist(artist);
+    expect(result).not.toHaveProperty('rejectedReason');
+  });
+
   it('保留其他所有欄位不受影響', () => {
     const artist = baseArtist({ stageName: 'IU', birthday: '1993-05-16' });
     const result = toPublicArtist(artist);
@@ -50,11 +59,13 @@ describe('toPublicArtist', () => {
     expect(artist.createdBy).toBe('uid-owner');
   });
 
-  it('回傳型別不含 createdBy/createdByEmail（compile-time 防退步：若實作退回 as T 蓋型別，這裡會編譯失敗）', () => {
+  it('回傳型別不含 createdBy/createdByEmail/rejectedReason（compile-time 防退步：若實作退回 as T 蓋型別，這裡會編譯失敗）', () => {
     const result = toPublicArtist(baseArtist());
     // @ts-expect-error createdBy 不應存在於回傳型別上
     void result.createdBy;
     // @ts-expect-error createdByEmail 不應存在於回傳型別上
     void result.createdByEmail;
+    // @ts-expect-error rejectedReason 不應存在於回傳型別上
+    void result.rejectedReason;
   });
 });
