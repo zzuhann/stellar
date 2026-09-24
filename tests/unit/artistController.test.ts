@@ -131,8 +131,11 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     };
   });
 
-  const buildReq = (id: string): AuthenticatedRequest => {
-    return { params: { id } } as unknown as AuthenticatedRequest;
+  const buildReq = (
+    id: string,
+    user?: { uid: string; email: string; role: 'user' | 'admin' }
+  ): AuthenticatedRequest => {
+    return { params: { id }, user } as unknown as AuthenticatedRequest;
   };
 
   it('回應不含 createdBy、createdByEmail，但保留其他欄位', async () => {
@@ -163,6 +166,89 @@ describe('ArtistController.getArtistById - 公開端點不洩漏投稿者資訊'
     const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
     expect(jsonArg).not.toHaveProperty('rejectedReason');
     expect(jsonArg.status).toBe('rejected');
+  });
+
+  it('查詢他人投稿、且已登入非該投稿人：回應仍不含 createdBy、createdByEmail、rejectedReason', async () => {
+    const req = buildReq('artist-1', { uid: 'someone-else', email: 'x@test.com', role: 'user' });
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg).not.toHaveProperty('createdBy');
+    expect(jsonArg).not.toHaveProperty('createdByEmail');
+  });
+});
+
+describe('ArtistController.getArtistById - 授權查詢（本人／管理員）保留完整欄位', () => {
+  let controller: ArtistController;
+  let mockGetArtistById: jest.Mock;
+  let res: Partial<Response>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockGetArtistById = jest.fn().mockResolvedValue({
+      id: 'artist-1',
+      stageName: 'Rejected Artist',
+      status: 'rejected',
+      rejectedReason: '資料不完整，缺少官方帳號連結',
+      createdBy: 'uid-owner',
+      createdByEmail: 'owner@example.com',
+    });
+    (ArtistService as jest.Mock).mockImplementation(() => ({
+      getArtistById: mockGetArtistById,
+    }));
+
+    controller = new ArtistController();
+
+    res = {
+      json: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+    };
+  });
+
+  const buildReq = (
+    id: string,
+    user?: { uid: string; email: string; role: 'user' | 'admin' }
+  ): AuthenticatedRequest => {
+    return { params: { id }, user } as unknown as AuthenticatedRequest;
+  };
+
+  it('本人查詢自己被退件的投稿：保留 createdBy、createdByEmail、rejectedReason（前端擁有者判斷依賴 createdBy）', async () => {
+    const req = buildReq('artist-1', {
+      uid: 'uid-owner',
+      email: 'owner@example.com',
+      role: 'user',
+    });
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg.createdBy).toBe('uid-owner');
+    expect(jsonArg.createdByEmail).toBe('owner@example.com');
+    expect(jsonArg.rejectedReason).toBe('資料不完整，缺少官方帳號連結');
+  });
+
+  it('管理員查詢任何人的投稿：保留 createdBy、createdByEmail、rejectedReason', async () => {
+    const req = buildReq('artist-1', { uid: 'admin-1', email: 'admin@test.com', role: 'admin' });
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg.createdBy).toBe('uid-owner');
+    expect(jsonArg.createdByEmail).toBe('owner@example.com');
+    expect(jsonArg.rejectedReason).toBe('資料不完整，缺少官方帳號連結');
+  });
+
+  it('未登入查詢：仍不含 createdBy、createdByEmail、rejectedReason', async () => {
+    const req = buildReq('artist-1');
+
+    await controller.getArtistById(req, res as Response);
+
+    const jsonArg = (res.json as jest.Mock).mock.calls[0][0];
+    expect(jsonArg).not.toHaveProperty('createdBy');
+    expect(jsonArg).not.toHaveProperty('createdByEmail');
+    expect(jsonArg).not.toHaveProperty('rejectedReason');
   });
 });
 

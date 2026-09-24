@@ -146,7 +146,11 @@ export class ArtistController {
       throw new AppError(404, 'ARTIST_NOT_FOUND', 'Artist not found');
     }
 
-    res.json(toPublicArtist(artist));
+    // 管理員或本人查詢自己投稿的藝人屬於已授權讀取，保留 createdBy/createdByEmail/rejectedReason；
+    // 其餘（未登入或查他人）一律過濾，比照 getAllArtists 的授權判斷模式
+    const isAuthorizedForFullData =
+      req.user?.role === 'admin' || artist.createdBy === req.user?.uid;
+    res.json(isAuthorizedForFullData ? artist : toPublicArtist(artist));
   };
 
   // 編輯藝人
