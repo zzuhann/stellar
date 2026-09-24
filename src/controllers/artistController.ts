@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ArtistService } from '../services/artistService';
 import { ArtistFilterParams } from '../models/types';
+import { toPublicArtist, toPublicArtists } from '../utils/artistSanitizer';
 
 export class ArtistController {
   private artistService: ArtistService;
@@ -52,7 +53,12 @@ export class ArtistController {
 
     // 統一使用 getArtistsWithFilters（已包含統計資料）
     const artists = await this.artistService.getArtistsWithFilters(filters);
-    res.json(artists);
+
+    // 管理員或查詢自己投稿（createdBy 已通過上方權限檢查）屬於已授權讀取，
+    // 保留 createdBy/createdByEmail/rejectedReason；其餘（未登入或查他人）一律過濾
+    const isAuthorizedForFullData =
+      req.user?.role === 'admin' || (!!filters.createdBy && filters.createdBy === req.user?.uid);
+    res.json(isAuthorizedForFullData ? artists : toPublicArtists(artists));
   };
 
   // 取得待審核的藝人（僅管理員）
@@ -140,7 +146,12 @@ export class ArtistController {
       throw new AppError(404, 'ARTIST_NOT_FOUND', 'Artist not found');
     }
 
-    res.json(artist);
+    // 管理員或本人查詢自己投稿的藝人屬於已授權讀取，保留 createdBy/createdByEmail/rejectedReason；
+    // 其餘（未登入或查他人）一律過濾，比照 getAllArtists 的授權判斷模式。
+    // !!artist.createdBy 防止兩邊都是 undefined（缺 createdBy 的舊資料 x 未登入請求）誤判為本人
+    const isAuthorizedForFullData =
+      req.user?.role === 'admin' || (!!artist.createdBy && artist.createdBy === req.user?.uid);
+    res.json(isAuthorizedForFullData ? artist : toPublicArtist(artist));
   };
 
   // 編輯藝人
@@ -193,7 +204,7 @@ export class ArtistController {
     }
 
     const artists = await this.artistService.getTopArtistsByUpcomingEvents(limit);
-    res.json(artists);
+    res.json(toPublicArtists(artists));
   };
 }
 import { AppError } from '../utils/AppError';

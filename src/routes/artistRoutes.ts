@@ -13,7 +13,7 @@ router.get('/top', artistController.getTopArtists);
 // 管理員專用路由（須在 /:id 之前定義，避免被 dynamic segment 攔截）
 router.get('/pending', authenticateToken, requireAdmin, artistController.getPendingArtists);
 
-router.get('/:id', artistController.getArtistById);
+router.get('/:id', optionalAuthenticate, artistController.getArtistById);
 
 // 需要登入的路由
 router.post(

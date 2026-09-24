@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { fetchWithRetry } from '../controllers/placesController';
 import { resolveLocation, ParsedLocation } from './placesService';
+import { isValidCalendarDate } from '../utils/calendarDate';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -82,15 +83,6 @@ export interface ParsedCaptionResult {
   reason?: ParseCaptionReason;
   message?: string;
   parsed?: ParsedCaptionFields;
-}
-
-const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
-
-function isValidCalendarDate(dateStr: string): boolean {
-  if (!DATE_FORMAT.test(dateStr)) return false;
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
 /**

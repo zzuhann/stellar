@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodSchema, ZodError } from 'zod';
+import { isValidCalendarDate } from '../utils/calendarDate';
 
 // 錯誤碼定義
 export const ERROR_CODES = {
@@ -76,6 +77,7 @@ export const artistSchemas = {
     birthday: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, '生日格式錯誤')
+      .refine(val => isValidCalendarDate(val), '生日日期不存在')
       .optional(),
     profileImage: z.string().url('請輸入正確的圖片連結格式').optional(),
   }),
@@ -96,6 +98,7 @@ export const artistSchemas = {
     birthday: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, '生日格式錯誤')
+      .refine(val => isValidCalendarDate(val), '生日日期不存在')
       .optional(),
     profileImage: z.string().url('藝人圖片網址格式錯誤').optional(),
   }),
