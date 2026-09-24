@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ArtistService } from '../services/artistService';
 import { ArtistFilterParams } from '../models/types';
+import { toPublicArtist } from '../utils/artistSanitizer';
 
 export class ArtistController {
   private artistService: ArtistService;
@@ -140,7 +141,7 @@ export class ArtistController {
       throw new AppError(404, 'ARTIST_NOT_FOUND', 'Artist not found');
     }
 
-    res.json(artist);
+    res.json(toPublicArtist(artist));
   };
 
   // 編輯藝人
