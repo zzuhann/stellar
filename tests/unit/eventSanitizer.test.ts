@@ -117,6 +117,91 @@ describe('serializeEventDatetime', () => {
     expect(event.datetime.start).not.toBe('string');
     expect(typeof event.datetime.start).toBe('object');
   });
+
+  describe('異常輸入防呆', () => {
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('datetime.start/end 為 undefined 時不拋錯，改回傳空字串並記 log', () => {
+      const event = baseEvent({
+        datetime: { start: undefined, end: undefined } as unknown as CoffeeEvent['datetime'],
+      });
+
+      expect(() => serializeEventDatetime(event)).not.toThrow();
+      const result = serializeEventDatetime(event);
+      expect(result.datetime.start).toBe('');
+      expect(result.datetime.end).toBe('');
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('datetime 整體為 null 時不拋錯，改回傳空字串並記 log', () => {
+      const event = baseEvent({ datetime: null as unknown as CoffeeEvent['datetime'] });
+
+      expect(() => serializeEventDatetime(event)).not.toThrow();
+      const result = serializeEventDatetime(event);
+      expect(result.datetime.start).toBe('');
+      expect(result.datetime.end).toBe('');
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('datetime.start 已經是字串（非 Timestamp，沒有 toDate）時不拋錯，改回傳空字串並記 log', () => {
+      const event = baseEvent({
+        datetime: {
+          start: '2027-01-01T00:00:00.000Z' as unknown as Timestamp,
+          end: makeTimestamp('2027-01-02'),
+        },
+      });
+
+      expect(() => serializeEventDatetime(event)).not.toThrow();
+      const result = serializeEventDatetime(event);
+      expect(result.datetime.start).toBe('');
+      expect(result.datetime.end).toBe('2027-01-02T00:00:00.000Z');
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('toDate() 產生 Invalid Date 時不拋錯，改回傳空字串並記 log', () => {
+      const invalidTimestamp = {
+        toDate: () => new Date('not-a-real-date'),
+        toMillis: () => NaN,
+      } as unknown as Timestamp;
+      const event = baseEvent({
+        datetime: { start: invalidTimestamp, end: makeTimestamp('2027-01-02') },
+      });
+
+      expect(() => serializeEventDatetime(event)).not.toThrow();
+      const result = serializeEventDatetime(event);
+      expect(result.datetime.start).toBe('');
+      expect(result.datetime.end).toBe('2027-01-02T00:00:00.000Z');
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('serializeEventsDatetime 中單筆異常不影響其他筆正常序列化', () => {
+      const events = [
+        baseEvent({
+          id: 'ok-1',
+          datetime: { start: makeTimestamp('2027-01-01'), end: makeTimestamp('2027-01-02') },
+        }),
+        baseEvent({
+          id: 'broken',
+          datetime: { start: undefined, end: undefined } as unknown as CoffeeEvent['datetime'],
+        }),
+      ];
+
+      expect(() => serializeEventsDatetime(events)).not.toThrow();
+      const result = serializeEventsDatetime(events);
+      expect(result).toHaveLength(2);
+      expect(result[0].datetime.start).toBe('2027-01-01T00:00:00.000Z');
+      expect(result[1].datetime.start).toBe('');
+      expect(result[1].id).toBe('broken');
+    });
+  });
 });
 
 describe('serializeEventsDatetime', () => {
