@@ -19,7 +19,12 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { syncEventVenue } from './eventVenueSync';
 import { cache } from '../utils/cache';
 import { generateEventSlug } from '../utils/eventSlug';
-import { toPublicEvent, toPublicEvents, serializeEventsDatetime } from '../utils/eventSanitizer';
+import {
+  toPublicEvent,
+  toPublicEvents,
+  serializeEventDatetime,
+  serializeEventsDatetime,
+} from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 import { AppError } from '../utils/AppError';
 
@@ -423,15 +428,14 @@ export class EventService {
 
     const mapEvents = filteredEvents.map(event => {
       return {
-        id: event.id,
-        slug: event.slug ?? null,
-        title: event.title,
-        mainImage: event.mainImage,
-        location: event.location, // 完整的 location 物件
-        datetime: {
-          start: event.datetime.start.toDate().toISOString(),
-          end: event.datetime.end.toDate().toISOString(),
-        },
+        ...serializeEventDatetime({
+          id: event.id,
+          slug: event.slug ?? null,
+          title: event.title,
+          mainImage: event.mainImage,
+          location: event.location, // 完整的 location 物件
+          datetime: event.datetime,
+        }),
         isFavorited: favoritedEventIds.has(event.id),
       };
     });
