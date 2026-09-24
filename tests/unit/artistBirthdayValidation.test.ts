@@ -39,7 +39,7 @@ describe('artistSchemas birthday calendar validity', () => {
     expect(result.success).toBe(true);
   });
 
-  it('create: still rejects malformed (non-calendar) format before the refine check runs', () => {
+  it('create: rejects a malformed (non-YYYY-MM-DD) format', () => {
     const result = artistSchemas.create.safeParse({
       stageName: '測試藝人',
       birthday: '2026/02/28',
