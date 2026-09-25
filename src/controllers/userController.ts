@@ -4,6 +4,7 @@ import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { ArtistService } from '../services/artistService';
 import { FavoriteFilterParams } from '../models/types';
+import { AppError } from '../utils/AppError';
 
 export class UserController {
   private userService: UserService;
@@ -133,24 +134,4 @@ export class UserController {
     const isFavorited = await this.userService.isFavorited(userId, eventId);
     res.json({ isFavorited });
   };
-
-  // ==================== 已認領活動（分頁） ====================
-
-  getMyClaimedEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const userId = req.user?.uid;
-    if (!userId) {
-      throw new AppError(401, 'AUTH_REQUIRED', 'Authentication required');
-    }
-
-    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-
-    const result = await this.eventService.getUserClaimedEventsPaginated(
-      userId,
-      Number.isFinite(page) ? page : 1,
-      Number.isFinite(limit) ? limit : 20
-    );
-    res.json(result);
-  };
 }
-import { AppError } from '../utils/AppError';

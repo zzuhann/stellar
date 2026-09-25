@@ -198,7 +198,7 @@ paths:
                   field: reservation.url,
                 }
         '403':
-          description: 非本人投稿、非已認領主辦，也非 admin
+          description: 非本人投稿，也非 admin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -218,7 +218,7 @@ paths:
       responses:
         '200': { description: 刪除成功 }
         '403':
-          description: 非本人投稿、非已認領主辦，也非 admin
+          description: 非本人投稿，也非 admin
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

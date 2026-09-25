@@ -63,7 +63,6 @@ Token 放在 `Authorization: Bearer {token}` header。
 |---|---|
 | `firebase.ts` | Firestore（`db`）、Firebase Auth（`auth`）實例 |
 | `r2-client.ts` | Cloudflare R2 圖片儲存 |
-| `oauth.ts` | Threads OAuth 設定 |
 
 ---
 
@@ -105,12 +104,6 @@ RESEND_API_KEY=
 EMAIL_WHITELIST=           # 逗號分隔，這些 email 不收通知
 ADMIN_NOTIFY_EMAIL=
 
-# OAuth
-THREADS_APP_ID=
-THREADS_APP_SECRET=
-OAUTH_CALLBACK_BASE_URL=   # https://stellar.zeabur.app/api
-OAUTH_STATE_SECRET=
-
 # 其他
 GOOGLE_MAPS_API_KEY=
 GEMINI_API_KEY=            # 貼文半自動匯入輔助（POST /api/import/parse-caption），僅後端使用，未設定時該端點回 503
@@ -147,7 +140,6 @@ DOCS_PASSWORD=             # /api/docs 的 HTTP Basic Auth 密碼（未設定時
 功能設計規格在 `specs/features/` 下：
 
 - `specs/features/events/design-backend.md` — CoffeeEvent 資料模型、API、快取策略
-- `specs/features/event-claim/design-backend.md` — Threads OAuth 認領流程
 - `specs/features/page-view-tracking/design-backend.md` — 瀏覽量追蹤
 - `specs/features/top-artists/design-backend.md` — 熱門藝人 API
 - `specs/features/email-notification/design-backend.md` — Email 通知
