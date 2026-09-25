@@ -147,7 +147,6 @@ DOCS_PASSWORD=             # /api/docs 的 HTTP Basic Auth 密碼（未設定時
 功能設計規格在 `specs/features/` 下：
 
 - `specs/features/events/design-backend.md` — CoffeeEvent 資料模型、API、快取策略
-- `specs/features/event-claim/design-backend.md` — Threads OAuth 認領流程
 - `specs/features/page-view-tracking/design-backend.md` — 瀏覽量追蹤
 - `specs/features/top-artists/design-backend.md` — 熱門藝人 API
 - `specs/features/email-notification/design-backend.md` — Email 通知

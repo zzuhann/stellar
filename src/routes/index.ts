@@ -5,7 +5,6 @@ import placesRoutes from './placesRoutes';
 import imageRoutes from './imageRoutes';
 import userRoutes from './userRoutes';
 import cacheRoutes from './cacheRoutes';
-import authRoutes from './authRoutes';
 import contactRoutes from './contactRoutes';
 import venueRoutes from './venueRoutes';
 import adminRoutes from './adminRoutes';
@@ -48,7 +47,6 @@ if (hasFirebaseConfig) {
   router.use('/events', eventRoutes);
   router.use('/users', userRoutes);
   router.use('/cache', cacheRoutes);
-  router.use('/auth', authRoutes);
   router.use('/venues', venueRoutes);
   router.use('/venue-submissions', venueSubmissionRoutes);
   router.use('/admin', adminRoutes);
@@ -67,7 +65,6 @@ if (hasFirebaseConfig) {
     '/venues',
     '/venue-submissions',
     '/cache',
-    '/auth',
     '/import',
   ].forEach(p => router.use(p, firebaseUnavailable));
 }
