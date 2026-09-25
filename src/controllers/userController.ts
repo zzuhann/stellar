@@ -134,5 +134,4 @@ export class UserController {
     const isFavorited = await this.userService.isFavorited(userId, eventId);
     res.json({ isFavorited });
   };
-
 }

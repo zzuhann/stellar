@@ -496,4 +496,3 @@ export interface EventsResponseWithFavorite {
     region?: string;
   };
 }
-

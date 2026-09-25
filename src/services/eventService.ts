@@ -1441,5 +1441,4 @@ export class EventService {
       return sortOrder === 'desc' ? -comparison : comparison;
     });
   }
-
 }
