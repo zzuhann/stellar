@@ -63,7 +63,6 @@ Token 放在 `Authorization: Bearer {token}` header。
 |---|---|
 | `firebase.ts` | Firestore（`db`）、Firebase Auth（`auth`）實例 |
 | `r2-client.ts` | Cloudflare R2 圖片儲存 |
-| `oauth.ts` | Threads OAuth 設定 |
 
 ---
 
@@ -104,12 +103,6 @@ FIREBASE_TOKEN_URI=
 RESEND_API_KEY=
 EMAIL_WHITELIST=           # 逗號分隔，這些 email 不收通知
 ADMIN_NOTIFY_EMAIL=
-
-# OAuth
-THREADS_APP_ID=
-THREADS_APP_SECRET=
-OAUTH_CALLBACK_BASE_URL=   # https://stellar.zeabur.app/api
-OAUTH_STATE_SECRET=
 
 # 其他
 GOOGLE_MAPS_API_KEY=

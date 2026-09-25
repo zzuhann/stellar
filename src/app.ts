@@ -55,19 +55,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// 登入相關的適度限制
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 30, // 提高到 30 次登入嘗試
-  message: {
-    error: 'Too many authentication attempts, please try again later',
-    code: 'RATE_LIMITED',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // 成功的請求不計入限制
-});
-
 // Places API 的寬鬆限制（因為地址搜尋會頻繁呼叫）
 const placesLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
@@ -78,7 +65,6 @@ const placesLimiter = rateLimit({
 });
 
 app.use(limiter);
-app.use('/api/auth', authLimiter);
 app.use('/api/places', placesLimiter);
 
 // CORS 設定
