@@ -37,6 +37,8 @@ describe('CORS rejection', () => {
       h.toLowerCase().startsWith('access-control-allow')
     );
     expect(accessControlHeaders).toHaveLength(0);
+    // 只涵蓋 app.ts 全域錯誤處理直接呼叫 captureException 的路徑；Sentry SDK 的
+    // setupExpressErrorHandler 在內部上報不經過這個 mock，那條路靠 SDK 預設只上報 status >= 500
     expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
