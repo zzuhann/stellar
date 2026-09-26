@@ -102,9 +102,9 @@ app.use(
         return callback(null, true);
       }
 
-      // 生產環境拒絕未授權的來源
+      // 生產環境拒絕未授權的來源（用 AppError 讓全域錯誤處理回 403，而不是落成 500 污染 Sentry）
       console.warn(`CORS: Origin ${origin} not in allowed list:`, allowedOrigins);
-      return callback(new Error('Not allowed by CORS'));
+      return callback(new AppError(403, 'CORS_NOT_ALLOWED', 'Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
