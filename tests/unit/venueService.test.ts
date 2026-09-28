@@ -808,3 +808,176 @@ describe('VenueService.getVenues — fetchAll 效能設計與 cold start（避�
     expect(result.venues.map(v => v.id)).toEqual(['v-newer', 'v-high-viewcount']);
   });
 });
+
+// --- 場地距離最近排序（sort=distance）--------------------------------------
+// 對應 specs/features/venue-distance-sort/qa.md 後端情境 1-7
+
+describe('VenueService.getVenues — sort=distance', () => {
+  let getWithLockSpy: jest.SpyInstance;
+
+  // 使用者座標：台北 101 附近
+  const userCoords = { lat: 25.033, lng: 121.5654 };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({});
+  });
+
+  afterEach(() => {
+    getWithLockSpy.mockRestore();
+  });
+
+  it('情境 1：有座標場地依距離由近到遠排序', async () => {
+    const venues = [
+      // 刻意打亂原始順序，確認排序而非沿用輸入順序
+      buildScoredVenue({ id: 'far', lat: 22.6273, lng: 120.3014 }), // 高雄，最遠
+      buildScoredVenue({ id: 'near', lat: 25.033, lng: 121.566 }), // 幾乎同點，最近
+      buildScoredVenue({ id: 'mid', lat: 25.0478, lng: 121.517 }), // 台北車站，中距離
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['near', 'mid', 'far']);
+  });
+
+  it('情境 2：缺座標場地（undefined/null/NaN/兩者為 0）一律排在有座標場地之後', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'missing-undefined', lat: undefined, lng: undefined }),
+      buildScoredVenue({ id: 'has-coords', lat: 25.033, lng: 121.566 }),
+      buildScoredVenue({ id: 'missing-null', lat: null, lng: null }),
+      buildScoredVenue({ id: 'missing-zero', lat: 0, lng: 0 }),
+      buildScoredVenue({ id: 'missing-nan', lat: NaN, lng: NaN }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    const ids = result.venues.map(v => v.id);
+    expect(ids[0]).toBe('has-coords');
+    expect(ids.slice(1).sort()).toEqual(
+      ['missing-undefined', 'missing-null', 'missing-zero', 'missing-nan'].sort()
+    );
+  });
+
+  it('情境 3：只有一邊為 0（lat=0, lng=121.5）視為有效座標，正常參與排序，不被排到最後', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'zero-lat-only', lat: 0, lng: 121.5 }),
+      buildScoredVenue({ id: 'missing', lat: undefined, lng: undefined }),
+      buildScoredVenue({ id: 'far', lat: 22.6273, lng: 120.3014 }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    const ids = result.venues.map(v => v.id);
+    // 'zero-lat-only' 有效座標，距離比 'far' 遠（不同緯度差很大）但仍排在真正缺座標的 'missing' 之前
+    expect(ids.indexOf('zero-lat-only')).toBeLessThan(ids.indexOf('missing'));
+    expect(ids[ids.length - 1]).toBe('missing');
+  });
+
+  it('情境 4a：距離相同時依 compositeScore desc → createdAt desc → id asc tie-break', async () => {
+    const samePoint = { lat: 25.05, lng: 121.6 };
+    const venues = [
+      buildScoredVenue({
+        id: 'low-score',
+        ...samePoint,
+        compositeScore: 0.2,
+        createdAt: { toMillis: () => 2000 },
+      }),
+      buildScoredVenue({
+        id: 'high-score',
+        ...samePoint,
+        compositeScore: 0.9,
+        createdAt: { toMillis: () => 1000 },
+      }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['high-score', 'low-score']);
+  });
+
+  it('情境 4b：缺座標場地彼此之間同樣依 compositeScore tie-break，而非隨機或原始順序', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'missing-low', lat: undefined, lng: undefined, compositeScore: 0.1 }),
+      buildScoredVenue({ id: 'missing-high', lat: undefined, lng: undefined, compositeScore: 0.9 }),
+      buildScoredVenue({ id: 'has-coords', lat: 25.033, lng: 121.566, compositeScore: 0 }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['has-coords', 'missing-high', 'missing-low']);
+  });
+
+  it('情境 5：距離相同＋缺座標混合，跨頁（limit=1, page:1/2/3）無重複、無遺漏', async () => {
+    const samePoint = { lat: 25.05, lng: 121.6 };
+    const venues = [
+      buildScoredVenue({ id: 'b', ...samePoint, compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+      buildScoredVenue({ id: 'a', ...samePoint, compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+      buildScoredVenue({ id: 'missing', lat: undefined, lng: undefined, compositeScore: 0.5 }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const service = new VenueService();
+    const page1 = await service.getVenues({ sort: 'distance', userCoords, limit: 1, page: 1 });
+    const page2 = await service.getVenues({ sort: 'distance', userCoords, limit: 1, page: 2 });
+    const page3 = await service.getVenues({ sort: 'distance', userCoords, limit: 1, page: 3 });
+    if (Array.isArray(page1) || Array.isArray(page2) || Array.isArray(page3)) {
+      throw new Error('expected paginated result');
+    }
+
+    const ids = [...page1.venues, ...page2.venues, ...page3.venues].map(v => v.id);
+    expect(ids).toEqual(['a', 'b', 'missing']); // 有座標依 id asc tie-break 排前面，缺座標排最後
+  });
+
+  it('情境 6：與 region/capacityRange/search 疊加，先 filter 再依距離排序', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'taipei-near', region: '台北', lat: 25.033, lng: 121.566 }),
+      buildScoredVenue({ id: 'taipei-far', region: '台北', lat: 22.6273, lng: 120.3014 }),
+      buildScoredVenue({ id: 'newtaipei-near', region: '新北', lat: 25.034, lng: 121.567 }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({
+      sort: 'distance',
+      userCoords,
+      region: ['台北'],
+    });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    // 新北場地被 region filter 排除，即使距離比 taipei-far 更近
+    expect(result.venues.map(v => v.id)).toEqual(['taipei-near', 'taipei-far']);
+  });
+
+  it('情境 7：回傳的 venue 物件不含任何新欄位（如 distanceMeters、compositeScore）', async () => {
+    const venues = [buildScoredVenue({ id: 'v1', lat: 25.033, lng: 121.566, compositeScore: 0.7 })];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(Object.keys(result.venues[0]).sort()).toEqual(
+      Object.keys(makeBaseVenue()).sort()
+    );
+    expect(result.venues[0]).not.toHaveProperty('distanceMeters');
+    expect(result.venues[0]).not.toHaveProperty('compositeScore');
+  });
+
+  it('sort 非 distance 時即使傳了 userCoords 也不受影響，回傳形狀與現況一致', async () => {
+    const venues = [
+      buildScoredVenue({ id: 'v1', compositeScore: 0.2 }),
+      buildScoredVenue({ id: 'v2', compositeScore: 0.9 }),
+    ];
+    getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
+
+    const withCoords = await new VenueService().getVenues({ sort: 'composite', userCoords });
+    const withoutCoords = await new VenueService().getVenues({ sort: 'composite' });
+    if (Array.isArray(withCoords) || Array.isArray(withoutCoords)) {
+      throw new Error('expected paginated result');
+    }
+    expect(withCoords.venues.map(v => v.id)).toEqual(withoutCoords.venues.map(v => v.id));
+    expect(withCoords.venues.map(v => v.id)).toEqual(['v2', 'v1']);
+  });
+});

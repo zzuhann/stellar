@@ -229,3 +229,94 @@ describe('GET /venues query validation (venueSchemas.getVenues)', () => {
     expect(parse({ region: ['台北', '東京'] }).success).toBe(false);
   });
 });
+
+// --- 場地距離最近排序（sort=distance）--------------------------------------
+// 對應 specs/features/venue-distance-sort/qa.md 後端情境 8-11
+
+describe('GET /venues query validation — sort=distance (venueSchemas.getVenues)', () => {
+  const parse = (query: Record<string, unknown>) => venueSchemas.getVenues.safeParse(query);
+
+  it('情境 8：sort=distance ＋ 合法座標通過', () => {
+    const result = parse({ sort: 'distance', lat: '25.03', lng: '121.56' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.lat).toBe(25.03);
+      expect(result.data.lng).toBe(121.56);
+    }
+  });
+
+  it('情境 9：sort=distance 缺 lng 時失敗', () => {
+    expect(parse({ sort: 'distance', lng: '121.56' }).success).toBe(false);
+  });
+
+  it('情境 9：sort=distance 缺 lat 時失敗', () => {
+    expect(parse({ sort: 'distance', lat: '25.03' }).success).toBe(false);
+  });
+
+  it('情境 9：sort=distance 兩者皆缺時失敗', () => {
+    expect(parse({ sort: 'distance' }).success).toBe(false);
+  });
+
+  it('情境 9：sort=distance ＋ lat 為空字串時失敗（不可被 Number() 誤轉為 0）', () => {
+    expect(parse({ sort: 'distance', lat: '', lng: '121.56' }).success).toBe(false);
+  });
+
+  it('情境 9：sort=distance ＋ lat 為純空白字串時失敗', () => {
+    expect(parse({ sort: 'distance', lat: '   ', lng: '121.56' }).success).toBe(false);
+  });
+
+  it('情境 9：sort=distance ＋ lng 為空字串時失敗', () => {
+    expect(parse({ sort: 'distance', lat: '25.03', lng: '' }).success).toBe(false);
+  });
+
+  it('情境 9 反向案例：sort=composite ＋ lat 為空字串時仍通過，且 parse 結果不含 lat/lng', () => {
+    const result = parse({ sort: 'composite', lat: '', lng: '121.56' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('lat');
+      expect(result.data).not.toHaveProperty('lng');
+    }
+  });
+
+  it('情境 9 反向案例：sort=composite ＋ lat 為非數字字串時仍通過，且 parse 結果不含 lat', () => {
+    const result = parse({ sort: 'composite', lat: 'abc' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('lat');
+    }
+  });
+
+  it.each([
+    ['lat', 90],
+    ['lat', -90],
+    ['lng', 180],
+    ['lng', -180],
+  ])('情境 10：%s=%s（合法邊界）通過', (key, value) => {
+    const other = key === 'lat' ? { lng: '121' } : { lat: '25' };
+    const result = parse({ sort: 'distance', [key]: String(value), ...other });
+    expect(result.success).toBe(true);
+  });
+
+  it.each([
+    ['lat', 90.0001],
+    ['lat', -90.0001],
+    ['lng', 180.0001],
+    ['lng', -180.0001],
+  ])('情境 10：%s=%s（超出邊界）失敗', (key, value) => {
+    const other = key === 'lat' ? { lng: '121' } : { lat: '25' };
+    const result = parse({ sort: 'distance', [key]: String(value), ...other });
+    expect(result.success).toBe(false);
+  });
+
+  it('情境 11：lat 為完全非數字字串（"abc"）時失敗', () => {
+    expect(parse({ sort: 'distance', lat: 'abc', lng: '121.56' }).success).toBe(false);
+  });
+
+  it('情境 11：lat 為部分數字字串（"25.03abc"）時失敗', () => {
+    expect(parse({ sort: 'distance', lat: '25.03abc', lng: '121.56' }).success).toBe(false);
+  });
+
+  it('accepts sort=distance in the existing sort enum list', () => {
+    expect(parse({ sort: 'distance', lat: '25', lng: '121' }).success).toBe(true);
+  });
+});
