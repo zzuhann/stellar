@@ -2,9 +2,9 @@ import { haversineDistanceMeters, isMissingVenueCoords } from '../../src/utils/g
 
 describe('haversineDistanceMeters', () => {
   it('同一點距離為 0', () => {
-    expect(haversineDistanceMeters({ lat: 25.033, lng: 121.5654 }, { lat: 25.033, lng: 121.5654 })).toBe(
-      0
-    );
+    expect(
+      haversineDistanceMeters({ lat: 25.033, lng: 121.5654 }, { lat: 25.033, lng: 121.5654 })
+    ).toBe(0);
   });
 
   it('台北 101 到台北車站約 5140~5155 公尺', () => {

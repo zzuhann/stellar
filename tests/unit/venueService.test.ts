@@ -916,8 +916,18 @@ describe('VenueService.getVenues — sort=distance', () => {
   it('情境 5：距離相同＋缺座標混合，跨頁（limit=1, page:1/2/3）無重複、無遺漏', async () => {
     const samePoint = { lat: 25.05, lng: 121.6 };
     const venues = [
-      buildScoredVenue({ id: 'b', ...samePoint, compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
-      buildScoredVenue({ id: 'a', ...samePoint, compositeScore: 0.5, createdAt: { toMillis: () => 1000 } }),
+      buildScoredVenue({
+        id: 'b',
+        ...samePoint,
+        compositeScore: 0.5,
+        createdAt: { toMillis: () => 1000 },
+      }),
+      buildScoredVenue({
+        id: 'a',
+        ...samePoint,
+        compositeScore: 0.5,
+        createdAt: { toMillis: () => 1000 },
+      }),
       buildScoredVenue({ id: 'missing', lat: undefined, lng: undefined, compositeScore: 0.5 }),
     ];
     getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
@@ -958,9 +968,7 @@ describe('VenueService.getVenues — sort=distance', () => {
 
     const result = await new VenueService().getVenues({ sort: 'distance', userCoords });
     if (Array.isArray(result)) throw new Error('expected paginated result');
-    expect(Object.keys(result.venues[0]).sort()).toEqual(
-      Object.keys(makeBaseVenue()).sort()
-    );
+    expect(Object.keys(result.venues[0]).sort()).toEqual(Object.keys(makeBaseVenue()).sort());
     expect(result.venues[0]).not.toHaveProperty('distanceMeters');
     expect(result.venues[0]).not.toHaveProperty('compositeScore');
   });

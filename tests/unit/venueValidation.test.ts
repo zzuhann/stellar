@@ -139,7 +139,7 @@ describe('GET /venues query validation (venueSchemas.getVenues)', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0].message).toBe(
-        'sort must be "composite", "eventCount", "name", "newest", or "random"'
+        'sort must be "composite", "eventCount", "name", "newest", "random", or "distance"'
       );
     }
   });

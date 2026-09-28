@@ -12,7 +12,9 @@ import { redactCoordsFromUrl } from '../../src/app';
 // morgan url token 遮蔽 lat/lng，避免使用者座標寫進 Cloud Run request log。
 describe('redactCoordsFromUrl', () => {
   it('情境 13a：遮蔽 lat/lng 值，其餘參數（如 region）維持原樣', () => {
-    const result = redactCoordsFromUrl('/api/venues?sort=distance&lat=25.033&lng=121.564&region=台北');
+    const result = redactCoordsFromUrl(
+      '/api/venues?sort=distance&lat=25.033&lng=121.564&region=台北'
+    );
     expect(result).toContain('lat=REDACTED');
     expect(result).toContain('lng=REDACTED');
     expect(result).not.toContain('25.033');
@@ -22,7 +24,10 @@ describe('redactCoordsFromUrl', () => {
   });
 
   it('情境 13b：不含 lat/lng 的 URL 不受影響，無多餘替換痕跡', () => {
-    const original = '/api/venues?sort=composite&region=台北';
+    // req.originalUrl 來自實際 HTTP request line，非 ASCII 字元本來就已是 percent-encoded
+    // 形式（而非測試 13a 那種示意用的原始 UTF-8 字串），用 encodeURIComponent 模擬真實情境，
+    // 確保這裡驗證的是「經過 URL/URLSearchParams round-trip 後字串不變」而非巧合。
+    const original = `/api/venues?sort=composite&region=${encodeURIComponent('台北')}`;
     const result = redactCoordsFromUrl(original);
     expect(result).toBe(original);
   });

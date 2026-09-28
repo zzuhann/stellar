@@ -17,6 +17,7 @@ import {
 import { cache } from '../utils/cache';
 import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
+import { haversineDistanceMeters, isMissingVenueCoords } from '../utils/geo';
 import {
   DocumentData,
   DocumentReference,
@@ -110,6 +111,17 @@ const stripScore = (v: VenueWithScore): Venue => {
   const rest: Partial<VenueWithScore> = { ...v };
   delete rest.compositeScore;
   return rest as Venue;
+};
+
+// compositeScore desc → createdAt desc → id asc，確保排序具決定性（deterministic）。
+// 抽出自既有 composite 排序分支，與 sort=distance 的 tie-break 共用，避免重複程式碼。
+const compositeTieBreak = (a: VenueWithScore, b: VenueWithScore): number => {
+  const scoreDiff = (b.compositeScore ?? 0) - (a.compositeScore ?? 0);
+  if (scoreDiff !== 0) return scoreDiff;
+  const aMs = a.createdAt?.toMillis() ?? 0;
+  const bMs = b.createdAt?.toMillis() ?? 0;
+  if (aMs !== bMs) return bMs - aMs; // createdAt desc
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; // 最終防線：確保排序具決定性
 };
 
 export class VenueService {
@@ -611,7 +623,7 @@ export class VenueService {
   }
 
   async getVenues(params: VenueFilterParams): Promise<Venue[] | PaginatedVenues> {
-    const { region, capacityRange, search, sort, limit, page, status } = params;
+    const { region, capacityRange, search, sort, limit, page, status, userCoords } = params;
 
     let venues = await this.fetchAll();
 
@@ -651,14 +663,7 @@ export class VenueService {
     const effectiveSort = sort ?? 'composite';
 
     if (effectiveSort === 'composite') {
-      venues = [...venues].sort((a, b) => {
-        const scoreDiff = (b.compositeScore ?? 0) - (a.compositeScore ?? 0);
-        if (scoreDiff !== 0) return scoreDiff;
-        const aMs = a.createdAt?.toMillis() ?? 0;
-        const bMs = b.createdAt?.toMillis() ?? 0;
-        if (aMs !== bMs) return bMs - aMs; // createdAt desc
-        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; // 最終防線：確保排序具決定性
-      });
+      venues = [...venues].sort(compositeTieBreak);
     } else if (sort === 'name') {
       venues = [...venues].sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
     } else if (sort === 'newest') {
@@ -666,6 +671,32 @@ export class VenueService {
         const aMs = a.createdAt?.toMillis() ?? 0;
         const bMs = b.createdAt?.toMillis() ?? 0;
         return bMs - aMs;
+      });
+    } else if (sort === 'distance' && userCoords) {
+      // 距離只用來排序、不寫回 venue 物件、不進 response——response 形狀與其他排序模式
+      // 完全一致，用 id -> distance 的 Map 存排序期間的計算結果即可，不需要之後再從
+      // 回傳物件裡 strip 掉。缺座標場地距離為 undefined，排序時一律排在最後。
+      const distanceByVenueId = new Map<string, number | undefined>();
+      venues.forEach(v => {
+        distanceByVenueId.set(
+          v.id,
+          isMissingVenueCoords(v.lat, v.lng)
+            ? undefined
+            : haversineDistanceMeters(userCoords, { lat: v.lat, lng: v.lng })
+        );
+      });
+
+      venues = [...venues].sort((a, b) => {
+        const aDist = distanceByVenueId.get(a.id);
+        const bDist = distanceByVenueId.get(b.id);
+        const aMissing = aDist === undefined;
+        const bMissing = bDist === undefined;
+        if (aMissing !== bMissing) return aMissing ? 1 : -1; // 缺座標永遠排最後
+        if (!aMissing && !bMissing && aDist !== bDist) {
+          return aDist! - bDist!;
+        }
+        // 距離相同（含皆缺座標）：沿用 composite tie-break 鏈，保證分頁穩定
+        return compositeTieBreak(a, b);
       });
     }
 
