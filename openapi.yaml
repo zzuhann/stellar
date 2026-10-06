@@ -393,14 +393,16 @@ paths:
         - in: query
           name: lat
           description: >-
-            使用者緯度，僅 sort=distance 時使用且為必填；與 sort 非 distance 時一併帶入
-            會被忽略（不報錯）。空字串／純空白字串視同未帶，一律回 400。
+            使用者緯度，僅 sort=distance 時使用且為必填。sort=distance 時，空字串／
+            純空白字串視同未帶 lat，回 400；sort 非 distance 時，lat（含空字串／
+            純空白字串／任何值）一律被忽略，不報錯。
           schema: { type: number, minimum: -90, maximum: 90 }
         - in: query
           name: lng
           description: >-
-            使用者經度，僅 sort=distance 時使用且為必填；與 sort 非 distance 時一併帶入
-            會被忽略（不報錯）。空字串／純空白字串視同未帶，一律回 400。
+            使用者經度，僅 sort=distance 時使用且為必填。sort=distance 時，空字串／
+            純空白字串視同未帶 lng，回 400；sort 非 distance 時，lng（含空字串／
+            純空白字串／任何值）一律被忽略，不報錯。
           schema: { type: number, minimum: -180, maximum: 180 }
       responses:
         '200':
