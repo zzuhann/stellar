@@ -978,11 +978,52 @@ describe('VenueService.getVenues — sort=distance', () => {
     expect(ids).toEqual(['a', 'b', 'missing']); // 有座標依 id asc tie-break 排前面，缺座標排最後
   });
 
-  it('情境 6：與 region/capacityRange/search 疊加，先 filter 再依距離排序', async () => {
+  it('情境 6：與 region/capacityRange/search 同時疊加，先完成三者 filter 交集再依距離排序', async () => {
     const venues = [
-      buildScoredVenue({ id: 'taipei-near', region: '台北', lat: 25.033, lng: 121.566 }),
-      buildScoredVenue({ id: 'taipei-far', region: '台北', lat: 22.6273, lng: 120.3014 }),
-      buildScoredVenue({ id: 'newtaipei-near', region: '新北', lat: 25.034, lng: 121.567 }),
+      // 符合 region=台北 + capacityRange=20-40 + search='abc' 的兩筆，距離不同
+      buildScoredVenue({
+        id: 'match-near',
+        region: '台北',
+        capacityRange: '20-40',
+        name: 'ABC Mart',
+        lat: 25.033,
+        lng: 121.566,
+      }),
+      buildScoredVenue({
+        id: 'match-far',
+        region: '台北',
+        capacityRange: '20-40',
+        name: 'ABC Mart 分店',
+        lat: 22.6273,
+        lng: 120.3014,
+      }),
+      // 地區不符（新北），即使座標比 match-far 更近也應被排除
+      buildScoredVenue({
+        id: 'wrong-region',
+        region: '新北',
+        capacityRange: '20-40',
+        name: 'ABC Mart 新北店',
+        lat: 25.034,
+        lng: 121.567,
+      }),
+      // capacityRange 不符（60以上），座標比 match-near 更近也應被排除
+      buildScoredVenue({
+        id: 'wrong-capacity',
+        region: '台北',
+        capacityRange: '60以上',
+        name: 'ABC Mart 大場地',
+        lat: 25.033,
+        lng: 121.566,
+      }),
+      // 名稱不含 'abc'，座標比 match-near 更近也應被排除
+      buildScoredVenue({
+        id: 'wrong-name',
+        region: '台北',
+        capacityRange: '20-40',
+        name: '完全不相關的名稱',
+        lat: 25.033,
+        lng: 121.566,
+      }),
     ];
     getWithLockSpy = jest.spyOn(cache, 'getWithLock').mockResolvedValue(venues);
 
@@ -990,10 +1031,12 @@ describe('VenueService.getVenues — sort=distance', () => {
       sort: 'distance',
       userCoords,
       region: ['台北'],
+      capacityRange: '20-40',
+      search: 'abc',
     });
     if (Array.isArray(result)) throw new Error('expected paginated result');
-    // 新北場地被 region filter 排除，即使距離比 taipei-far 更近
-    expect(result.venues.map(v => v.id)).toEqual(['taipei-near', 'taipei-far']);
+    // 只有 region + capacityRange + search 三者都符合的兩筆進入結果，依距離排序
+    expect(result.venues.map(v => v.id)).toEqual(['match-near', 'match-far']);
   });
 
   it('情境 7：回傳的 venue 物件不含任何新欄位（如 distanceMeters、compositeScore）', async () => {
