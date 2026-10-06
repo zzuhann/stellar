@@ -14,6 +14,7 @@ import swaggerUi from 'swagger-ui-express';
 import routes from './routes';
 import { requireDocsAuth } from './middleware/docsAuth';
 import { AppError, normalizeError } from './utils/AppError';
+import { redactCoordsFromUrl } from './utils/privacyRedaction';
 
 const app = express();
 
@@ -124,20 +125,8 @@ app.use(
 // 即使前端已把座標四捨五入到小數第 3 位，仍是可追蹤到大致位置的個資。覆寫全域 :url token
 // 而非只在 /venues route 另掛一份 morgan：座標參數以後可能出現在其他端點，全域遮蔽一次
 // 比每個路由各自小心來得穩妥，且只有一個 morgan('combined') 掛載點，不會重複記錄。
-const REDACTED_QUERY_KEYS = ['lat', 'lng'];
-
-export function redactCoordsFromUrl(originalUrl: string): string {
-  try {
-    const url = new URL(originalUrl, 'http://internal');
-    REDACTED_QUERY_KEYS.forEach(key => {
-      if (url.searchParams.has(key)) url.searchParams.set(key, 'REDACTED');
-    });
-    return url.pathname + (url.search ? `?${url.searchParams.toString()}` : '');
-  } catch {
-    return originalUrl;
-  }
-}
-
+// redactCoordsFromUrl 本身抽到 src/utils/privacyRedaction.ts，與 Sentry
+// beforeSend/beforeSendTransaction（src/utils/sentryRedaction.ts）共用同一套判定。
 morgan.token('url', (req: express.Request) => redactCoordsFromUrl(req.originalUrl));
 app.use(morgan('combined'));
 
