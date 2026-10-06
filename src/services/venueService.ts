@@ -17,7 +17,7 @@ import {
 import { cache } from '../utils/cache';
 import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
-import { haversineDistanceMeters, isMissingVenueCoords } from '../utils/geo';
+import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
 import {
   DocumentData,
   DocumentReference,
@@ -135,13 +135,17 @@ export class VenueService {
 
   private mapDocToVenue(doc: QueryDocumentSnapshot<DocumentData>): Venue {
     const d = doc.data();
+    // 任一邊缺值（null/undefined/字串/NaN）→ 兩邊都設為 0，與 isMissingVenueCoords
+    // 的「兩者同時為 0 視為缺座標」判定一致，避免單側缺值被誤判成有效座標。
+    // 見 src/utils/geo.ts 的 toValidVenueCoords。
+    const { lat, lng } = toValidVenueCoords(d.lat, d.lng);
     return {
       id: doc.id,
       name: d.name ?? '',
       address: d.address ?? '',
       region: normalizeRegion(d.region ?? ''),
-      lat: d.lat ?? 0,
-      lng: d.lng ?? 0,
+      lat,
+      lng,
       nearestMrt: d.nearestMrt ?? '',
       mrtWalkMinutes: d.mrtWalkMinutes ?? null,
       capacityRange: d.capacityRange ?? null,

@@ -807,6 +807,40 @@ describe('VenueService.getVenues — fetchAll 效能設計與 cold start（避�
     // 僅靠 createdAt desc tie-break 排序，'v-newer' 應排前面。
     expect(result.venues.map(v => v.id)).toEqual(['v-newer', 'v-high-viewcount']);
   });
+
+  it('mapDocToVenue：lat 缺值但 lng 有值時，兩者正規化為 (0,0)，判定為缺座標並排在最後（防止單側缺值誤判為有效座標）', async () => {
+    const venues = [
+      venueDoc('v-half-missing', {
+        name: '只有經度的場地',
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        lat: null,
+        lng: 121.5,
+      }),
+      venueDoc('v-valid', {
+        name: '座標正常的場地',
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        lat: 25.1,
+        lng: 121.5,
+      }),
+    ];
+    mockVenuesGet.mockResolvedValue({ docs: venues });
+
+    // 使用者座標故意貼近 (0, 121.5)：若 mapDocToVenue 把單側缺值的場地變成
+    // { lat: 0, lng: 121.5 }（只把缺的那一邊設 0、另一邊維持原值），會被誤判為有效
+    // 座標且距離使用者極近，排到第一位。正確行為是兩邊都正規化為 (0, 0)，
+    // isMissingVenueCoords(0, 0) === true，一律排在最後。
+    const result = await service.getVenues({
+      sort: 'distance',
+      userCoords: { lat: 0, lng: 121.5 },
+    });
+    if (Array.isArray(result)) throw new Error('expected paginated result');
+    expect(result.venues.map(v => v.id)).toEqual(['v-valid', 'v-half-missing']);
+    expect(result.venues.find(v => v.id === 'v-half-missing')).toMatchObject({ lat: 0, lng: 0 });
+  });
 });
 
 // --- 場地距離最近排序（sort=distance）--------------------------------------

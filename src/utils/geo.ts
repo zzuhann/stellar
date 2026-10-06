@@ -34,3 +34,22 @@ export function isMissingVenueCoords(
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
   return lat === 0 && lng === 0;
 }
+
+/**
+ * 把 Firestore 讀出的原始 lat/lng（可能是 null/undefined/字串/NaN，取決於歷史資料
+ * 或手動修改）正規化成「兩者皆有效數字，或兩者皆為 0」，確保 Venue.lat/lng 永遠是
+ * number、且與 isMissingVenueCoords 的「兩者同時為 0 視為缺值」判定一致。
+ *
+ * 關鍵行為：只要有一邊不是有限數字，兩邊都設為 0——不能只把缺的那一邊設成 0、
+ * 另一邊維持原值，否則會變成「單側缺座標」卻意外通過 isMissingVenueCoords(0, 121.5)
+ * === false 的判定（只有一邊為 0 視為有效座標），讓距離排序把半殘資料的場地誤判
+ * 成有效座標參與排序。
+ */
+export function toValidVenueCoords(lat: unknown, lng: unknown): { lat: number; lng: number } {
+  const hasValidLat = typeof lat === 'number' && Number.isFinite(lat);
+  const hasValidLng = typeof lng === 'number' && Number.isFinite(lng);
+  if (hasValidLat && hasValidLng) {
+    return { lat: lat as number, lng: lng as number };
+  }
+  return { lat: 0, lng: 0 };
+}
