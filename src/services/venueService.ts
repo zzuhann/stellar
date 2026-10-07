@@ -40,11 +40,14 @@ const VIEW_WINDOW_DAYS = 90;
 // Composite sort scoring constants — see specs/features/venues/design-backend.md
 // Phase 2.8「分數正規化」段落。
 export const ACTIVE_WEEKS_WINDOW = 26;
-// 近 90 天瀏覽數上限，目前是暫定值：viewCount 現況全為 0（追蹤 API 呼叫遺漏，見 PR #148，
-// 上線當天才開始累積真實資料）。待累積 90 天真實瀏覽資料後應重新校準，不影響本次上線。
-export const VIEW_SCORE_CAP = 300;
+export const VIEW_CAP_FLOOR = 30; // viewCap 下限，避免資料少時 P90 過小讓大家輕易拿滿分
+export const VIEW_CAP_PERCENTILE = 0.9;
 export const NEW_VENUE_PROTECTION_WEEKS = 8;
 export const NEW_VENUE_DECAY_WEEKS = 2; // 保護期最後兩週線性降到 0
+
+const WEIGHT_ACTIVE_WEEKS = 0.45;
+const WEIGHT_VIEWS = 0.3;
+const WEIGHT_NEW_VENUE = 0.25;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
@@ -52,8 +55,16 @@ const clamp = (value: number, min: number, max: number): number =>
 export const computeActiveWeeksScore = (activeWeeks: number): number =>
   Math.min(activeWeeks, ACTIVE_WEEKS_WINDOW) / ACTIVE_WEEKS_WINDOW;
 
-export const computeViewScore = (recentViews: number): number =>
-  Math.min(recentViews, VIEW_SCORE_CAP) / VIEW_SCORE_CAP;
+// 用 P90 而非最大值，爆紅場地只拿滿分、不會拉高上限壓縮其他場地
+export const computeViewCap = (recentViewsAll: number[]): number => {
+  if (recentViewsAll.length === 0) return VIEW_CAP_FLOOR;
+  const sorted = [...recentViewsAll].sort((a, b) => a - b);
+  const p90 = sorted[Math.floor(VIEW_CAP_PERCENTILE * sorted.length)];
+  return Math.max(VIEW_CAP_FLOOR, p90);
+};
+
+export const computeViewScore = (recentViews: number, viewCap: number): number =>
+  Math.min(recentViews, viewCap) / viewCap;
 
 // 未滿 6 週（8-2）滿分 1；6-8 週線性降到 0；超過 8 週（含）為 0
 export const computeNewVenueScore = (weeksSinceCreated: number): number =>
@@ -62,11 +73,12 @@ export const computeNewVenueScore = (weeksSinceCreated: number): number =>
 export const computeCompositeScore = (
   activeWeeks: number,
   recentViews: number,
-  weeksSinceCreated: number
+  weeksSinceCreated: number,
+  viewCap: number
 ): number =>
-  computeActiveWeeksScore(activeWeeks) * 0.5 +
-  computeViewScore(recentViews) * 0.3 +
-  computeNewVenueScore(weeksSinceCreated) * 0.2;
+  computeActiveWeeksScore(activeWeeks) * WEIGHT_ACTIVE_WEEKS +
+  computeViewScore(recentViews, viewCap) * WEIGHT_VIEWS +
+  computeNewVenueScore(weeksSinceCreated) * WEIGHT_NEW_VENUE;
 
 /**
  * For each venue, counts distinct ISO weeks (UTC) among its approved events whose
@@ -190,6 +202,11 @@ export class VenueService {
 
         const activeWeeksByVenue = computeActiveWeeks(refsByVenue, eventDocs);
 
+        // 母體只含 active 場地（無 bucket 補 0），已刪除場地的殘留 bucket 不計
+        const viewCap = computeViewCap(
+          venues.filter(v => v.status === 'active').map(v => viewsByVenue.get(v.id) ?? 0)
+        );
+
         return venues.map(venue => {
           const activeWeeks = activeWeeksByVenue.get(venue.id) ?? 0;
           const recentViews = viewsByVenue.get(venue.id) ?? 0;
@@ -199,7 +216,12 @@ export class VenueService {
 
           return {
             ...venue,
-            compositeScore: computeCompositeScore(activeWeeks, recentViews, weeksSinceCreated),
+            compositeScore: computeCompositeScore(
+              activeWeeks,
+              recentViews,
+              weeksSinceCreated,
+              viewCap
+            ),
           };
         });
       },
