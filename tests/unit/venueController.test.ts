@@ -209,4 +209,24 @@ describe('VenueController.getVenues - 已驗證輸入的映射與業務規則', 
     await controller.getVenues(req, res as Response);
     expect(mockGetVenues).toHaveBeenCalledWith({});
   });
+
+  // 對應 specs/features/venue-distance-sort/qa.md 後端情境 12
+  it('情境 12a：sort=distance 且 lat/lng 皆存在時，組裝 userCoords 傳給 service', async () => {
+    await controller.getVenues(
+      buildReq({ sort: 'distance', lat: 25.03, lng: 121.56 }),
+      res as Response
+    );
+    const params = mockGetVenues.mock.calls[0][0];
+    expect(params.sort).toBe('distance');
+    expect(params.userCoords).toEqual({ lat: 25.03, lng: 121.56 });
+  });
+
+  it('情境 12b：sort 非 distance 時，即使 validatedQuery 意外帶有 lat/lng，也不組裝 userCoords（防呆）', async () => {
+    await controller.getVenues(
+      buildReq({ sort: 'composite', lat: 25.03, lng: 121.56 }),
+      res as Response
+    );
+    const params = mockGetVenues.mock.calls[0][0];
+    expect(params.userCoords).toBeUndefined();
+  });
 });

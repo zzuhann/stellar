@@ -184,39 +184,82 @@ const venuePageQuerySchema = z.preprocess(value => {
 // 兩種型態都要能吃到既有的 venueRegionEnum（含「臺」→「台」正規化與合法地區檢查）
 const venueRegionQuerySchema = z.union([venueRegionEnum, z.array(venueRegionEnum)]).optional();
 
+// GET /venues 的 lat/lng（sort=distance 時使用）：不能直接用 z.coerce.number() 包，
+// 因為 Number('') / Number('   ') 會得到 0 而不是 NaN，會讓空字串座標被誤判為合法的
+// 「緯度/經度 0 度」。先用 z.string().trim().min(1) 擋掉空字串/純空白字串，再轉數字並做範圍檢查。
+const venueLatQuerySchema = z
+  .string()
+  .trim()
+  .min(1, { error: 'lat must not be empty' })
+  .transform(Number)
+  .pipe(z.number().min(-90).max(90))
+  .optional();
+
+const venueLngQuerySchema = z
+  .string()
+  .trim()
+  .min(1, { error: 'lng must not be empty' })
+  .transform(Number)
+  .pipe(z.number().min(-180).max(180))
+  .optional();
+
 export const venueSchemas = {
-  getVenues: z
-    .object({
-      region: venueRegionQuerySchema,
-      capacityRange: z
-        .enum(['20以下', '20-40', '40-60', '60以上'], {
-          error: 'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上',
-        })
-        .optional(),
-      search: z
-        .string()
-        .optional()
-        .transform(value => {
-          const trimmed = value?.trim();
-          return trimmed && trimmed.length > 0 ? trimmed : undefined;
-        }),
-      sort: z
-        .enum(['composite', 'eventCount', 'name', 'newest', 'random'], {
-          error: 'sort must be "composite", "eventCount", "name", "newest", or "random"',
-        })
-        .optional(),
-      limit: venueLimitQuerySchema,
-      page: venuePageQuerySchema,
-      status: z
-        .enum(['active', 'inactive', 'pending', 'rejected', 'all'], {
-          error: 'status must be one of: active, inactive, pending, rejected, all',
-        })
-        .optional(),
-    })
-    .refine(data => data.sort !== 'random' || data.limit !== undefined, {
-      error: 'limit is required when sort is "random"',
-      path: ['limit'],
-    }),
+  // sort !== 'distance' 時先移除 lat/lng，讓非距離排序帶任何座標值（含空字串、非數字）
+  // 都靜默忽略、不報錯，也不會出現在 validatedQuery 裡（controller 不需要再判斷）。
+  getVenues: z.preprocess(
+    raw => {
+      if (!raw || typeof raw !== 'object' || (raw as { sort?: unknown }).sort === 'distance') {
+        return raw;
+      }
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).filter(
+          ([key]) => key !== 'lat' && key !== 'lng'
+        )
+      );
+    },
+    z
+      .object({
+        region: venueRegionQuerySchema,
+        capacityRange: z
+          .enum(['20以下', '20-40', '40-60', '60以上'], {
+            error: 'capacityRange must be one of: 20以下, 20-40, 40-60, 60以上',
+          })
+          .optional(),
+        search: z
+          .string()
+          .optional()
+          .transform(value => {
+            const trimmed = value?.trim();
+            return trimmed && trimmed.length > 0 ? trimmed : undefined;
+          }),
+        sort: z
+          .enum(['composite', 'eventCount', 'name', 'newest', 'random', 'distance'], {
+            error:
+              'sort must be "composite", "eventCount", "name", "newest", "random", or "distance"',
+          })
+          .optional(),
+        limit: venueLimitQuerySchema,
+        page: venuePageQuerySchema,
+        status: z
+          .enum(['active', 'inactive', 'pending', 'rejected', 'all'], {
+            error: 'status must be one of: active, inactive, pending, rejected, all',
+          })
+          .optional(),
+        lat: venueLatQuerySchema,
+        lng: venueLngQuerySchema,
+      })
+      .refine(data => data.sort !== 'random' || data.limit !== undefined, {
+        error: 'limit is required when sort is "random"',
+        path: ['limit'],
+      })
+      .refine(
+        data => data.sort !== 'distance' || (data.lat !== undefined && data.lng !== undefined),
+        {
+          error: 'lat and lng are required when sort is "distance"',
+          path: ['lat'],
+        }
+      )
+  ),
   batchReview: z.object({
     updates: z
       .array(

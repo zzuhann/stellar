@@ -42,7 +42,7 @@ export class VenueController {
   // 由 route 層的 validateRequest({ query: venueSchemas.getVenues }) 保證，
   // 這裡只做「已驗證資料 → VenueFilterParams」的映射與業務規則（非格式）判斷。
   getVenues = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { region, capacityRange, search, sort, status, limit, page } =
+    const { region, capacityRange, search, sort, status, limit, page, lat, lng } =
       (req.validatedQuery as GetVenuesQuery | undefined) ?? {};
 
     const params: VenueFilterParams = {};
@@ -74,6 +74,13 @@ export class VenueController {
 
     if (status !== undefined) {
       params.status = status;
+    }
+
+    // lat/lng 是否存在已由 route 層 validateRequest({ query: venueSchemas.getVenues })
+    // 的 Zod refine 保證（sort=distance 時必有值）；這裡的 if 只是 TypeScript narrowing，
+    // 不是業務驗證。sort 非 distance 時 schema 已在 preprocess 移除 lat/lng，不會走進這裡。
+    if (sort === 'distance' && lat !== undefined && lng !== undefined) {
+      params.userCoords = { lat, lng };
     }
 
     // 安全性：非管理員一律只能查詢 active 狀態的場地，

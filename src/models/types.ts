@@ -139,10 +139,12 @@ export interface VenueFilterParams {
   region?: string[];
   capacityRange?: CapacityRange;
   search?: string;
-  sort?: 'composite' | 'eventCount' | 'name' | 'newest' | 'random'; // 'composite' 為新增值；省略時等同 'composite'
+  sort?: 'composite' | 'eventCount' | 'name' | 'newest' | 'random' | 'distance'; // 'composite' 為新增值；省略時等同 'composite'
   limit?: number;
   page?: number;
   status?: VenueStatus | 'all';
+  // 僅 sort='distance' 時有值，由 controller 組裝，只用於排序，不進 response
+  userCoords?: { lat: number; lng: number };
 }
 
 // venueViewDaily collection 的 document schema

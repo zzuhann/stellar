@@ -366,11 +366,13 @@ paths:
           description: >-
             未帶時等同 composite（綜合排序：活躍週數 50% + 瀏覽數 30% + 新場地加分 20%，
             同分依 createdAt desc 再依 id asc 排序）。sort=eventCount 明確指定時維持既有的
-            eventCount desc 排序，行為不變。
+            eventCount desc 排序，行為不變。sort=distance（距離最近）時 lat/lng 為必填，
+            缺一即回 400；場地缺座標（lat/lng 缺值或兩者同時為 0）一律排在結果最後，
+            距離相同或皆缺座標時比照 composite 的 tie-break 鏈排序。
           schema:
             {
               type: string,
-              enum: [composite, eventCount, name, newest, random],
+              enum: [composite, eventCount, name, newest, random, distance],
               default: composite,
             }
         - in: query
@@ -388,6 +390,20 @@ paths:
         - in: query
           name: status
           schema: { type: string }
+        - in: query
+          name: lat
+          description: >-
+            使用者緯度，僅 sort=distance 時使用且為必填。sort=distance 時，空字串／
+            純空白字串視同未帶 lat，回 400；sort 非 distance 時，lat（含空字串／
+            純空白字串／任何值）一律被忽略，不報錯。
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - in: query
+          name: lng
+          description: >-
+            使用者經度，僅 sort=distance 時使用且為必填。sort=distance 時，空字串／
+            純空白字串視同未帶 lng，回 400；sort 非 distance 時，lng（含空字串／
+            純空白字串／任何值）一律被忽略，不報錯。
+          schema: { type: number, minimum: -180, maximum: 180 }
       responses:
         '200':
           description: 場地列表
@@ -409,16 +425,27 @@ paths:
                       total: { type: integer }
                       totalPages: { type: integer }
         '400':
-          description: sort 或 limit 參數組合不合法
+          description: sort/limit 或 sort=distance 的 lat/lng 參數組合不合法
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
-              example:
-                {
-                  error: 'limit is required when sort is "random"',
-                  code: VALIDATION_ERROR,
-                  field: limit,
-                }
+              examples:
+                randomMissingLimit:
+                  summary: sort=random 缺 limit
+                  value:
+                    {
+                      error: 'limit is required when sort is "random"',
+                      code: VALIDATION_ERROR,
+                      field: limit,
+                    }
+                distanceMissingCoords:
+                  summary: sort=distance 缺 lat/lng
+                  value:
+                    {
+                      error: 'lat and lng are required when sort is "distance"',
+                      code: VALIDATION_ERROR,
+                      field: lat,
+                    }
     post:
       tags: [venues]
       summary: 新增場地（僅 admin）
