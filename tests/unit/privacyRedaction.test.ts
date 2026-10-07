@@ -60,6 +60,47 @@ describe('redactCoordsFromUrl', () => {
     expect(result).not.toContain('121.564');
     expect(result).not.toContain('?');
   });
+
+  // 第二輪 code review 補強：URLSearchParams 對畸形 percent-encoding 有容錯（不丟例外），
+  // 導致 key 無法被 decode 比對成 lat/lng，座標因而漏出。改成自己 split + decodeURIComponent
+  // 後，任一 key decode 失敗都要 fail closed 捨棄整段 query（只留 path，絕對 URL 留 origin+path）。
+  it.each([
+    [
+      'key 內有不完整的 percent-encoding（la%74%）',
+      '/api/venues?sort=distance&la%74%=25.033&lng=121.564',
+    ],
+    ['key 結尾單獨的 %（lat%）', '/api/venues?sort=distance&lat%=25.033&lng=121.564'],
+  ])('%s：fail closed 捨棄整段 query，座標不漏出', (_label, malformed) => {
+    const result = redactCoordsFromUrl(malformed);
+    expect(result).not.toContain('25.033');
+    expect(result).not.toContain('121.564');
+    expect(result).not.toContain('?');
+    expect(result).toBe('/api/venues');
+  });
+
+  it('絕對 URL 帶座標時，fail closed 仍保留 origin+path，只捨棄 query', () => {
+    const malformed = 'https://api.stellar-zone.com/api/venues?lat%=25.033&lng=121.564';
+    const result = redactCoordsFromUrl(malformed);
+    expect(result).toBe('https://api.stellar-zone.com/api/venues');
+  });
+
+  it('絕對 URL 的座標正常遮蔽時，保留原 origin', () => {
+    const result = redactCoordsFromUrl(
+      'https://api.stellar-zone.com/api/venues?sort=distance&lat=25.033&lng=121.564'
+    );
+    expect(result.startsWith('https://api.stellar-zone.com/api/venues?')).toBe(true);
+    expect(result).toContain('lat=REDACTED');
+    expect(result).toContain('lng=REDACTED');
+    expect(result).not.toContain('25.033');
+  });
+
+  it('key 中含 `+`（解碼為空白）時不是 lat/lng，正常保留原樣不丟例外', () => {
+    const url = '/api/venues?la+t=25.033&lng=121.564';
+    const result = redactCoordsFromUrl(url);
+    expect(result).toContain('la+t=25.033'); // 不是 lat，不遮蔽，原始 encoding 不變
+    expect(result).toContain('lng=REDACTED');
+    expect(result).not.toContain('121.564');
+  });
 });
 
 describe('redactCoordsFromQueryString', () => {
@@ -94,6 +135,21 @@ describe('redactCoordsFromQueryString', () => {
 
   it('空字串輸入回傳空字串', () => {
     expect(redactCoordsFromQueryString('')).toBe('');
+  });
+
+  // 與 redactCoordsFromUrl 一致：畸形 percent-encoding 的 key 要 fail closed。
+  it.each([
+    ['key 內有不完整的 percent-encoding（la%74%）', '?sort=distance&la%74%=25.033&lng=121.564'],
+    ['key 結尾單獨的 %（lat%）', 'sort=distance&lat%=25.033&lng=121.564'],
+  ])('%s：fail closed 回傳空字串', (_label, malformed) => {
+    expect(redactCoordsFromQueryString(malformed)).toBe('');
+  });
+
+  it('key 中含 `+`（解碼為空白）時不是 lat/lng，原樣保留', () => {
+    const result = redactCoordsFromQueryString('la+t=25.033&lng=121.564');
+    expect(result).toContain('la+t=25.033');
+    expect(result).toContain('lng=REDACTED');
+    expect(result).not.toContain('121.564');
   });
 });
 

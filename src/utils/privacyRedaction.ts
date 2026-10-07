@@ -11,16 +11,52 @@
 const COORD_QUERY_KEYS = new Set(['lat', 'lng']);
 
 // 大小寫、percent-encoding 皆需視為同一個 key（例如 ?LAT=25、?%4Cat=25 都要遮蔽）。
-// URL/URLSearchParams 的 parser 本身已經會 decode key（%4C → L），這裡只需要在比對
-// 前額外轉小寫，不需要自己處理 decode。
 const isCoordKey = (key: string): boolean => COORD_QUERY_KEYS.has(key.toLowerCase());
 
-const redactParams = (params: URLSearchParams): void => {
-  // 用 Array.from 先複製一份 key 列表，避免在 forEach/for-of 迭代中呼叫 set() 修改
-  // 同一個 URLSearchParams 導致的迭代器狀態問題（部分環境對「迭代中修改」行為不保證）。
-  Array.from(params.keys()).forEach(key => {
-    if (isCoordKey(key)) params.set(key, 'REDACTED');
-  });
+/**
+ * 自行切 raw query string（不透過 URLSearchParams），逐個 key 嚴格 decode 後比對。
+ *
+ * 背景：URLSearchParams 對畸形 percent-encoding（如 `la%74%=`、`lat%=`）有容錯，
+ * 不會拋例外，導致這類 key 無法被正確 decode 比對、也就不會被判定成 lat/lng，
+ * 座標因而原封不動流出去。改成自己 split + decodeURIComponent，任何一個 key
+ * decode 失敗就视為整段 query 不可信，fail closed 捨棄整段（由呼叫端處理）。
+ *
+ * 非座標參數的 value 維持原始 encoding 不變（不重新編碼），只有座標 key 對應的
+ * value 會被換成 REDACTED；key 本身（含原始 percent-encoding 形式）不更動。
+ *
+ * @returns 重組後的 query string（不含開頭 `?`），或 null 代表某個 key 解碼失敗
+ *          （呼叫端應 fail closed，捨棄整段 query）。
+ */
+const redactRawQuery = (rawQuery: string): string | null => {
+  if (rawQuery === '') return '';
+
+  const segments = rawQuery.split('&');
+  const result: string[] = [];
+
+  for (const segment of segments) {
+    if (segment === '') {
+      result.push(segment);
+      continue;
+    }
+
+    const eqIndex = segment.indexOf('=');
+    const rawKey = eqIndex === -1 ? segment : segment.slice(0, eqIndex);
+
+    let decodedKey: string;
+    try {
+      decodedKey = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+    } catch {
+      return null;
+    }
+
+    if (isCoordKey(decodedKey)) {
+      result.push(`${rawKey}=REDACTED`);
+    } else {
+      result.push(segment);
+    }
+  }
+
+  return result.join('&');
 };
 
 // 給相對路徑（如 morgan 的 req.originalUrl，永遠不含 scheme/host）用的佔位 base，
@@ -41,10 +77,13 @@ const RELATIVE_URL_BASE = 'http://internal';
 export function redactCoordsFromUrl(urlOrPath: string): string {
   try {
     const url = new URL(urlOrPath, RELATIVE_URL_BASE);
-    redactParams(url.searchParams);
-    const query = url.search ? `?${url.searchParams.toString()}` : '';
     const isRelativeInput = url.origin === RELATIVE_URL_BASE;
-    return (isRelativeInput ? '' : url.origin) + url.pathname + query;
+    const base = (isRelativeInput ? '' : url.origin) + url.pathname;
+    if (!url.search) return base;
+
+    const redactedQuery = redactRawQuery(url.search.slice(1));
+    // redactedQuery === null：某個 key decode 失敗，fail closed 捨棄整段 query。
+    return redactedQuery === null ? base : `${base}?${redactedQuery}`;
   } catch {
     return urlOrPath.split('?')[0];
   }
@@ -57,15 +96,11 @@ export function redactCoordsFromUrl(urlOrPath: string): string {
  */
 export function redactCoordsFromQueryString(queryString: string): string {
   const hasLeadingMark = queryString.startsWith('?');
-  try {
-    const params = new URLSearchParams(hasLeadingMark ? queryString.slice(1) : queryString);
-    redactParams(params);
-    const serialized = params.toString();
-    if (!serialized) return '';
-    return hasLeadingMark ? `?${serialized}` : serialized;
-  } catch {
-    return '';
-  }
+  const raw = hasLeadingMark ? queryString.slice(1) : queryString;
+  const redacted = redactRawQuery(raw);
+  // redacted === null：某個 key decode 失敗，fail closed 回傳空字串。
+  if (redacted === null || redacted === '') return '';
+  return hasLeadingMark ? `?${redacted}` : redacted;
 }
 
 /** 遮蔽物件形狀的 query_string（Sentry RequestEventData.query_string 的其中一種型態）。 */

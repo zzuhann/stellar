@@ -88,6 +88,20 @@ describe('redactSentryEvent — event.request', () => {
     expect(result.request).toBeUndefined();
   });
 
+  // 與 privacyRedaction 的 fail-closed 修正一致：request.url 經 redactCoordsFromUrl
+  // 處理，畸形 percent-encoding 的 key（如 lat%）要整段 query 捨棄，不能讓座標漏出。
+  it('request.url 帶畸形 percent-encoding 的 key 時，fail closed 捨棄整段 query', () => {
+    const event = baseEvent({
+      request: {
+        url: 'https://api.stellar-zone.com/api/venues?sort=distance&lat%=25.033&lng=121.564',
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.url).toBe('https://api.stellar-zone.com/api/venues');
+  });
+
   it('request 存在但沒有 query_string／url 時不受影響', () => {
     const event = baseEvent({ request: { method: 'GET' } });
 
