@@ -3,6 +3,7 @@
 // key 判定，見 src/utils/privacyRedaction.ts。
 import type { Event } from '@sentry/node';
 import {
+  extractQueryFromUrl,
   redactCoordsFromQueryPairs,
   redactCoordsFromQueryRecord,
   redactCoordsFromQueryString,
@@ -14,8 +15,26 @@ function redactRequestEventData(request: Event['request']): void {
 
   if (typeof request.url === 'string') {
     request.url = redactCoordsFromUrl(request.url);
+
+    // request.query_string 不再獨立處理：它可能來自上游容錯 parser 對畸形
+    // percent-encoding 的解析結果（例如 `la%74%=25.033` 被解析成
+    // `{'lat%': '25.033'}`），這種已經 decode 過一半、不含原始 raw string 的資料
+    // 無法安全地重新驗證是否為座標 key，獨立判斷有漏判風險。既然 request.url 已經
+    // 遮蔽過，直接以遮蔽後的 url 重新切出 query 部分覆蓋 query_string——統一輸出成
+    // string 形狀，不嘗試還原原本的 record/array 形狀（還原形狀需要重新 decode
+    // 已經被容錯 parser 處理過的 key/value，同樣沒有 raw string 可驗證）。
+    // 遮蔽後的 url 沒有 query（含 fail-closed 捨棄整段 query 的情況）時，
+    // query_string 一併清空為空字串，不殘留任何原始內容。
+    //
+    // 只在原本就帶 query_string 欄位時才覆寫——欄位本來就不存在時不無端生出來，
+    // 避免動到跟座標完全無關、原本就乾淨的 event 的欄位形狀。
+    if ('query_string' in request) {
+      request.query_string = extractQueryFromUrl(request.url);
+    }
+    return;
   }
 
+  // request.url 不存在時，query_string 是唯一資訊來源，只能就地保守處理。
   // Sentry 的 RequestEventData.query_string 可能是三種形狀之一：
   // string（原始 query string）、Record<string,string>（已 parse 成物件）、
   // Array<[string,string]>（保留重複 key 的陣列形式）。欄位不存在時原樣跳過。

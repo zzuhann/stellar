@@ -29,40 +29,102 @@ describe('redactSentryEvent — event.request', () => {
     expect(result.request?.url).toContain('sort=distance');
   });
 
-  it('query_string 為 string 形狀時正確遮蔽', () => {
+  // 第三輪 code review 補強：request.url 存在時，query_string 不再獨立處理，一律
+  // 以遮蔽後的 request.url 重新產生——因為 query_string 可能來自上游容錯 parser
+  // 對畸形 percent-encoding 的解析結果（例如把 `la%74%=25.033` 解析成
+  // `{'lat%': '25.033'}`），這種資料沒有 raw string 可以重新驗證，獨立判斷有
+  // 漏判風險。以下三個測試驗證：無論 query_string 原本是什麼形狀（string/物件/
+  // 陣列）、內容是否乾淨，只要 request.url 存在，輸出永遠是「以遮蔽後 url 重新
+  // 切出的 string」，不會殘留 query_string 原始內容。
+  it('request.url 存在時，query_string（string 形狀）完全由遮蔽後的 url 重新產生', () => {
     const event = baseEvent({
       request: {
-        url: 'https://api.stellar-zone.com/api/venues',
+        url: 'https://api.stellar-zone.com/api/venues?sort=distance&lat=25.033&lng=121.564',
         query_string: '?lat=25.033&lng=121.564',
       },
     });
 
     const result = redactSentryEvent(event);
 
-    expect(result.request?.query_string).toBe('?lat=REDACTED&lng=REDACTED');
+    expect(result.request?.query_string).toBe('?sort=distance&lat=REDACTED&lng=REDACTED');
   });
 
-  it('query_string 為物件形狀時正確遮蔽', () => {
+  it('request.url 存在時，query_string（物件形狀，含容錯 parser 可能產生的畸形 key）完全由遮蔽後的 url 重新產生', () => {
     const event = baseEvent({
       request: {
-        url: 'https://api.stellar-zone.com/api/venues',
-        query_string: { lat: '25.033', lng: '121.564', region: '台北' },
+        url: 'https://api.stellar-zone.com/api/venues?sort=distance&lat=25.033&lng=121.564',
+        // 模擬容錯 parser 把 `la%74%=25.033` 解析成 `{'lat%': '25.033'}` 殘留下來的
+        // 畸形 key；因為 request.url 存在，這個物件的內容會被完全忽略、不會殘留。
+        query_string: { 'lat%': '25.033', lng: '121.564', region: '台北' },
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.query_string).toBe('?sort=distance&lat=REDACTED&lng=REDACTED');
+  });
+
+  it('request.url 存在時，query_string（[key,value][] 陣列形狀）完全由遮蔽後的 url 重新產生', () => {
+    const event = baseEvent({
+      request: {
+        url: 'https://api.stellar-zone.com/api/venues?sort=distance&lat=25.033&lng=121.564',
+        query_string: [
+          ['lat%', '25.033'],
+          ['lng', '121.564'],
+          ['region', '台北'],
+        ],
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.query_string).toBe('?sort=distance&lat=REDACTED&lng=REDACTED');
+  });
+
+  it('request.url 因畸形 percent-encoding fail closed（整段 query 被捨棄）時，query_string 一併清空為空字串', () => {
+    const event = baseEvent({
+      request: {
+        url: 'https://api.stellar-zone.com/api/venues?sort=distance&lat%=25.033&lng=121.564',
+        // 即使 query_string 本身長得「乾淨」，也要以 url 的遮蔽結果為準一併清空，
+        // 不能因為 query_string 看起來沒問題就讓它殘留座標資訊。
+        query_string: { lat: '25.033', lng: '121.564' },
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.url).toBe('https://api.stellar-zone.com/api/venues');
+    expect(result.request?.query_string).toBe('');
+  });
+
+  // request.url 不存在時，query_string 是唯一資訊來源，只能就地保守處理：容錯
+  // parser 可能已經把畸形 percent-encoding decode 到一半（如 `lat%`、`lat%25`），
+  // 這類 key 轉小寫後以 lat/lng 開頭就一併遮蔽，即使不完全等於 lat/lng。
+  it('沒有 request.url 時，query_string 物件形狀中「像座標 key」的畸形 key（lat%、lat%25）也保守遮蔽，正常 lat/lng 與非座標參數不受影響', () => {
+    const event = baseEvent({
+      request: {
+        query_string: {
+          'lat%': '25.033',
+          'lat%25': '25.1',
+          lng: '121.564',
+          region: '台北',
+        },
       },
     });
 
     const result = redactSentryEvent(event);
 
     expect(result.request?.query_string).toEqual({
-      lat: 'REDACTED',
+      'lat%': 'REDACTED',
+      'lat%25': 'REDACTED',
       lng: 'REDACTED',
       region: '台北',
     });
   });
 
-  it('query_string 為 [key,value][] 陣列形狀時正確遮蔽', () => {
+  it('沒有 request.url 時，query_string 陣列形狀的正常 lat/lng 仍被遮蔽，非座標參數不受影響', () => {
     const event = baseEvent({
       request: {
-        url: 'https://api.stellar-zone.com/api/venues',
         query_string: [
           ['lat', '25.033'],
           ['lng', '121.564'],

@@ -103,20 +103,60 @@ export function redactCoordsFromQueryString(queryString: string): string {
   return hasLeadingMark ? `?${redacted}` : redacted;
 }
 
-/** 遮蔽物件形狀的 query_string（Sentry RequestEventData.query_string 的其中一種型態）。 */
+/**
+ * 從一個「已知安全」的 URL/path 字串（必須是 redactCoordsFromUrl 的回傳值，
+ * 不是任意外部輸入）取出 query 部分（含開頭 `?`；沒有 query 則回傳空字串）。
+ *
+ * 用於 sentryRedaction.ts：request.url 遮蔽後，request.query_string 一律從
+ * 遮蔽後的 url 重新切出，而不是獨立處理 query_string 原本的值——因為
+ * query_string 可能來自上游容錯 parser 對畸形 percent-encoding 的解析結果
+ * （例如 `la%74%=25.033` 被解析成 `{'lat%': '25.033'}`），這種已經 decode 過
+ * 一半的資料沒有 raw string 可以重新驗證，無法保證獨立判斷時不會漏判。
+ *
+ * 因為輸入保證是 redactCoordsFromUrl 的輸出（本身就是由合法 URL 的
+ * pathname/origin 組成，不含未解析的畸形 percent-encoding），這裡不需要
+ * 再做一次 fail-closed 判斷；try/catch 只是防禦性寫法。
+ */
+export function extractQueryFromUrl(url: string): string {
+  try {
+    return new URL(url, RELATIVE_URL_BASE).search;
+  } catch {
+    return '';
+  }
+}
+
+// Record/pairs 形狀的 query_string 沒有 raw string 可以重新 decode 驗證（上游容錯
+// parser 已經處理過一次，例如把畸形 percent-encoding `la%74%` decode 到一半變成
+// `lat%`）。只能保守比對：key 轉小寫後以 `lat`/`lng` 開頭（不要求完全相等）就視為
+// 座標 key 一併遮蔽，寧可多遮蔽幾個巧合同字首的無關參數，也不能讓座標漏出。
+const isSuspiciousCoordKey = (key: string): boolean => {
+  const lower = key.toLowerCase();
+  return lower.startsWith('lat') || lower.startsWith('lng');
+};
+
+/**
+ * 遮蔽物件形狀的 query_string（Sentry RequestEventData.query_string 的其中一種型態）。
+ * 只在 request.url 不存在、沒有其他資訊來源可用時才會走到這裡（見 sentryRedaction.ts）。
+ */
 export function redactCoordsFromQueryRecord(
   record: Record<string, string>
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(record)) {
-    result[key] = isCoordKey(key) ? 'REDACTED' : value;
+    result[key] = isSuspiciousCoordKey(key) ? 'REDACTED' : value;
   }
   return result;
 }
 
-/** 遮蔽 [key, value][] 陣列形狀的 query_string（Sentry RequestEventData.query_string 的另一種型態）。 */
+/**
+ * 遮蔽 [key, value][] 陣列形狀的 query_string（Sentry RequestEventData.query_string 的另一種型態）。
+ * 只在 request.url 不存在、沒有其他資訊來源可用時才會走到這裡（見 sentryRedaction.ts）。
+ */
 export function redactCoordsFromQueryPairs(
   pairs: Array<[string, string]>
 ): Array<[string, string]> {
-  return pairs.map(([key, value]): [string, string] => [key, isCoordKey(key) ? 'REDACTED' : value]);
+  return pairs.map(([key, value]): [string, string] => [
+    key,
+    isSuspiciousCoordKey(key) ? 'REDACTED' : value,
+  ]);
 }
