@@ -2,6 +2,7 @@ import {
   computeActiveWeeks,
   computeCompositeScore,
   computeNewVenueScore,
+  computeViewCap,
   computeViewScore,
 } from '../../src/services/venueService';
 
@@ -132,52 +133,105 @@ describe('computeNewVenueScore（新場地加分衰減公式邊界）', () => {
   });
 });
 
-describe('computeViewScore（VIEW_SCORE_CAP = 300）', () => {
+describe('computeViewCap（viewCap = max(30, P90)，P90 取升冪 index floor(0.9n)）', () => {
+  it('空陣列 → viewCap = 30', () => {
+    expect(computeViewCap([])).toBe(30);
+  });
+
+  it('全部瀏覽數為 0 → viewCap = 30，viewScore 為 0 且 compositeScore 無 NaN / Infinity', () => {
+    const cap = computeViewCap([0, 0, 0, 0]);
+    expect(cap).toBe(30);
+    expect(computeViewScore(0, cap)).toBe(0);
+    const score = computeCompositeScore(10, 0, 10, cap);
+    expect(Number.isFinite(score)).toBe(true);
+  });
+
+  it('P90 < 30（10 個場地皆 ≤ 10）→ 下限生效 viewCap = 30', () => {
+    expect(computeViewCap([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])).toBe(30);
+  });
+
+  it('P90 = 30 → viewCap = 30（邊界）', () => {
+    expect(computeViewCap([0, 0, 0, 0, 0, 0, 0, 0, 0, 30])).toBe(30);
+  });
+
+  it('P90 > 30（10 個場地 0..90 → P90 = 90）→ viewCap = P90', () => {
+    expect(computeViewCap([0, 10, 20, 30, 40, 50, 60, 70, 80, 90])).toBe(90);
+  });
+
+  it('n = 1：views = 500 → 500；views = 5 → 30', () => {
+    expect(computeViewCap([500])).toBe(500);
+    expect(computeViewCap([5])).toBe(30);
+  });
+
+  it('n = 11 含離群值 5000：index = 9，取第 10 小的值，不被離群值拉高', () => {
+    const views = [5000, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5];
+    expect(computeViewCap(views)).toBe(50);
+  });
+
+  it('未排序、含重複值 → 結果正確，且不 mutate 傳入陣列', () => {
+    const input = [100, 40, 40, 100, 40, 100, 40, 100, 40, 100];
+    const snapshot = [...input];
+    expect(computeViewCap(input)).toBe(100);
+    expect(input).toEqual(snapshot);
+  });
+
+  it('以數值排序而非字典序（[9, 10, 100] 不被排成 [10, 100, 9]）', () => {
+    // 字典序排成 [10, 100, 9] 會取到 9 → 下限 30；數值排序取 100
+    expect(computeViewCap([9, 10, 100])).toBe(100);
+  });
+});
+
+describe('computeViewScore(recentViews, viewCap)', () => {
   it('recentViews = 0 → viewScore = 0', () => {
-    expect(computeViewScore(0)).toBe(0);
+    expect(computeViewScore(0, 300)).toBe(0);
   });
 
-  it('recentViews = 150 → viewScore = 0.5', () => {
-    expect(computeViewScore(150)).toBe(0.5);
+  it('viewCap = 300、recentViews = 150 → viewScore = 0.5', () => {
+    expect(computeViewScore(150, 300)).toBe(0.5);
   });
 
-  it('recentViews = 300 → viewScore = 1（cap 邊界）', () => {
-    expect(computeViewScore(300)).toBe(1);
+  it('recentViews = viewCap → viewScore = 1（cap 邊界）', () => {
+    expect(computeViewScore(300, 300)).toBe(1);
   });
 
-  it('recentViews = 5000（離群值）→ viewScore clamp 為 1，不超過 1', () => {
-    expect(computeViewScore(5000)).toBe(1);
+  it('recentViews > viewCap（5000 對 90）→ clamp 為 1', () => {
+    expect(computeViewScore(5000, 90)).toBe(1);
   });
 
-  it('沒有任何 venueViewDaily bucket（recentViews = 0）→ 不報錯', () => {
-    expect(() => computeViewScore(0)).not.toThrow();
-    expect(computeViewScore(0)).toBe(0);
+  it('同一 recentViews，viewCap 較大者 viewScore 較小', () => {
+    expect(computeViewScore(50, 200)).toBeLessThan(computeViewScore(50, 100));
   });
 });
 
 describe('computeCompositeScore（綜合分數計算與加權方向）', () => {
-  it('activeWeeks=13、recentViews=150、weeksSinceCreated=10 → compositeScore 精確等於 0.4', () => {
-    // 0.5(活躍週數) * 0.5 + 0.5(瀏覽數) * 0.3 + 0(新場地，已出保護期) * 0.2 = 0.4
-    expect(computeCompositeScore(13, 150, 10)).toBeCloseTo(0.4, 10);
+  it('activeWeeks=13、recentViews=viewCap/2、weeksSinceCreated=10 → 0.375', () => {
+    // 0.5 * 0.45 + 0.5 * 0.3 + 0 * 0.25
+    expect(computeCompositeScore(13, 50, 10, 100)).toBeCloseTo(0.375, 10);
   });
 
-  it('三維度皆滿分 → compositeScore = 1.0', () => {
-    expect(computeCompositeScore(26, 300, 0)).toBeCloseTo(1.0, 10);
+  it('三維度皆滿分 → 1.0', () => {
+    expect(computeCompositeScore(26, 100, 0, 100)).toBeCloseTo(1.0, 10);
   });
 
-  it('三維度皆為 0 → compositeScore = 0', () => {
-    expect(computeCompositeScore(0, 0, 100)).toBe(0);
+  it('權重鎖定：僅活躍度滿分 0.45、僅瀏覽滿分 0.3、僅新場地滿分 0.25', () => {
+    expect(computeCompositeScore(26, 0, 100, 100)).toBeCloseTo(0.45, 10);
+    expect(computeCompositeScore(0, 100, 100, 100)).toBeCloseTo(0.3, 10);
+    expect(computeCompositeScore(0, 0, 0, 100)).toBeCloseTo(0.25, 10);
   });
 
-  it('相同活躍週數與新場地加分，recentViews 較高者 compositeScore 較高', () => {
-    const lower = computeCompositeScore(10, 50, 10);
-    const higher = computeCompositeScore(10, 200, 10);
+  it('三維度皆為 0 → 0', () => {
+    expect(computeCompositeScore(0, 0, 100, 100)).toBe(0);
+  });
+
+  it('相同活躍週數與新場地加分，recentViews 較高者分數較高', () => {
+    const lower = computeCompositeScore(10, 50, 10, 300);
+    const higher = computeCompositeScore(10, 200, 10, 300);
     expect(higher).toBeGreaterThan(lower);
   });
 
-  it('相同瀏覽數與新場地加分，activeWeeks 較高者 compositeScore 較高', () => {
-    const lower = computeCompositeScore(5, 100, 10);
-    const higher = computeCompositeScore(20, 100, 10);
+  it('相同瀏覽數與新場地加分，activeWeeks 較高者分數較高', () => {
+    const lower = computeCompositeScore(5, 100, 10, 300);
+    const higher = computeCompositeScore(20, 100, 10, 300);
     expect(higher).toBeGreaterThan(lower);
   });
 });

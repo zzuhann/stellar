@@ -808,6 +808,141 @@ describe('VenueService.getVenues — fetchAll 效能設計與 cold start（避�
     expect(result.venues.map(v => v.id)).toEqual(['v-newer', 'v-high-viewcount']);
   });
 
+  describe('viewCap 母體與整合', () => {
+    const activeVenue = (id: string, extra: Record<string, unknown> = {}) =>
+      venueDoc(id, {
+        name: id,
+        status: 'active',
+        eventCount: 0,
+        eventRefs: [],
+        createdAt: fakeTimestamp(0),
+        ...extra,
+      });
+    const bucket = (venueId: string, count: number) => ({
+      data: () => ({ venueId, count, date: '2099-01-01' }),
+    });
+    // 活躍週數與新場地分數皆為 0，compositeScore = 0.3 * viewScore，可反推 viewCap
+    const scoresById = async (svc: VenueService) => {
+      const all = await (
+        svc as unknown as { fetchAll: () => Promise<{ id: string; compositeScore: number }[]> }
+      ).fetchAll();
+      return new Map(all.map(v => [v.id, v.compositeScore]));
+    };
+
+    it('母體只含 active 場地：非 active 場地的高瀏覽不影響 viewCap', async () => {
+      const actives = Array.from({ length: 10 }, (_, i) => activeVenue(`a${i}`));
+      const pendings = Array.from({ length: 3 }, (_, i) =>
+        activeVenue(`p${i}`, { status: 'pending' })
+      );
+      mockVenuesGet.mockResolvedValue({ docs: [...actives, ...pendings] });
+      mockViewsGet.mockResolvedValue({
+        docs: [...actives.map(v => bucket(v.id, 40)), ...pendings.map(v => bucket(v.id, 5000))],
+      });
+
+      const scores = await scoresById(service);
+      expect(scores.get('a0')).toBeCloseTo(0.3, 10); // viewCap = 40
+    });
+
+    it('母體以 venues 清單為準：venueViewDaily 殘留 venueId 不進入 P90', async () => {
+      const actives = Array.from({ length: 10 }, (_, i) => activeVenue(`a${i}`));
+      mockVenuesGet.mockResolvedValue({ docs: actives });
+      mockViewsGet.mockResolvedValue({
+        docs: [
+          ...actives.slice(0, 9).map(v => bucket(v.id, 40)),
+          bucket('a9', 20),
+          bucket('ghost-1', 5000),
+          bucket('ghost-2', 5000),
+          bucket('ghost-3', 5000),
+        ],
+      });
+
+      const scores = await scoresById(service);
+      // 若殘留值被計入 viewCap 會變 5000，a9 會是 0.3 * 20/5000
+      expect(scores.get('a9')).toBeCloseTo((0.3 * 20) / 40, 10);
+    });
+
+    it('無 bucket 的 active 場地以 0 計入母體（viewCap 與只取有 bucket 場地不同）', async () => {
+      const actives = Array.from({ length: 20 }, (_, i) => activeVenue(`a${i}`));
+      mockVenuesGet.mockResolvedValue({ docs: actives });
+      mockViewsGet.mockResolvedValue({ docs: [bucket('a0', 100), bucket('a1', 15)] });
+
+      const scores = await scoresById(service);
+      // 含 18 個 0：sorted idx 18 = 15 → viewCap = 30；只取 bucket 場地則 viewCap = 100
+      expect(scores.get('a1')).toBeCloseTo((0.3 * 15) / 30, 10);
+    });
+
+    it('n = 11 含離群值 5000：離群場地 viewScore = 1，其餘以 P90 計算不被壓縮', async () => {
+      const actives = Array.from({ length: 11 }, (_, i) => activeVenue(`a${i}`));
+      mockVenuesGet.mockResolvedValue({ docs: actives });
+      const views = [5000, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+      mockViewsGet.mockResolvedValue({ docs: actives.map((v, i) => bucket(v.id, views[i])) });
+
+      const scores = await scoresById(service);
+      expect(scores.get('a0')).toBeCloseTo(0.3, 10);
+      expect(scores.get('a5')).toBeCloseTo((0.3 * 25) / 50, 10); // viewCap = 50
+    });
+
+    it('新權重生效：舊權重（0.5/0.3/0.2、cap 300）A 在前，新規則 B 在前', async () => {
+      const filler = Array.from({ length: 8 }, (_, i) => activeVenue(`f${i}`));
+      const venueA = activeVenue('A', { createdAt: fakeTimestamp(Date.now()) }); // 新場地、0 瀏覽
+      const venueB = activeVenue('B'); // 舊場地、100 瀏覽
+      mockVenuesGet.mockResolvedValue({ docs: [venueA, venueB, ...filler] });
+      mockViewsGet.mockResolvedValue({
+        docs: [bucket('B', 100), ...filler.map(v => bucket(v.id, 100))],
+      });
+
+      // 舊：A = 0.2、B = 0.3 * 100/300 = 0.1；新（viewCap = 100）：A = 0.25、B = 0.3
+      const result = await service.getVenues({});
+      if (Array.isArray(result)) throw new Error('expected paginated result');
+      const ids = result.venues.map(v => v.id);
+      expect(ids.indexOf('B')).toBeLessThan(ids.indexOf('A'));
+    });
+
+    it('viewCap 求出不新增 Firestore 讀取：venues get、db.getAll、venueViewDaily query 各 1 次', async () => {
+      const firebase = jest.requireMock('../../src/config/firebase');
+      const actives = Array.from({ length: 11 }, (_, i) =>
+        activeVenue(`a${i}`, { eventRefs: [{ id: `e${i}` }] })
+      );
+      mockVenuesGet.mockResolvedValue({ docs: actives });
+
+      await service.getVenues({});
+
+      expect(mockVenuesGet).toHaveBeenCalledTimes(1);
+      expect(firebase.db.getAll).toHaveBeenCalledTimes(1);
+      expect(mockViewsGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('cache 有效期間內新增瀏覽資料，viewCap 不變；cache 失效後才重算', async () => {
+      const actives = Array.from({ length: 10 }, (_, i) => activeVenue(`a${i}`));
+      mockVenuesGet.mockResolvedValue({ docs: actives });
+      mockViewsGet.mockResolvedValue({ docs: actives.map(v => bucket(v.id, 40)) });
+
+      const first = await scoresById(service);
+      expect(first.get('a0')).toBeCloseTo(0.3, 10); // viewCap = 40
+
+      mockViewsGet.mockResolvedValue({ docs: actives.map(v => bucket(v.id, 400)) });
+      const cached = await scoresById(service);
+      expect(cached.get('a0')).toBeCloseTo(0.3, 10);
+      expect(mockViewsGet).toHaveBeenCalledTimes(1);
+
+      cache.clear();
+      mockViewsGet.mockResolvedValue({
+        docs: [...actives.slice(1).map(v => bucket(v.id, 400)), bucket('a0', 40)],
+      });
+      const refreshed = await scoresById(service);
+      expect(refreshed.get('a0')).toBeCloseTo((0.3 * 40) / 400, 10); // viewCap = 400
+    });
+
+    it('API response 不含 compositeScore 與 viewCap', async () => {
+      mockVenuesGet.mockResolvedValue({ docs: [activeVenue('a0')] });
+
+      const result = await service.getVenues({});
+      if (Array.isArray(result)) throw new Error('expected paginated result');
+      expect(result.venues[0]).not.toHaveProperty('compositeScore');
+      expect(result.venues[0]).not.toHaveProperty('viewCap');
+    });
+  });
+
   it('mapDocToVenue：lat 缺值但 lng 有值時，兩者正規化為 (0,0)，判定為缺座標並排在最後（防止單側缺值誤判為有效座標）', async () => {
     const venues = [
       venueDoc('v-half-missing', {
