@@ -99,7 +99,10 @@ export class EventController {
     }
 
     const event = await this.eventService.createEvent(eventData, userId, userEmail);
-    res.status(201).json(event);
+    // Never echo the submitter's email back to the client
+    const publicEvent = { ...event };
+    delete publicEvent.createdByEmail;
+    res.status(201).json(publicEvent);
   };
 
   // 編輯活動
