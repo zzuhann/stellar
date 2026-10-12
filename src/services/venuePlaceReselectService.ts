@@ -63,8 +63,15 @@ function assertWithinLimit(count: number) {
 function compareAddress(venueAddress: unknown, googleAddress: string) {
   const current = typeof venueAddress === 'string' ? venueAddress : '';
   const currentEmpty = current.trim() === '';
+  const googleEmpty = googleAddress.trim() === '';
   const same = isSameAddress(current, googleAddress);
-  return { current, currentEmpty, same, choiceRequired: !same && !currentEmpty };
+  return {
+    current,
+    currentEmpty,
+    googleEmpty,
+    same,
+    choiceRequired: !same && !currentEmpty && !googleEmpty,
+  };
 }
 
 function pickAddress(
@@ -72,6 +79,8 @@ function pickAddress(
   googleAddress: string,
   choice?: AddressChoice
 ): { address: string; write: boolean } {
+  // Never overwrite the address with an empty Google value
+  if (comparison.googleEmpty) return { address: comparison.current, write: false };
   if (comparison.currentEmpty) return { address: googleAddress, write: true };
   if (comparison.same) return { address: comparison.current, write: false };
   if (!choice) {

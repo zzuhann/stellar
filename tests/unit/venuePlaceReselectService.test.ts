@@ -435,6 +435,39 @@ describe('B10 地址決策', () => {
   });
 });
 
+describe('B10 Google 地址為空：保留現有地址', () => {
+  const current = '台北市中正區A路1號';
+
+  it.each([
+    ['空字串', ''],
+    ['僅空白', '   '],
+    ['缺欄位', undefined],
+  ])('Google 地址%s：不要求選擇，apply 帶 google 也不改寫 address', async (_label, formatted) => {
+    seedVenue({ address: current });
+    respond(googleOk({ formattedAddress: formatted }));
+
+    const preview = await service.preview(VENUE_ID, PLACE);
+    expect(preview.address.choiceRequired).toBe(false);
+    expect(preview.address.current).toBe(current);
+
+    const result = await service.apply(VENUE_ID, PLACE, 'google');
+    expect(venueUpdate()).not.toHaveProperty('address');
+    expect(result.address).toBe(current);
+  });
+
+  it('現有與 Google 皆空：不寫入 address', async () => {
+    seedVenue({ address: '' });
+    respond(googleOk({ formattedAddress: '' }));
+
+    const preview = await service.preview(VENUE_ID, PLACE);
+    expect(preview.address.choiceRequired).toBe(false);
+
+    const result = await service.apply(VENUE_ID, PLACE);
+    expect(venueUpdate()).not.toHaveProperty('address');
+    expect(result.address).toBe('');
+  });
+});
+
 describe('B11 其他欄位不動', () => {
   it('payload 只含 placeId、lat、lng、eventRefs、eventCount、updatedAt', async () => {
     seedVenue();

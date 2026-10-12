@@ -1081,7 +1081,9 @@ components:
             current: { type: string }
             google: { type: string }
             sameAfterNormalize: { type: boolean }
-            choiceRequired: { type: boolean }
+            choiceRequired:
+              type: boolean
+              description: 地址正規化後不同、現有地址非空且 Google 地址非空時為 true；Google 地址為空時一律保留現有地址
         linkableEvents:
           type: array
           maxItems: 100
