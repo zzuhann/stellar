@@ -404,6 +404,11 @@ export const eventSchemas = {
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
     reservation: reservationSchema.optional(),
+    // 匿名投稿者的選填通知信箱；空字串視為未填
+    submitterEmail: z.preprocess(
+      val => (typeof val === 'string' ? val.trim() || undefined : val),
+      z.string().email('信箱格式不正確').max(254, '信箱不能超過 254 個字').optional()
+    ),
   }),
 
   update: z.object({
