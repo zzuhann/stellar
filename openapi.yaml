@@ -511,6 +511,133 @@ paths:
                   code: RATE_LIMITED,
                 }
 
+  /venues/admin/{id}/place-reselect/preview:
+    post:
+      tags: [venues]
+      summary: 預覽場地重新選擇地點（僅 admin，唯讀）
+      description: >-
+        後端以 placeId 向 Google 查座標與地址，回傳預覽，不寫入任何資料。
+        Rate limit：30 req / 15min（與 apply 共用）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VenuePlaceReselectRequest' }
+      responses:
+        '200':
+          description: 預覽結果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VenuePlaceReselectPreview' }
+        '400':
+          description: placeId 格式不合（VALIDATION_ERROR，field 為 placeId）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        '401': { description: 未登入 }
+        '403':
+          description: 非管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Admin access required, code: ADMIN_REQUIRED }
+        '404':
+          description: 場地不存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Venue not found, code: VENUE_NOT_FOUND }
+        '409':
+          description: 新 placeId 已被其他場地使用
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: Place ID is already used by another venue
+                code: PLACE_ID_IN_USE
+                details: { venue: { id: venue-2, name: 某某咖啡 } }
+        '422':
+          description: >-
+            Google 查詢失敗（PLACE_LOOKUP_FAILED）、Google 無座標（PLACE_NO_COORDINATES），
+            或候選活動超過 400 筆（TOO_MANY_LINKABLE_EVENTS，details.linkableEventCount 為實際總數）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: Too many linkable events
+                code: TOO_MANY_LINKABLE_EVENTS
+                details: { linkableEventCount: 523 }
+        '429': { description: 超過 rate limit }
+        '503': { description: Google API key 未設定（SERVICE_UNAVAILABLE） }
+
+  /venues/admin/{id}/place-reselect:
+    post:
+      tags: [venues]
+      summary: 套用場地重新選擇地點（僅 admin）
+      description: >-
+        單一 transaction 內更新場地 placeId、座標（必要時地址），並補連 approved、
+        location.placeId 相同、venueId 為空的活動。以 transaction 內讀到的資料為準，回傳實際補連結果。
+        Rate limit：30 req / 15min（與 preview 共用）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VenuePlaceReselectRequest' }
+      responses:
+        '200':
+          description: 套用成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VenuePlaceReselectResult' }
+        '400':
+          description: >-
+            placeId 或 addressChoice 格式不合（VALIDATION_ERROR），或地址不同卻未帶
+            addressChoice（ADDRESS_CHOICE_REQUIRED）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: Address choice is required
+                code: ADDRESS_CHOICE_REQUIRED
+                field: addressChoice
+        '401': { description: 未登入 }
+        '403':
+          description: 非管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Admin access required, code: ADMIN_REQUIRED }
+        '404':
+          description: 場地不存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Venue not found, code: VENUE_NOT_FOUND }
+        '409':
+          description: 新 placeId 已被其他場地使用（transaction 內再檢查）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: Place ID is already used by another venue
+                code: PLACE_ID_IN_USE
+                details: { venue: { id: venue-2, name: 某某咖啡 } }
+        '422':
+          description: >-
+            PLACE_LOOKUP_FAILED、PLACE_NO_COORDINATES，或 transaction 內候選活動超過 400 筆
+            （TOO_MANY_LINKABLE_EVENTS）；皆不寫入任何資料
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { description: 超過 rate limit }
+        '503': { description: Google API key 未設定（SERVICE_UNAVAILABLE） }
+
   /venues/batch-review:
     patch:
       tags: [venues]
@@ -902,6 +1029,10 @@ components:
             機器可讀的錯誤代碼，例如 EVENT_NOT_FOUND、ARTIST_NOT_FOUND、VENUE_NOT_FOUND、
             FORBIDDEN、VALIDATION_ERROR、SERVICE_UNAVAILABLE、RATE_LIMITED、
             ROUTE_NOT_FOUND、INTERNAL_ERROR 等，實際值請以拋出的 AppError 為準。
+        details:
+          description: >-
+            選用的結構化補充資料（optional，僅部分錯誤帶，例如 PLACE_ID_IN_USE 的
+            details.venue、TOO_MANY_LINKABLE_EVENTS 的 details.linkableEventCount）。
 
     ValidationError:
       description: VALIDATION_ERROR 的回應（400），部分情境會額外帶 field。
@@ -912,6 +1043,65 @@ components:
             field:
               type: string
               description: 驗證失敗的欄位名稱（optional，並非所有 VALIDATION_ERROR 都會帶此欄位）
+
+    LinkableEvent:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+
+    VenuePlaceReselectRequest:
+      type: object
+      required: [placeId]
+      properties:
+        placeId:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{10,300}$'
+        addressChoice:
+          type: string
+          enum: [existing, google]
+          description: 僅在 preview 的 address.choiceRequired 為 true 時必填，其餘情況忽略
+
+    VenuePlaceReselectPreview:
+      type: object
+      properties:
+        placeId: { type: string }
+        unchanged: { type: boolean, description: 新 placeId 等於場地現有 placeId }
+        google:
+          type: object
+          properties:
+            formattedAddress: { type: string }
+            lat: { type: number }
+            lng: { type: number }
+            isAddressType: { type: boolean, description: placeId 非 ChIJ 開頭（僅提醒，不擋） }
+            types: { type: array, items: { type: string } }
+        address:
+          type: object
+          properties:
+            current: { type: string }
+            google: { type: string }
+            sameAfterNormalize: { type: boolean }
+            choiceRequired: { type: boolean }
+        linkableEvents:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/LinkableEvent' }
+        linkableEventCount:
+          type: integer
+          description: 實際候選總數（成功回應時必 <= 400，名單可能少於總數）
+
+    VenuePlaceReselectResult:
+      type: object
+      properties:
+        venueId: { type: string }
+        placeId: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        address: { type: string }
+        linkedEvents:
+          type: array
+          items: { $ref: '#/components/schemas/LinkableEvent' }
+        linkedCount: { type: integer }
 
     FirestoreTimestamp:
       type: object
