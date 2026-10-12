@@ -3,6 +3,7 @@ import { VenueController } from '../controllers/venueController';
 import { authenticateToken, optionalAuthenticate, requireAdmin } from '../middleware/auth';
 import {
   venueDetailLimiter,
+  venuePlaceReselectLimiter,
   venuesListLimiter,
   venueViewLimiter,
 } from '../middleware/rateLimiters';
@@ -42,6 +43,22 @@ router.patch(
   venueController.batchStatus
 );
 
+router.post(
+  '/admin/:id/place-reselect/preview',
+  authenticateToken,
+  requireAdmin,
+  venuePlaceReselectLimiter,
+  validateRequest({ body: venueSchemas.placeReselect }),
+  venueController.previewPlaceReselect
+);
+router.post(
+  '/admin/:id/place-reselect',
+  authenticateToken,
+  requireAdmin,
+  venuePlaceReselectLimiter,
+  validateRequest({ body: venueSchemas.placeReselect }),
+  venueController.applyPlaceReselect
+);
 router.get('/admin/:id', authenticateToken, requireAdmin, venueController.getAdminVenueById);
 router.get('/:id', venueDetailLimiter, optionalAuthenticate, venueController.getVenueById);
 router.post('/:id/view', venueViewLimiter, venueController.recordView);

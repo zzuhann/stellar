@@ -81,3 +81,15 @@ export const importFetchImageLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many image fetch requests, please try again later', code: 'RATE_LIMITED' },
 });
+
+// 每次呼叫都會打 Google Places，限流是為了守配額
+export const venuePlaceReselectLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many place reselect requests, please try again later',
+    code: 'RATE_LIMITED',
+  },
+});

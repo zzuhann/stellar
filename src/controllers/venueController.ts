@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { VenueService } from '../services/venueService';
+import * as venuePlaceReselectService from '../services/venuePlaceReselectService';
 import { venueSchemas } from '../middleware/validation';
 import {
   CreateVenueData,
@@ -161,6 +162,16 @@ export class VenueController {
     }
 
     res.json(venue);
+  };
+
+  previewPlaceReselect = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { placeId } = req.body as z.infer<typeof venueSchemas.placeReselect>;
+    res.json(await venuePlaceReselectService.preview(String(req.params.id), placeId));
+  };
+
+  applyPlaceReselect = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { placeId, addressChoice } = req.body as z.infer<typeof venueSchemas.placeReselect>;
+    res.json(await venuePlaceReselectService.apply(String(req.params.id), placeId, addressChoice));
   };
 
   batchReview = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

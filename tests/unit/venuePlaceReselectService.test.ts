@@ -48,7 +48,7 @@ const makeSnap = (coll: Coll, id: string) => ({
 });
 
 function makeRef(coll: Coll, id: string): FakeRef {
-  return { id, path: `${coll}/${id}`, get: async () => makeSnap(coll, id) };
+  return { id, path: `${coll}/${id}`, get: () => Promise.resolve(makeSnap(coll, id)) };
 }
 
 function makeQuery(coll: Coll, field: string, value: unknown, max = Infinity): FakeQuery {
@@ -57,12 +57,12 @@ function makeQuery(coll: Coll, field: string, value: unknown, max = Infinity): F
     coll,
     field,
     limit: n => makeQuery(coll, field, value, n),
-    get: async () => {
+    get: () => {
       const docs = Object.keys(store[coll])
         .filter(id => getPath(store[coll][id], field) === value)
         .slice(0, max)
         .map(id => makeSnap(coll, id));
-      return { size: docs.length, empty: docs.length === 0, docs };
+      return Promise.resolve({ size: docs.length, empty: docs.length === 0, docs });
     },
   };
 }
@@ -146,7 +146,9 @@ const googleOk = (overrides: GoogleBody = {}): GoogleBody => ({
 
 const mockFetch = jest.fn();
 const respond = (body: GoogleBody, status = 200) => {
-  mockFetch.mockResolvedValue(new Response(JSON.stringify(body), { status }));
+  mockFetch.mockImplementation(() =>
+    Promise.resolve(new Response(JSON.stringify(body), { status }))
+  );
 };
 
 const originalFetch = global.fetch;
@@ -472,9 +474,7 @@ describe('B12 原子性', () => {
 
   it('tx 內讀取拋錯：錯誤向上傳、不清快取', async () => {
     seedVenue();
-    mockRunTransaction.mockImplementationOnce(async () => {
-      throw new Error('read failed');
-    });
+    mockRunTransaction.mockImplementationOnce(() => Promise.reject(new Error('read failed')));
 
     await expect(service.apply(VENUE_ID, PLACE)).rejects.toThrow('read failed');
     noCacheCleared();

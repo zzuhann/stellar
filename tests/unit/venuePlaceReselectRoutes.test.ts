@@ -18,7 +18,8 @@ jest.mock('../../src/config/firebase', () => ({
   db: {
     collection: () => ({
       doc: (uid: string) => ({
-        get: async () => ({ data: () => ({ role: uid === 'admin-uid' ? 'admin' : 'user' }) }),
+        get: () =>
+          Promise.resolve({ data: () => ({ role: uid === 'admin-uid' ? 'admin' : 'user' }) }),
       }),
     }),
   },
@@ -44,10 +45,11 @@ const applyPath = '/api/venues/admin/v1/place-reselect';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockVerifyIdToken.mockImplementation(async (token: string) => {
-    if (token === 'admin-token') return { uid: 'admin-uid', email: 'a@example.com' };
-    if (token === 'user-token') return { uid: 'user-uid', email: 'u@example.com' };
-    throw new Error('bad token');
+  mockVerifyIdToken.mockImplementation((token: string) => {
+    if (token === 'admin-token')
+      return Promise.resolve({ uid: 'admin-uid', email: 'a@example.com' });
+    if (token === 'user-token') return Promise.resolve({ uid: 'user-uid', email: 'u@example.com' });
+    return Promise.reject(new Error('bad token'));
   });
 });
 

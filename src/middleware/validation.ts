@@ -311,6 +311,11 @@ export const venueSchemas = {
         message: '至少需要填寫 Instagram 或 Threads',
       }),
   }),
+  // Regex also keeps the id safe to embed in the Google Places URL path
+  placeReselect: z.object({
+    placeId: z.string().regex(/^[A-Za-z0-9_-]{10,300}$/, 'placeId 格式不正確'),
+    addressChoice: z.enum(['existing', 'google']).optional(),
+  }),
   update: z.object({
     name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
     address: z.string().min(1, '地址不能為空').max(500).trim().optional(),
