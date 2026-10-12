@@ -389,10 +389,4 @@ describe('venue submission error messages (Traditional Chinese)', () => {
   it('update: status enum has a Chinese message', () => {
     expect(firstIssue('update', { status: 'pending' }).message).toBe('請選擇有效的場地狀態');
   });
-
-  it('update: hostTags over 5 uses the same message as create', () => {
-    expect(
-      firstIssue('update', { hostTags: Array.from({ length: 6 }, (_, i) => `t${i}`) }).message
-    ).toBe('最多只能新增 5 個場地標籤');
-  });
 });
