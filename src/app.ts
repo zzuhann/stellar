@@ -150,6 +150,7 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
       error: appError.message,
       code: appError.code,
       ...(appError.field ? { field: appError.field } : {}),
+      ...(appError.details !== undefined ? { details: appError.details } : {}),
     });
     return;
   }
