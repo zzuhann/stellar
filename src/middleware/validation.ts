@@ -147,31 +147,53 @@ export const artistSchemas = {
 
 const venueRegionEnum = z.preprocess(
   val => (typeof val === 'string' ? val.replace(/臺/g, '台') : val),
-  z.enum([
-    '台北',
-    '新北',
-    '桃園',
-    '台中',
-    '台南',
-    '高雄',
-    '基隆',
-    '新竹',
-    '嘉義',
-    '宜蘭',
-    '苗栗',
-    '彰化',
-    '南投',
-    '雲林',
-    '屏東',
-    '花蓮',
-    '台東',
-    '澎湖',
-    '金門',
-    '連江',
-  ])
+  z.enum(
+    [
+      '台北',
+      '新北',
+      '桃園',
+      '台中',
+      '台南',
+      '高雄',
+      '基隆',
+      '新竹',
+      '嘉義',
+      '宜蘭',
+      '苗栗',
+      '彰化',
+      '南投',
+      '雲林',
+      '屏東',
+      '花蓮',
+      '台東',
+      '澎湖',
+      '金門',
+      '連江',
+    ],
+    { error: '請選擇有效的地區' }
+  )
 );
 
 // GET /venues 的 limit：若帶必須為正整數字串；sort=random 時為必填（見下方 refine）
+const VENUE_CONTACT_URL_MESSAGE = '請輸入完整網址（以 http:// 或 https:// 開頭）';
+const venueContactUrlSchema = z
+  .string({ error: '預約表單連結格式不正確' })
+  .url(VENUE_CONTACT_URL_MESSAGE)
+  .max(500, '網址不能超過 500 個字')
+  .refine(val => /^https?:\/\//i.test(val), VENUE_CONTACT_URL_MESSAGE);
+
+const venueCapacityRangeEnum = z.enum(['20以下', '20-40', '40-60', '60以上'], {
+  error: '請選擇有效的容納人數範圍',
+});
+const venuePreferredContactEnum = z.enum(['instagram', 'threads', 'line', 'form', 'other'], {
+  error: '請選擇有效的預約聯絡方式',
+});
+const venueSocialHandle = z
+  .string({ error: '社群帳號格式不正確' })
+  .max(500, '社群帳號不能超過 500 個字')
+  .trim()
+  .optional();
+
 const venueLimitQuerySchema = z
   .string()
   .regex(/^\d+$/, { error: 'limit must be a positive integer' })
@@ -290,30 +312,65 @@ export const venueSchemas = {
       .max(50, '一次最多更新 50 筆'),
   }),
   create: z.object({
-    name: z.string().min(1, '場地名稱不能為空').max(200).trim(),
-    address: z.string().min(1, '地址不能為空').max(500).trim(),
+    name: z
+      .string({ error: '請填寫場地名稱' })
+      .min(1, '場地名稱不能為空')
+      .max(200, '場地名稱不能超過 200 個字')
+      .trim(),
+    address: z
+      .string({ error: '請填寫地址' })
+      .min(1, '地址不能為空')
+      .max(500, '地址不能超過 500 個字')
+      .trim(),
     region: venueRegionEnum,
-    lat: z.number().optional(),
-    lng: z.number().optional(),
-    placeId: z.string().max(500).trim().optional(),
-    nearestMrt: z.string().max(100).trim().optional(),
-    mrtWalkMinutes: z.number().int().min(0).nullable().optional(),
-    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']),
-    description: z.string().max(3000).trim().optional(),
-    hostTags: z.array(z.string().min(1).max(50)).max(5, '最多只能新增 5 個場地標籤').optional(),
-    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']),
-    contactUrl: z.string().url('聯絡網址格式不正確').max(500).optional(),
-    coverPhoto: z.string().url('封面照片網址格式不正確'),
+    lat: z.number({ error: '緯度必須是數字' }).optional(),
+    lng: z.number({ error: '經度必須是數字' }).optional(),
+    placeId: z
+      .string({ error: 'Google 地點 ID 格式不正確' })
+      .max(500, 'Google 地點 ID 不能超過 500 個字')
+      .trim()
+      .optional(),
+    nearestMrt: z
+      .string({ error: '最近捷運站格式不正確' })
+      .max(100, '最近捷運站不能超過 100 個字')
+      .trim()
+      .optional(),
+    mrtWalkMinutes: z
+      .number({ error: '步行分鐘數必須是數字' })
+      .int('步行分鐘數必須是 0 以上的整數')
+      .min(0, '步行分鐘數必須是 0 以上的整數')
+      .nullable()
+      .optional(),
+    capacityRange: venueCapacityRangeEnum,
+    description: z
+      .string({ error: '場地介紹格式不正確' })
+      .max(3000, '場地介紹不能超過 3000 個字')
+      .trim()
+      .optional(),
+    hostTags: z
+      .array(
+        z
+          .string({ error: '場地標籤格式不正確' })
+          .min(1, '場地標籤不能為空')
+          .max(50, '每個場地標籤不能超過 50 個字'),
+        { error: '場地標籤格式不正確' }
+      )
+      .max(5, '最多只能新增 5 個場地標籤')
+      .optional(),
+    preferredContact: venuePreferredContactEnum,
+    contactUrl: venueContactUrlSchema.optional(),
+    coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確'),
     otherPhotos: z
-      .array(z.string().url('照片網址格式不正確'))
+      .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
+        error: '照片格式不正確',
+      })
       .max(9, '最多只能上傳 9 張其他照片')
       .optional(),
     socialMedia: z
-      .object({
-        threads: z.string().max(500).trim().optional(),
-        instagram: z.string().max(500).trim().optional(),
-        line: z.string().max(500).trim().optional(),
-      })
+      .object(
+        { threads: venueSocialHandle, instagram: venueSocialHandle, line: venueSocialHandle },
+        { error: '請填寫社群帳號' }
+      )
       .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
         message: '至少需要填寫 Instagram 或 Threads',
       }),
@@ -324,25 +381,59 @@ export const venueSchemas = {
     addressChoice: z.enum(['existing', 'google']).optional(),
   }),
   update: z.object({
-    name: z.string().min(1, '場地名稱不能為空').max(200).trim().optional(),
-    address: z.string().min(1, '地址不能為空').max(500).trim().optional(),
+    name: z
+      .string({ error: '場地名稱格式不正確' })
+      .min(1, '場地名稱不能為空')
+      .max(200, '場地名稱不能超過 200 個字')
+      .trim()
+      .optional(),
+    address: z
+      .string({ error: '地址格式不正確' })
+      .min(1, '地址不能為空')
+      .max(500, '地址不能超過 500 個字')
+      .trim()
+      .optional(),
     region: venueRegionEnum.optional(),
-    nearestMrt: z.string().max(100).trim().optional(),
-    mrtWalkMinutes: z.number().int().min(0).nullable().optional(),
-    capacityRange: z.enum(['20以下', '20-40', '40-60', '60以上']).nullable().optional(),
-    description: z.string().max(3000).trim().optional(),
-    hostTags: z.array(z.string().min(1).max(50)).optional(),
-    preferredContact: z.enum(['instagram', 'threads', 'line', 'form', 'other']).optional(),
-    contactUrl: z.string().url('聯絡網址格式不正確').max(500).optional(),
-    coverPhoto: z.string().url('封面照片網址格式不正確').optional(),
-    otherPhotos: z.array(z.string().url('照片網址格式不正確')).optional(),
-    status: z.enum(['active', 'inactive']).optional(),
-    socialMedia: z
-      .object({
-        threads: z.string().max(500).trim().optional(),
-        instagram: z.string().max(500).trim().optional(),
-        line: z.string().max(500).trim().optional(),
+    nearestMrt: z
+      .string({ error: '最近捷運站格式不正確' })
+      .max(100, '最近捷運站不能超過 100 個字')
+      .trim()
+      .optional(),
+    mrtWalkMinutes: z
+      .number({ error: '步行分鐘數必須是數字' })
+      .int('步行分鐘數必須是 0 以上的整數')
+      .min(0, '步行分鐘數必須是 0 以上的整數')
+      .nullable()
+      .optional(),
+    capacityRange: venueCapacityRangeEnum.nullable().optional(),
+    description: z
+      .string({ error: '場地介紹格式不正確' })
+      .max(3000, '場地介紹不能超過 3000 個字')
+      .trim()
+      .optional(),
+    hostTags: z
+      .array(
+        z
+          .string({ error: '場地標籤格式不正確' })
+          .min(1, '場地標籤不能為空')
+          .max(50, '每個場地標籤不能超過 50 個字'),
+        { error: '場地標籤格式不正確' }
+      )
+      .optional(),
+    preferredContact: venuePreferredContactEnum.optional(),
+    contactUrl: venueContactUrlSchema.optional(),
+    coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確').optional(),
+    otherPhotos: z
+      .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
+        error: '照片格式不正確',
       })
+      .optional(),
+    status: z.enum(['active', 'inactive'], { error: '請選擇有效的場地狀態' }).optional(),
+    socialMedia: z
+      .object(
+        { threads: venueSocialHandle, instagram: venueSocialHandle, line: venueSocialHandle },
+        { error: '請填寫社群帳號' }
+      )
       .optional(),
   }),
 };

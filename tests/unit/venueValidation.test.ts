@@ -320,3 +320,126 @@ describe('GET /venues query validation — sort=distance (venueSchemas.getVenues
     expect(parse({ sort: 'distance', lat: '25', lng: '121' }).success).toBe(true);
   });
 });
+
+describe('venue submission error messages (Traditional Chinese)', () => {
+  const base = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40',
+    coverPhoto: 'https://example.com/cover.jpg',
+    preferredContact: 'instagram',
+    socialMedia: { instagram: 'venue' },
+  } as const;
+
+  const URL_MESSAGE = '請輸入完整網址（以 http:// 或 https:// 開頭）';
+
+  const firstIssue = (schema: 'create' | 'update', input: Record<string, unknown>) => {
+    const result = venueSchemas[schema].safeParse(input);
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('unreachable');
+    return result.error.issues[0];
+  };
+
+  describe.each(['create', 'update'] as const)('contactUrl (%s)', schema => {
+    it.each(['@abc123', 'line.me/xxx', 'javascript:alert(1)', 'ftp://x'])(
+      'rejects "%s" with the URL message on contactUrl',
+      value => {
+        const issue = firstIssue(schema, { ...base, contactUrl: value });
+        expect(issue.message).toBe(URL_MESSAGE);
+        expect(issue.path).toEqual(['contactUrl']);
+      }
+    );
+
+    it('accepts an https URL', () => {
+      expect(
+        venueSchemas[schema].safeParse({ ...base, contactUrl: 'https://line.me/ti/p/xxx' }).success
+      ).toBe(true);
+    });
+
+    it('rejects a URL longer than 500 chars with a Chinese message', () => {
+      const issue = firstIssue(schema, {
+        ...base,
+        contactUrl: `https://example.com/${'a'.repeat(500)}`,
+      });
+      expect(issue.message).toBe('網址不能超過 500 個字');
+      expect(issue.path).toEqual(['contactUrl']);
+    });
+  });
+
+  it.each([
+    ['name', { name: 'a'.repeat(201) }, '場地名稱不能超過 200 個字'],
+    ['address', { address: 'a'.repeat(501) }, '地址不能超過 500 個字'],
+    ['description', { description: 'a'.repeat(3001) }, '場地介紹不能超過 3000 個字'],
+    ['nearestMrt', { nearestMrt: 'a'.repeat(101) }, '最近捷運站不能超過 100 個字'],
+    ['mrtWalkMinutes', { mrtWalkMinutes: -1 }, '步行分鐘數必須是 0 以上的整數'],
+    ['region', { region: '東京' }, '請選擇有效的地區'],
+    ['capacityRange', { capacityRange: '100以上' }, '請選擇有效的容納人數範圍'],
+    ['preferredContact', { preferredContact: 'fax' }, '請選擇有效的預約聯絡方式'],
+    ['hostTags', { hostTags: ['a'.repeat(51)] }, '每個場地標籤不能超過 50 個字'],
+    [
+      'socialMedia.instagram',
+      { socialMedia: { instagram: 'a'.repeat(501) } },
+      '社群帳號不能超過 500 個字',
+    ],
+  ])('create: %s has a Chinese message', (_field, override, message) => {
+    expect(firstIssue('create', { ...base, ...override }).message).toBe(message);
+  });
+
+  it('update: status enum has a Chinese message', () => {
+    expect(firstIssue('update', { status: 'pending' }).message).toBe('請選擇有效的場地狀態');
+  });
+
+  describe('contactUrl edge cases', () => {
+    const ok = (schema: 'create' | 'update', contactUrl: unknown) =>
+      venueSchemas[schema].safeParse({ ...base, contactUrl }).success;
+
+    it.each(['create', 'update'] as const)('(%s) accepts http:// and omitted value', schema => {
+      expect(ok(schema, 'http://example.com')).toBe(true);
+      expect(ok(schema, undefined)).toBe(true);
+    });
+
+    it.each(['create', 'update'] as const)('(%s) rejects null, empty and blank', schema => {
+      expect(firstIssue(schema, { ...base, contactUrl: null }).message).toBe(
+        '預約表單連結格式不正確'
+      );
+      expect(firstIssue(schema, { ...base, contactUrl: '' }).message).toBe(URL_MESSAGE);
+      expect(firstIssue(schema, { ...base, contactUrl: '   ' }).message).toBe(URL_MESSAGE);
+    });
+
+    it.each(['create', 'update'] as const)('(%s) enforces the 500 char boundary', schema => {
+      const prefix = 'https://example.com/';
+      expect(ok(schema, prefix + 'a'.repeat(500 - prefix.length))).toBe(true);
+      expect(ok(schema, prefix + 'a'.repeat(501 - prefix.length))).toBe(false);
+    });
+
+    it('keeps legacy behavior: trailing whitespace is trimmed by .url() before max', () => {
+      expect(ok('create', `https://example.com${' '.repeat(600)}`)).toBe(true);
+    });
+  });
+
+  describe('missing and wrong-type values', () => {
+    it.each([
+      ['name', { name: undefined }, '請填寫場地名稱'],
+      ['address', { address: undefined }, '請填寫地址'],
+      ['coverPhoto', { coverPhoto: undefined }, '請上傳封面照片'],
+      ['region', { region: undefined }, '請選擇有效的地區'],
+      ['capacityRange', { capacityRange: undefined }, '請選擇有效的容納人數範圍'],
+      ['preferredContact', { preferredContact: undefined }, '請選擇有效的預約聯絡方式'],
+      ['socialMedia', { socialMedia: undefined }, '請填寫社群帳號'],
+      ['mrtWalkMinutes', { mrtWalkMinutes: '5' }, '步行分鐘數必須是數字'],
+      ['lat', { lat: '25' }, '緯度必須是數字'],
+      ['description', { description: 5 }, '場地介紹格式不正確'],
+      ['hostTags', { hostTags: 'a' }, '場地標籤格式不正確'],
+      ['otherPhotos', { otherPhotos: 'x' }, '照片格式不正確'],
+    ])('create: %s', (_f, override, message) => {
+      expect(firstIssue('create', { ...base, ...override }).message).toBe(message);
+    });
+
+    it('update: wrong types give Chinese messages', () => {
+      expect(firstIssue('update', { name: 5 }).message).toBe('場地名稱格式不正確');
+      expect(firstIssue('update', { mrtWalkMinutes: '5' }).message).toBe('步行分鐘數必須是數字');
+      expect(firstIssue('update', { socialMedia: 'x' }).message).toBe('請填寫社群帳號');
+    });
+  });
+});
