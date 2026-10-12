@@ -92,6 +92,36 @@ describe('VenueService.permanentDeleteVenue', () => {
   });
 });
 
+describe('VenueService.updateVenue 不改 placeId 與座標', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ placeId: 'ChIJold', lat: 25, lng: 121 }),
+    });
+    mockUpdate.mockResolvedValue(undefined);
+  });
+
+  it('body 夾帶 placeId、lat、lng 時，寫入內容不含這三個欄位', async () => {
+    const data = { name: '新名稱', placeId: 'ChIJnew', lat: 1, lng: 2 };
+    await new VenueService().updateVenue('venue-1', data as never);
+
+    const written = mockUpdate.mock.calls[0][0];
+    expect(written.name).toBe('新名稱');
+    expect(written).not.toHaveProperty('placeId');
+    expect(written).not.toHaveProperty('lat');
+    expect(written).not.toHaveProperty('lng');
+  });
+
+  it('一般欄位照常寫入', async () => {
+    await new VenueService().updateVenue('venue-1', { description: '說明' });
+
+    expect(mockUpdate.mock.calls[0][0]).toMatchObject({ description: '說明' });
+  });
+});
+
 describe('VenueService.batchReview', () => {
   let service: VenueService;
 

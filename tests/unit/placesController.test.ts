@@ -1,4 +1,4 @@
-import { fetchWithRetry } from '../../src/controllers/placesController';
+import { fetchWithRetry, PlacesController } from '../../src/controllers/placesController';
 
 describe('fetchWithRetry', () => {
   const originalFetch = global.fetch;
@@ -53,5 +53,46 @@ describe('fetchWithRetry', () => {
     ).rejects.toThrow('fetch failed');
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('PlacesController.placeDetails', () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  beforeAll(() => {
+    process.env.GOOGLE_MAPS_API_KEY = 'test-key';
+  });
+
+  afterAll(() => {
+    process.env.GOOGLE_MAPS_API_KEY = originalKey;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('Google 缺座標時仍回 0（既有行為，不隨 googlePlacesService 改變）', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ formattedAddress: '台北市A路1號', displayName: { text: 'X' } }),
+        {
+          status: 200,
+        }
+      )
+    ) as unknown as typeof fetch;
+    const res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
+
+    await new PlacesController().placeDetails(
+      { params: { placeId: 'ChIJabcdefghijk' } } as never,
+      res as never
+    );
+
+    expect(res.json).toHaveBeenCalledWith({
+      geometry: { location: { lat: 0, lng: 0 } },
+      formatted_address: '台北市A路1號',
+      name: 'X',
+      city: '',
+    });
   });
 });
