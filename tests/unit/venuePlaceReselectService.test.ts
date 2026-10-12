@@ -468,6 +468,22 @@ describe('B10 Google 地址為空：保留現有地址', () => {
   });
 });
 
+describe('B10 現有僅空白且 Google 地址為空', () => {
+  it.each([
+    ['空字串', ''],
+    ['僅空白', '  '],
+    ['缺欄位', undefined],
+  ])('Google 地址%s：不寫入 address，回傳空字串', async (_label, formatted) => {
+    seedVenue({ address: '   ' });
+    respond(googleOk({ formattedAddress: formatted }));
+
+    const result = await service.apply(VENUE_ID, PLACE);
+
+    expect(venueUpdate()).not.toHaveProperty('address');
+    expect(result.address).toBe('');
+  });
+});
+
 describe('B11 其他欄位不動', () => {
   it('payload 只含 placeId、lat、lng、eventRefs、eventCount、updatedAt', async () => {
     seedVenue();

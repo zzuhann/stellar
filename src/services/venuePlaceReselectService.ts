@@ -80,7 +80,9 @@ function pickAddress(
   choice?: AddressChoice
 ): { address: string; write: boolean } {
   // Never overwrite the address with an empty Google value
-  if (comparison.googleEmpty) return { address: comparison.current, write: false };
+  if (comparison.googleEmpty) {
+    return { address: comparison.currentEmpty ? '' : comparison.current, write: false };
+  }
   if (comparison.currentEmpty) return { address: googleAddress, write: true };
   if (comparison.same) return { address: comparison.current, write: false };
   if (!choice) {
