@@ -63,7 +63,9 @@ describe('eventSchemas.create submitterEmail', () => {
 describe('EventController.createEvent userEmail precedence', () => {
   let controller: EventController;
   let mockCreateEvent: jest.Mock;
-  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+  const statusMock = jest.fn().mockReturnThis();
+  const jsonMock = jest.fn();
+  const res = { status: statusMock, json: jsonMock } as unknown as Response;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -91,5 +93,23 @@ describe('EventController.createEvent userEmail precedence', () => {
       res
     );
     expect(mockCreateEvent.mock.calls[0][2]).toBe('acct@example.com');
+  });
+
+  it('anonymous Firebase user with empty email: falls back to submitterEmail', async () => {
+    await controller.createEvent(
+      build(
+        { ...basePayload, submitterEmail: 'fan@example.com' },
+        { uid: 'anon1', email: '', role: 'user' }
+      ),
+      res
+    );
+    expect(mockCreateEvent.mock.calls[0][2]).toBe('fan@example.com');
+  });
+
+  it('201 response omits createdByEmail but keeps other fields', async () => {
+    mockCreateEvent.mockResolvedValue({ id: 'e1', title: 't', createdByEmail: 'fan@example.com' });
+    await controller.createEvent(build({ ...basePayload }), res);
+    expect(statusMock).toHaveBeenCalledWith(201);
+    expect(jsonMock).toHaveBeenCalledWith({ id: 'e1', title: 't' });
   });
 });
