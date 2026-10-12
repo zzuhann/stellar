@@ -91,7 +91,10 @@ export class ArtistController {
       userEmail
     );
 
-    res.status(201).json(artist);
+    // Never echo the submitter's email back to the client
+    const publicArtist = { ...artist };
+    delete publicArtist.createdByEmail;
+    res.status(201).json(publicArtist);
   };
 
   // 審核藝人（僅管理員）

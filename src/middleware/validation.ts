@@ -64,6 +64,12 @@ const firestoreDocIdSchema = (label: string) =>
     .min(1, `${label} 不能為空`)
     .regex(/^[A-Za-z0-9_-]+$/, `${label} 格式錯誤`);
 
+// 匿名投稿者的選填通知信箱；空字串視為未填
+const submitterEmailSchema = z.preprocess(
+  val => (typeof val === 'string' ? val.trim() || undefined : val),
+  z.string().email('信箱格式不正確').max(254, '信箱不能超過 254 個字').optional()
+);
+
 // Artist 相關的 schema
 export const artistSchemas = {
   create: z.object({
@@ -80,6 +86,7 @@ export const artistSchemas = {
       .refine(val => isValidCalendarDate(val), '生日日期不存在')
       .optional(),
     profileImage: z.string().url('請輸入正確的圖片連結格式').optional(),
+    submitterEmail: submitterEmailSchema,
   }),
 
   update: z.object({
@@ -404,11 +411,7 @@ export const eventSchemas = {
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
     reservation: reservationSchema.optional(),
-    // 匿名投稿者的選填通知信箱；空字串視為未填
-    submitterEmail: z.preprocess(
-      val => (typeof val === 'string' ? val.trim() || undefined : val),
-      z.string().email('信箱格式不正確').max(254, '信箱不能超過 254 個字').optional()
-    ),
+    submitterEmail: submitterEmailSchema,
   }),
 
   update: z.object({
