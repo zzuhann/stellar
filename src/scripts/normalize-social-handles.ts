@@ -13,7 +13,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import admin from 'firebase-admin';
-import { normalizeSocialHandles } from '../utils/socialHandle';
+import { parseSocialHandles } from '../utils/socialHandle';
 
 const { FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL } = process.env;
 
@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   console.log(APPLY ? '模式：APPLY（會寫入）' : '模式：dry-run（不寫入）');
   const changes: Change[] = [];
   let fieldCount = 0;
+  const manual: string[] = [];
 
   for (const name of COLLECTIONS) {
     const snapshot = await db.collection(name).get();
@@ -61,7 +62,11 @@ async function main(): Promise<void> {
       for (const field of FIELDS) {
         const raw = socialMedia?.[field];
         if (typeof raw !== 'string') continue;
-        const cleaned = normalizeSocialHandles(raw);
+        const cleaned = parseSocialHandles(raw);
+        if (cleaned === null) {
+          manual.push(`${name}/${doc.id}  ${field}: ${JSON.stringify(raw)}`);
+          continue;
+        }
         if (cleaned === raw) continue;
         updates[`socialMedia.${field}`] = cleaned;
         fieldCount++;
@@ -73,6 +78,9 @@ async function main(): Promise<void> {
       if (Object.keys(updates).length > 0) changes.push({ ref: doc.ref, updates });
     }
   }
+
+  console.log(`\n=== 需人工處理（${manual.length} 筆，不會被寫入）===`);
+  manual.forEach(line => console.log(line));
 
   console.log(`\n需變更：${changes.length} 份文件、${fieldCount} 個欄位`);
 

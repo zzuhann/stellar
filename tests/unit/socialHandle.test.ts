@@ -1,4 +1,4 @@
-import { normalizeSocialHandles } from '../../src/utils/socialHandle';
+import { normalizeSocialHandles, parseSocialHandles } from '../../src/utils/socialHandle';
 import { eventSchemas, venueSchemas } from '../../src/middleware/validation';
 
 describe('normalizeSocialHandles', () => {
@@ -24,6 +24,14 @@ describe('normalizeSocialHandles', () => {
     ['instagram.com/xxx?igsh=abc', 'xxx'],
     ['https://www.threads.com/@a, @b', 'a, b'],
     ['𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡 ', '𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡'],
+    [
+      'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
+      'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
+    ],
+    ['  https://www.instagram.com/reel/abc123/ ', 'https://www.instagram.com/reel/abc123/'],
+    ['a, https://www.instagram.com/p/abc/', 'a, https://www.instagram.com/p/abc/'],
+    ['https://www.instagram.com/stories/abc/123', 'abc'],
+    ['https://www.threads.com/@user/post/xyz123', 'user'],
   ])('%j -> %j', (input, expected) => {
     expect(normalizeSocialHandles(input)).toBe(expected);
   });
@@ -86,5 +94,14 @@ describe('venue schema social handle cleanup', () => {
       socialMedia: { instagram: '@' },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('parseSocialHandles', () => {
+  it('returns null for unresolvable post URLs', () => {
+    expect(parseSocialHandles('https://www.instagram.com/p/abc/')).toBeNull();
+  });
+  it('returns cleaned value otherwise', () => {
+    expect(parseSocialHandles('@a')).toBe('a');
   });
 });
