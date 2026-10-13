@@ -135,6 +135,8 @@ describe('parseSocialHandles unresolvable URLs', () => {
     '@alice、https://instagram.com/bob',
     'https://instagram.com/user?x=a、b',
     'https://instagram.com/user#foo、bar',
+    '@alice/instagram.com/bob',
+    'alice//instagram.com/bob',
   ])('%s -> null', input => {
     expect(parseSocialHandles(input)).toBeNull();
     expect(normalizeSocialHandles(input)).toBe(input);

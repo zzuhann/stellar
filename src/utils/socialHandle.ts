@@ -4,6 +4,7 @@ const THREADS_HOSTS = new Set(['threads.com', 'www.threads.com', 'threads.net', 
 const USERNAME = /^[A-Za-z0-9._]+$/;
 const FINAL_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
 const LOOKS_LIKE_URL = /:\/\/|^\/\/|^[\w.-]+\.[a-z]{2,}(:\d+)?\//i;
+const URL_ANYWHERE = /:\/\/|[\w-]+\.[a-z]{2,}(:\d+)?\//i;
 
 // Returns the handle from a whitelisted IG/Threads profile URL, or null if it can't be resolved.
 const handleFromUrl = (token: string): string | null => {
@@ -43,12 +44,11 @@ export const parseSocialHandles = (value: string): string | null => {
       if (handle === null) return null;
       handles.push(handle);
     } else {
-      for (const piece of chunk.split(/[,、]+/)) {
-        if (LOOKS_LIKE_URL.test(piece.replace(/^@+/, ''))) return null;
-        for (const part of piece.split('/')) {
-          const cleaned = part.replace(/@/g, '');
-          if (cleaned) handles.push(cleaned);
-        }
+      // A URL glued to a handle list by any separator has no reliable boundary
+      if (URL_ANYWHERE.test(chunk)) return null;
+      for (const part of chunk.split(/[,、/]+/)) {
+        const cleaned = part.replace(/@/g, '');
+        if (cleaned) handles.push(cleaned);
       }
     }
   }
