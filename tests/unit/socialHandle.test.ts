@@ -14,6 +14,16 @@ describe('normalizeSocialHandles', () => {
     ['@a, @ b', 'a, b'],
     ['a,,b', 'a, b'],
     ['@, a', 'a'],
+    ['@yyuuu._.tk @at.3.33.am', 'yyuuu._.tk, at.3.33.am'],
+    ['@cute._.babygyu / @young2_tuan', 'cute._.babygyu, young2_tuan'],
+    ['knock_onedoor/ yuchieh_apple860924', 'knock_onedoor, yuchieh_apple860924'],
+    ['@17hanwonuuu___、@with1996__', '17hanwonuuu___, with1996__'],
+    ['https://www.threads.com/@mpe7889', 'mpe7889'],
+    ['https://www.instagram.com/xxx/', 'xxx'],
+    ['https://www.instagram.com/xxx?igsh=abc', 'xxx'],
+    ['instagram.com/xxx?igsh=abc', 'xxx'],
+    ['https://www.threads.com/@a, @b', 'a, b'],
+    ['𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡 ', '𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡'],
   ])('%j -> %j', (input, expected) => {
     expect(normalizeSocialHandles(input)).toBe(expected);
   });
