@@ -1,4 +1,4 @@
-import { normalizeSocialHandles, parseSocialHandles } from '../../src/utils/socialHandle';
+import { normalizeSocialHandles } from '../../src/utils/socialHandle';
 import { eventSchemas, venueSchemas } from '../../src/middleware/validation';
 
 describe('normalizeSocialHandles', () => {
@@ -7,40 +7,19 @@ describe('normalizeSocialHandles', () => {
     ['@name', 'name'],
     ['name', 'name'],
     ['@@name', 'name'],
-    ['@ @name', 'name'],
+    ['  @name  ', 'name'],
     ['@', ''],
     ['@ ', ''],
     ['', ''],
     ['@a, @ b', 'a, b'],
+    ['a,b', 'a, b'],
     ['a,,b', 'a, b'],
     ['@, a', 'a'],
-    ['@yyuuu._.tk @at.3.33.am', 'yyuuu._.tk, at.3.33.am'],
-    ['@cute._.babygyu / @young2_tuan', 'cute._.babygyu, young2_tuan'],
-    ['knock_onedoor/ yuchieh_apple860924', 'knock_onedoor, yuchieh_apple860924'],
-    ['@17hanwonuuu___、@with1996__', '17hanwonuuu___, with1996__'],
-    ['https://www.threads.com/@mpe7889', 'mpe7889'],
-    ['https://www.instagram.com/xxx/', 'xxx'],
-    ['https://www.instagram.com/xxx?igsh=abc', 'xxx'],
-    ['instagram.com/xxx?igsh=abc', 'xxx'],
-    ['https://www.threads.com/@a, @b', 'a, b'],
-    // NFKC: stylised Unicode handles are converted to ASCII (behaviour change from "preserved")
-    ['𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡 ', 'your._.little.angel'],
-    ['𝗇𝗉𝖼𝗅𝖺𝖻𝗍𝖺𝗂𝖼𝗁𝗎𝗇𝗀', 'npclabtaichung'],
-    ['＠abc，＠def', 'abc, def'],
-    ['https://instagram.com/user?x=a,b', 'user'],
-    ['https://instagram.com/user#foo,bar', 'user'],
-    ['a,b', 'a, b'],
-    ['@a,@b', 'a, b'],
-    ['//instagram.com/user', 'user'],
-    ['instagram.com:443/user', 'user'],
-    [
-      'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
-      'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
-    ],
-    ['  https://www.instagram.com/reel/abc123/ ', 'https://www.instagram.com/reel/abc123/'],
-    ['a, https://www.instagram.com/p/abc/', 'a, https://www.instagram.com/p/abc/'],
-    ['https://www.instagram.com/stories/abc/123', 'abc'],
-    ['https://www.threads.com/@user/post/xyz123', 'user'],
+    // Anything beyond leading @ / whitespace per comma item is stored as-is (no guessing)
+    ['https://www.threads.com/@mpe7889', 'https://www.threads.com/@mpe7889'],
+    ['@yyuuu._.tk @at.3.33.am', 'yyuuu._.tk @at.3.33.am'],
+    ['knock_onedoor/ yuchieh', 'knock_onedoor/ yuchieh'],
+    ['@a、@b', 'a、@b'],
   ])('%j -> %j', (input, expected) => {
     expect(normalizeSocialHandles(input)).toBe(expected);
   });
@@ -103,52 +82,6 @@ describe('venue schema social handle cleanup', () => {
       socialMedia: { instagram: '@' },
     });
     expect(result.success).toBe(false);
-  });
-});
-
-describe('parseSocialHandles', () => {
-  it('returns null for unresolvable post URLs', () => {
-    expect(parseSocialHandles('https://www.instagram.com/p/abc/')).toBeNull();
-  });
-  it('returns cleaned value otherwise', () => {
-    expect(parseSocialHandles('@a')).toBe('a');
-  });
-});
-
-describe('parseSocialHandles unresolvable URLs', () => {
-  test.each([
-    'https://example.com/user',
-    'https://notinstagram.com/user',
-    'https://threads.net/t/abc',
-    'https://www.instagram.com/帳號/',
-    'https://instagram.com/a/@b',
-    'https://www.instagram.com/a/b/c',
-    'https://www.threads.com/user',
-    'https://instagram.com/a,b',
-    '//example.com/user',
-    'example.com:443/user',
-    'foo:443/user',
-    '主辦帳號',
-    'a'.repeat(31),
-    // URL glued to a handle list without whitespace: boundary is ambiguous
-    '@alice,instagram.com/bob',
-    '@alice、https://instagram.com/bob',
-    'https://instagram.com/user?x=a、b',
-    'https://instagram.com/user#foo、bar',
-    '@alice/instagram.com/bob',
-    'alice//instagram.com/bob',
-  ])('%s -> null', input => {
-    expect(parseSocialHandles(input)).toBeNull();
-    expect(normalizeSocialHandles(input)).toBe(input);
-  });
-
-  it('returns null when any token is unresolvable', () => {
-    expect(parseSocialHandles('a https://example.com/user')).toBeNull();
-  });
-
-  it('accepts threads.net and mixed-case hosts', () => {
-    expect(parseSocialHandles('https://threads.net/@user')).toBe('user');
-    expect(parseSocialHandles('HTTPS://WWW.Instagram.com/Abc')).toBe('Abc');
   });
 });
 
