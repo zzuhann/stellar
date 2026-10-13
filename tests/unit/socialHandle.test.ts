@@ -130,6 +130,11 @@ describe('parseSocialHandles unresolvable URLs', () => {
     'foo:443/user',
     '主辦帳號',
     'a'.repeat(31),
+    // URL glued to a handle list without whitespace: boundary is ambiguous
+    '@alice,instagram.com/bob',
+    '@alice、https://instagram.com/bob',
+    'https://instagram.com/user?x=a、b',
+    'https://instagram.com/user#foo、bar',
   ])('%s -> null', input => {
     expect(parseSocialHandles(input)).toBeNull();
     expect(normalizeSocialHandles(input)).toBe(input);

@@ -48,6 +48,7 @@ const cell = (v: string | undefined): string => (v ?? '').replace(/[\t\r\n]+/g, 
 
 interface Change {
   ref: FirebaseFirestore.DocumentReference;
+  updateTime: FirebaseFirestore.Timestamp;
   updates: Record<string, string>;
 }
 
@@ -92,7 +93,8 @@ async function main(): Promise<void> {
         );
       }
 
-      if (Object.keys(updates).length > 0) changes.push({ ref: doc.ref, updates });
+      if (Object.keys(updates).length > 0)
+        changes.push({ ref: doc.ref, updateTime: doc.updateTime, updates });
     }
   }
 
@@ -114,8 +116,17 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < changes.length; i += BATCH_SIZE) {
     const batch = db.batch();
-    for (const { ref, updates } of changes.slice(i, i + BATCH_SIZE)) batch.update(ref, updates);
-    await batch.commit();
+    // Precondition: fail the whole batch if a doc was edited after we scanned it, instead of overwriting with stale data
+    for (const { ref, updateTime, updates } of changes.slice(i, i + BATCH_SIZE))
+      batch.update(ref, updates, { lastUpdateTime: updateTime });
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.error(
+        '寫入失敗（可能有文件在掃描後被編輯），此批未寫入。請重跑 dry-run 確認後再 apply。'
+      );
+      throw err;
+    }
     console.log(`已寫入 ${Math.min(i + BATCH_SIZE, changes.length)} / ${changes.length}`);
   }
   console.log('完成。注意：後端記憶體快取不會被腳本清除，需等 TTL 過期或呼叫 /cache 管理端點。');

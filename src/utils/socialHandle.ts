@@ -35,18 +35,20 @@ const handleFromUrl = (token: string): string | null => {
 export const parseSocialHandles = (value: string): string | null => {
   const handles: string[] = [];
   // Split on whitespace only first: URLs never contain spaces, so commas in a query stay in the chunk.
-  for (const chunk of value
-    .normalize('NFKC')
-    .split(/[\s、]+/)
-    .filter(Boolean)) {
+  for (const chunk of value.normalize('NFKC').split(/\s+/).filter(Boolean)) {
     if (LOOKS_LIKE_URL.test(chunk)) {
+      // 、 inside a URL chunk can't be told apart from a list separator
+      if (chunk.includes('、')) return null;
       const handle = handleFromUrl(chunk.replace(/^,+|,+$/g, ''));
       if (handle === null) return null;
       handles.push(handle);
     } else {
-      for (const part of chunk.split(/[,/]+/)) {
-        const cleaned = part.replace(/@/g, '');
-        if (cleaned) handles.push(cleaned);
+      for (const piece of chunk.split(/[,、]+/)) {
+        if (LOOKS_LIKE_URL.test(piece.replace(/^@+/, ''))) return null;
+        for (const part of piece.split('/')) {
+          const cleaned = part.replace(/@/g, '');
+          if (cleaned) handles.push(cleaned);
+        }
       }
     }
   }
