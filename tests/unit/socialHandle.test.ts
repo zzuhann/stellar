@@ -23,7 +23,16 @@ describe('normalizeSocialHandles', () => {
     ['https://www.instagram.com/xxx?igsh=abc', 'xxx'],
     ['instagram.com/xxx?igsh=abc', 'xxx'],
     ['https://www.threads.com/@a, @b', 'a, b'],
-    ['𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡 ', '𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡'],
+    // NFKC: stylised Unicode handles are converted to ASCII (behaviour change from "preserved")
+    ['𝙮𝙤𝙪𝙧._.𝙡𝙞𝙩𝙩𝙡𝙚.𝙖𝙣𝙜𝙚𝙡 ', 'your._.little.angel'],
+    ['𝗇𝗉𝖼𝗅𝖺𝖻𝗍𝖺𝗂𝖼𝗁𝗎𝗇𝗀', 'npclabtaichung'],
+    ['＠abc，＠def', 'abc, def'],
+    ['https://instagram.com/user?x=a,b', 'user'],
+    ['https://instagram.com/user#foo,bar', 'user'],
+    ['a,b', 'a, b'],
+    ['@a,@b', 'a, b'],
+    ['//instagram.com/user', 'user'],
+    ['instagram.com:443/user', 'user'],
     [
       'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
       'https://www.instagram.com/p/DWTvn3bkooB/?igsh=abc',
@@ -51,10 +60,10 @@ describe('event schema social handle cleanup', () => {
   it('cleans instagram on create', () => {
     const result = eventSchemas.create.safeParse({
       ...eventBase,
-      socialMedia: { instagram: '@ 帳號' },
+      socialMedia: { instagram: '@ my_account' },
     });
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.socialMedia.instagram).toBe('帳號');
+    if (result.success) expect(result.data.socialMedia.instagram).toBe('my_account');
   });
 
   it('rejects when the only handle is a bare @', () => {
@@ -79,11 +88,11 @@ describe('venue schema social handle cleanup', () => {
   it('cleans instagram but keeps line url untouched', () => {
     const result = venueSchemas.create.safeParse({
       ...venueBase,
-      socialMedia: { instagram: '@ 帳號', line: 'https://line.me/ti/p/@abc' },
+      socialMedia: { instagram: '@ my_account', line: 'https://line.me/ti/p/@abc' },
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.socialMedia.instagram).toBe('帳號');
+      expect(result.data.socialMedia.instagram).toBe('my_account');
       expect(result.data.socialMedia.line).toBe('https://line.me/ti/p/@abc');
     }
   });
@@ -115,6 +124,12 @@ describe('parseSocialHandles unresolvable URLs', () => {
     'https://instagram.com/a/@b',
     'https://www.instagram.com/a/b/c',
     'https://www.threads.com/user',
+    'https://instagram.com/a,b',
+    '//example.com/user',
+    'example.com:443/user',
+    'foo:443/user',
+    '主辦帳號',
+    'a'.repeat(31),
   ])('%s -> null', input => {
     expect(parseSocialHandles(input)).toBeNull();
     expect(normalizeSocialHandles(input)).toBe(input);

@@ -5,6 +5,7 @@
  * 使用方式：
  *   npx tsx src/scripts/normalize-social-handles.ts           # dry-run，只印出變更
  *   npx tsx src/scripts/normalize-social-handles.ts --apply   # 實際寫入
+ *   --tsv <path>  另外輸出 change/manual 對照表
  *
  * 注意：不碰 line / x / artists，也不更新 updatedAt（資料清理非使用者編輯）
  */
@@ -13,6 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import admin from 'firebase-admin';
+import fs from 'fs';
 import { parseSocialHandles } from '../utils/socialHandle';
 
 const { FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL } = process.env;
@@ -39,6 +41,10 @@ const APPLY = process.argv.includes('--apply');
 const COLLECTIONS = ['coffeeEvents', 'venues'];
 const FIELDS = ['instagram', 'threads'] as const;
 const BATCH_SIZE = 500;
+const tsvIndex = process.argv.indexOf('--tsv');
+const TSV_PATH = tsvIndex >= 0 ? process.argv[tsvIndex + 1] : undefined;
+const tsvRows: string[][] = [];
+const cell = (v: string | undefined): string => (v ?? '').replace(/[\t\r\n]+/g, ' ');
 
 interface Change {
   ref: FirebaseFirestore.DocumentReference;
@@ -63,11 +69,22 @@ async function main(): Promise<void> {
         const raw = socialMedia?.[field];
         if (typeof raw !== 'string') continue;
         const cleaned = parseSocialHandles(raw);
+        const meta = [
+          name,
+          doc.id,
+          doc.get('slug'),
+          doc.get(name === 'venues' ? 'name' : 'title'),
+          doc.get('status'),
+          field,
+          raw,
+        ];
         if (cleaned === null) {
+          tsvRows.push(['manual', ...meta, ''].map(cell));
           manual.push(`${name}/${doc.id}  ${field}: ${JSON.stringify(raw)}`);
           continue;
         }
         if (cleaned === raw) continue;
+        tsvRows.push(['change', ...meta, cleaned].map(cell));
         updates[`socialMedia.${field}`] = cleaned;
         fieldCount++;
         console.log(
@@ -83,6 +100,12 @@ async function main(): Promise<void> {
   manual.forEach(line => console.log(line));
 
   console.log(`\n需變更：${changes.length} 份文件、${fieldCount} 個欄位`);
+
+  if (TSV_PATH) {
+    const header = ['kind', 'collection', 'id', 'slug', 'name', 'status', 'field', 'old', 'new'];
+    fs.writeFileSync(TSV_PATH, [header, ...tsvRows].map(r => r.join('\t')).join('\n') + '\n');
+    console.log(`TSV 已輸出：${TSV_PATH}（${tsvRows.length} 列）`);
+  }
 
   if (!APPLY) {
     console.log('dry-run 結束，未寫入。加 --apply 才會實際更新。');

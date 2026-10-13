@@ -2,13 +2,17 @@ const IG_RESERVED = new Set(['p', 'reel', 'reels', 'tv', 'explore', 'stories', '
 const IG_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
 const THREADS_HOSTS = new Set(['threads.com', 'www.threads.com', 'threads.net', 'www.threads.net']);
 const USERNAME = /^[A-Za-z0-9._]+$/;
-const LOOKS_LIKE_URL = /:\/\/|^[\w.-]+\.[a-z]{2,}\//i;
+const FINAL_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
+const LOOKS_LIKE_URL = /:\/\/|^\/\/|^[\w.-]+\.[a-z]{2,}(:\d+)?\//i;
 
 // Returns the handle from a whitelisted IG/Threads profile URL, or null if it can't be resolved.
 const handleFromUrl = (token: string): string | null => {
   let url: URL;
   try {
-    url = new URL(token.includes('://') ? token : `https://${token}`);
+    let href = `https://${token}`;
+    if (token.startsWith('//')) href = `https:${token}`;
+    else if (token.includes('://')) href = token;
+    url = new URL(href);
   } catch {
     return null;
   }
@@ -27,21 +31,26 @@ const handleFromUrl = (token: string): string | null => {
 };
 
 // Returns null when any token can't be resolved (e.g. IG post links, foreign URLs); callers keep the original.
-// Plain handles are not charset-checked: stylised Unicode handles exist in the data.
+// Input is NFKC-normalised so stylised/full-width characters become ASCII.
 export const parseSocialHandles = (value: string): string | null => {
   const handles: string[] = [];
-  for (const token of value.split(/[,、\s]+/).filter(Boolean)) {
-    if (LOOKS_LIKE_URL.test(token)) {
-      const handle = handleFromUrl(token);
+  // Split on whitespace only first: URLs never contain spaces, so commas in a query stay in the chunk.
+  for (const chunk of value
+    .normalize('NFKC')
+    .split(/[\s、]+/)
+    .filter(Boolean)) {
+    if (LOOKS_LIKE_URL.test(chunk)) {
+      const handle = handleFromUrl(chunk.replace(/^,+|,+$/g, ''));
       if (handle === null) return null;
       handles.push(handle);
     } else {
-      for (const part of token.split('/')) {
+      for (const part of chunk.split(/[,/]+/)) {
         const cleaned = part.replace(/@/g, '');
         if (cleaned) handles.push(cleaned);
       }
     }
   }
+  if (!handles.every(h => FINAL_HANDLE.test(h))) return null;
   return handles.join(', ');
 };
 
