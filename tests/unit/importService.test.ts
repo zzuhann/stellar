@@ -73,7 +73,7 @@ describe('ImportService.parseCaption', () => {
         coordinates: { lat: 25.03, lng: 121.56 },
         placeId: 'place-123',
       },
-      socialMedia: { instagram: '@example', threads: '@example2' },
+      socialMedia: { instagram: 'example', threads: 'example2' },
     });
     expect(mockResolveLocation).toHaveBeenCalledWith('某咖啡廳 台北市大安區');
   });

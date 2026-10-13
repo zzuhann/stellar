@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { fetchWithRetry } from '../controllers/placesController';
 import { resolveLocation, ParsedLocation } from './placesService';
 import { isValidCalendarDate } from '../utils/calendarDate';
+import { normalizeSocialHandles } from '../utils/socialHandle';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -123,7 +124,7 @@ function parseSocialHandles(handles: string[]): { instagram?: string; threads?: 
     if (separatorIndex === -1) continue;
 
     const platform = raw.slice(0, separatorIndex).trim().toLowerCase();
-    const handle = raw.slice(separatorIndex + 1).trim();
+    const handle = normalizeSocialHandles(raw.slice(separatorIndex + 1));
     if (!handle) continue;
 
     if (platform === 'instagram') result.instagram = handle;

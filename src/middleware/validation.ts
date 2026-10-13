@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodSchema, ZodError } from 'zod';
 import { isValidCalendarDate } from '../utils/calendarDate';
+import { normalizeSocialHandles } from '../utils/socialHandle';
 
 // 錯誤碼定義
 export const ERROR_CODES = {
@@ -193,6 +194,12 @@ const venueSocialHandle = z
   .max(500, '社群帳號不能超過 500 個字')
   .trim()
   .optional();
+const venueHandleSchema = z
+  .string({ error: '社群帳號格式不正確' })
+  .max(500, '社群帳號不能超過 500 個字')
+  .trim()
+  .transform(normalizeSocialHandles)
+  .optional();
 
 const venueLimitQuerySchema = z
   .string()
@@ -368,7 +375,7 @@ export const venueSchemas = {
       .optional(),
     socialMedia: z
       .object(
-        { threads: venueSocialHandle, instagram: venueSocialHandle, line: venueSocialHandle },
+        { threads: venueHandleSchema, instagram: venueHandleSchema, line: venueSocialHandle },
         { error: '請填寫社群帳號' }
       )
       .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
@@ -431,9 +438,12 @@ export const venueSchemas = {
     status: z.enum(['active', 'inactive'], { error: '請選擇有效的場地狀態' }).optional(),
     socialMedia: z
       .object(
-        { threads: venueSocialHandle, instagram: venueSocialHandle, line: venueSocialHandle },
+        { threads: venueHandleSchema, instagram: venueHandleSchema, line: venueSocialHandle },
         { error: '請填寫社群帳號' }
       )
+      .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
+        message: '至少需要填寫 Instagram 或 Threads',
+      })
       .optional(),
   }),
 };
@@ -493,9 +503,9 @@ export const eventSchemas = {
       .max(10, '最多只能選擇 10 位藝人'),
     socialMedia: z
       .object({
-        instagram: z.string().optional(),
+        instagram: z.string().transform(normalizeSocialHandles).optional(),
         x: z.string().optional(),
-        threads: z.string().optional(),
+        threads: z.string().transform(normalizeSocialHandles).optional(),
       })
       .refine(data => data.instagram || data.x || data.threads, {
         message: '至少需要填寫一個社群媒體帳號（Instagram、X 或 Threads）',
@@ -549,9 +559,9 @@ export const eventSchemas = {
       .optional(),
     socialMedia: z
       .object({
-        instagram: z.string().optional(),
+        instagram: z.string().transform(normalizeSocialHandles).optional(),
         x: z.string().optional(),
-        threads: z.string().optional(),
+        threads: z.string().transform(normalizeSocialHandles).optional(),
       })
       .refine(data => data.instagram || data.x || data.threads, {
         message: '至少需要填寫一個社群媒體帳號（Instagram、X 或 Threads）',
