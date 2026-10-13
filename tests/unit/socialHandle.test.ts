@@ -105,3 +105,37 @@ describe('parseSocialHandles', () => {
     expect(parseSocialHandles('@a')).toBe('a');
   });
 });
+
+describe('parseSocialHandles unresolvable URLs', () => {
+  test.each([
+    'https://example.com/user',
+    'https://notinstagram.com/user',
+    'https://threads.net/t/abc',
+    'https://www.instagram.com/帳號/',
+    'https://instagram.com/a/@b',
+    'https://www.instagram.com/a/b/c',
+    'https://www.threads.com/user',
+  ])('%s -> null', input => {
+    expect(parseSocialHandles(input)).toBeNull();
+    expect(normalizeSocialHandles(input)).toBe(input);
+  });
+
+  it('returns null when any token is unresolvable', () => {
+    expect(parseSocialHandles('a https://example.com/user')).toBeNull();
+  });
+
+  it('accepts threads.net and mixed-case hosts', () => {
+    expect(parseSocialHandles('https://threads.net/@user')).toBe('user');
+    expect(parseSocialHandles('HTTPS://WWW.Instagram.com/Abc')).toBe('Abc');
+  });
+});
+
+describe('venue update schema socialMedia', () => {
+  it('rejects update whose only handle is a bare @', () => {
+    expect(venueSchemas.update.safeParse({ socialMedia: { instagram: '@' } }).success).toBe(false);
+  });
+
+  it('allows partial update without socialMedia', () => {
+    expect(venueSchemas.update.safeParse({ name: '新名稱' }).success).toBe(true);
+  });
+});

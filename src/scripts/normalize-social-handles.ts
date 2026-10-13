@@ -3,8 +3,8 @@
  * 清理 coffeeEvents / venues 的 socialMedia.instagram / socialMedia.threads（去掉 @ 與空白）
  *
  * 使用方式：
- *   bun src/scripts/normalize-social-handles.ts           # dry-run，只印出變更
- *   bun src/scripts/normalize-social-handles.ts --apply   # 實際寫入
+ *   npx tsx src/scripts/normalize-social-handles.ts           # dry-run，只印出變更
+ *   npx tsx src/scripts/normalize-social-handles.ts --apply   # 實際寫入
  *
  * 注意：不碰 line / x / artists，也不更新 updatedAt（資料清理非使用者編輯）
  */

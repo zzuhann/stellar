@@ -441,6 +441,9 @@ export const venueSchemas = {
         { threads: venueHandleSchema, instagram: venueHandleSchema, line: venueSocialHandle },
         { error: '請填寫社群帳號' }
       )
+      .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
+        message: '至少需要填寫 Instagram 或 Threads',
+      })
       .optional(),
   }),
 };
