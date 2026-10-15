@@ -463,7 +463,7 @@ paths:
       summary: 場地標籤字典（只回 active 標籤）
       description: |
         常數，部署時才會改。Response header `Cache-Control: public, max-age=3600`。
-        Rate limit 沿用列表：每 IP 每 15 分鐘 180 次。
+        Rate limit：每 IP 每 15 分鐘 180 次（額度同列表，但獨立計數）。
       responses:
         '200':
           description: 標籤分組與標籤
