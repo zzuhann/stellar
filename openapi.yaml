@@ -249,11 +249,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /events/{id}/resubmit:
     patch:
@@ -322,8 +318,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
-              example:
-                { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
+              example: { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
         '404':
           description: 其中一筆活動不存在
           content:
@@ -544,11 +539,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /venues/admin/{id}/place-reselect/preview:
     post:
@@ -734,11 +725,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /venue-submissions/images:
     post:
@@ -769,11 +756,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /venue-submissions/places/autocomplete:
     post:
@@ -795,11 +778,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /venue-submissions/places/{placeId}:
     get:
@@ -817,11 +796,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                {
-                  error: 'Too many requests, please try again later',
-                  code: RATE_LIMITED,
-                }
+              example: { error: 'Too many requests, please try again later', code: RATE_LIMITED }
 
   /artists:
     get:
@@ -967,7 +942,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example: { error: '權限不足: 只能重新送審自己的投稿', code: ARTIST_RESUBMIT_FORBIDDEN }
+              example:
+                { error: '權限不足: 只能重新送審自己的投稿', code: ARTIST_RESUBMIT_FORBIDDEN }
         '404':
           description: 找不到藝人
           content:
@@ -979,8 +955,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example:
-                { error: '只能重新送審已拒絕的藝人', code: ARTIST_RESUBMIT_INVALID_STATE }
+              example: { error: '只能重新送審已拒絕的藝人', code: ARTIST_RESUBMIT_INVALID_STATE }
 
   /artists/batch-review:
     post:
@@ -1025,8 +1000,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
-              example:
-                { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
+              example: { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
         '404':
           description: 其中一筆藝人不存在
           content:
@@ -1426,6 +1400,13 @@ components:
             sourceLinks: { type: array, maxItems: 5, items: { type: string, format: uri } }
             equipmentNote: { type: string, description: 店家提供的設備原文，空字串代表沒有 }
             infoUpdatedOn: { type: string, format: date, nullable: true }
+            bookingFormUrl:
+              {
+                type: string,
+                format: uri,
+                nullable: true,
+                description: 預約表單網址，沒有時為 null,
+              }
             events:
               type: array
               items:
@@ -1459,7 +1440,8 @@ components:
       properties:
         slug: { type: string }
         limited: { type: boolean, enum: [true] }
-        until: { type: string, format: date, description: 台灣時間的日期，有 until 一定要有 limited }
+        until:
+          { type: string, format: date, description: 台灣時間的日期，有 until 一定要有 limited }
 
     VenueTagInput:
       type: object
@@ -1528,8 +1510,20 @@ components:
               { type: string, nullable: true, enum: [20以下, 20-40, 40-60, 60以上, null] }
             description: { type: string }
             hostTags: { type: array, items: { type: string } }
-            preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
-            contactUrl: { type: string, format: uri }
+            preferredContact:
+              type: string
+              enum: [instagram, threads, line, form, other]
+              description: 新前端只送 instagram／threads／line；form、other 為舊資料相容
+            contactUrl:
+              { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
+            bookingFormUrl:
+              {
+                type: string,
+                format: uri,
+                maxLength: 500,
+                nullable: true,
+                description: "預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內，`''`／null 清空",
+              }
             coverPhoto: { type: string, format: uri }
             otherPhotos: { type: array, items: { type: string, format: uri } }
             socialMedia:
@@ -1561,8 +1555,19 @@ components:
         capacityRange: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
         description: { type: string }
         hostTags: { type: array, maxItems: 5, items: { type: string } }
-        preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
-        contactUrl: { type: string, format: uri }
+        preferredContact:
+          type: string
+          enum: [instagram, threads, line, form, other]
+          description: 新前端只送 instagram／threads／line；form、other 為舊資料相容
+        contactUrl: { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
+        bookingFormUrl:
+          {
+            type: string,
+            format: uri,
+            maxLength: 500,
+            nullable: true,
+            description: "預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內，`''`／null 清空",
+          }
         coverPhoto: { type: string, format: uri }
         otherPhotos: { type: array, maxItems: 9, items: { type: string, format: uri } }
         socialMedia:
