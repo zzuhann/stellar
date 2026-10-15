@@ -1469,4 +1469,13 @@ describe('VenueService — venue-tags 欄位', () => {
     const result = await new AdminService().getAdminVenues({});
     expect(result.data[0].tags).toEqual(venueA.tags);
   });
+
+  it('admin 列表：舊文件沒有 tags 欄位時回 []', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      get: () => Promise.resolve({ docs: [{ id: 'b', data: () => venueB }] }),
+    });
+    const result = await new AdminService().getAdminVenues({});
+    expect(result.data[0].tags).toEqual([]);
+  });
 });

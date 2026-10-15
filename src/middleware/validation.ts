@@ -178,11 +178,13 @@ const venueRegionEnum = z.preprocess(
 
 // GET /venues 的 limit：若帶必須為正整數字串；sort=random 時為必填（見下方 refine）
 const VENUE_CONTACT_URL_MESSAGE = '請輸入完整網址（以 http:// 或 https:// 開頭）';
-const venueContactUrlSchema = z
-  .string({ error: '預約表單連結格式不正確' })
-  .url(VENUE_CONTACT_URL_MESSAGE)
-  .max(500, '網址不能超過 500 個字')
-  .refine(val => /^https?:\/\//i.test(val), VENUE_CONTACT_URL_MESSAGE);
+const httpUrlSchema = (typeError: string) =>
+  z
+    .string({ error: typeError })
+    .url(VENUE_CONTACT_URL_MESSAGE)
+    .max(500, '網址不能超過 500 個字')
+    .refine(val => /^https?:\/\//i.test(val), VENUE_CONTACT_URL_MESSAGE);
+const venueContactUrlSchema = httpUrlSchema('預約表單連結格式不正確');
 
 const venueCapacityRangeEnum = z.enum(['20以下', '20-40', '40-60', '60以上'], {
   error: '請選擇有效的容納人數範圍',
@@ -239,8 +241,8 @@ const venueTagFieldSchemas = {
     .optional(),
   sourceLinks: z
     .array(z.string({ error: '連結格式不正確' }), { error: '連結格式不正確' })
-    .transform(links => links.filter(link => link.trim() !== ''))
-    .pipe(z.array(venueContactUrlSchema).max(5, '最多只能新增 5 個原始說明連結'))
+    .transform(links => links.map(link => link.trim()).filter(link => link !== ''))
+    .pipe(z.array(httpUrlSchema('原始說明連結格式不正確')).max(5, '最多只能新增 5 個原始說明連結'))
     .optional(),
   equipmentNote: z
     .string({ error: '設備說明格式不正確' })
@@ -253,7 +255,10 @@ const venueTagFieldSchemas = {
     .nullable()
     .optional(),
   calendarUrl: z
-    .preprocess(val => (val === '' ? null : val), venueContactUrlSchema.nullable())
+    .preprocess(
+      val => (typeof val === 'string' ? val.trim() || null : val),
+      httpUrlSchema('行事曆連結格式不正確').nullable()
+    )
     .optional(),
 };
 

@@ -21,6 +21,12 @@ import { VENUE_TAG_GROUPS, VENUE_TAGS } from '../constants/venueTags';
 // 這裡用同一份 schema 推導型別，而不是對 req.query（Express 的 ParsedQs）逐欄位 `as` 轉型。
 type GetVenuesQuery = z.infer<typeof venueSchemas.getVenues>;
 
+// Dictionary is a constant; build the public shape once
+const PUBLIC_TAG_DICTIONARY = {
+  groups: VENUE_TAG_GROUPS,
+  tags: VENUE_TAGS.filter(t => t.active).map(({ active: _active, ...tag }) => tag),
+};
+
 export class VenueController {
   private venueService: VenueService;
 
@@ -43,10 +49,7 @@ export class VenueController {
 
   getTagDictionary = (_req: Request, res: Response): void => {
     res.set('Cache-Control', 'public, max-age=3600');
-    res.json({
-      groups: VENUE_TAG_GROUPS,
-      tags: VENUE_TAGS.filter(t => t.active).map(({ active: _active, ...tag }) => tag),
-    });
+    res.json(PUBLIC_TAG_DICTIONARY);
   };
 
   // 注意：region/capacityRange/search/sort/limit/page/status 的格式驗證

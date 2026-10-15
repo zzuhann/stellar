@@ -5,6 +5,7 @@ import {
   venueDetailLimiter,
   venuePlaceReselectLimiter,
   venuesListLimiter,
+  venueTagDictionaryLimiter,
   venueViewLimiter,
 } from '../middleware/rateLimiters';
 import { validateRequest, venueSchemas } from '../middleware/validation';
@@ -28,7 +29,7 @@ router.get(
 );
 
 // Batch routes must come before /:id to avoid being matched as an id param
-router.get('/tag-dictionary', venuesListLimiter, venueController.getTagDictionary);
+router.get('/tag-dictionary', venueTagDictionaryLimiter, venueController.getTagDictionary);
 router.patch(
   '/batch-review',
   authenticateToken,

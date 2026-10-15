@@ -580,3 +580,25 @@ describe('venue tag fields (venue-tags)', () => {
     }
   });
 });
+
+describe('venue tag URL fields: trim and messages', () => {
+  it('sourceLinks、calendarUrl 前後空白先 trim 再驗證', () => {
+    const result = venueSchemas.update.safeParse({
+      sourceLinks: [' https://a.com ', '   '],
+      calendarUrl: ' https://cal.example.com ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceLinks).toEqual(['https://a.com']);
+      expect(result.data.calendarUrl).toBe('https://cal.example.com');
+    }
+    const blank = venueSchemas.update.safeParse({ calendarUrl: '   ' });
+    expect(blank.success && blank.data.calendarUrl).toBeNull();
+  });
+
+  it('calendarUrl 型別錯誤的訊息指向行事曆，不是預約表單', () => {
+    const result = venueSchemas.update.safeParse({ calendarUrl: 123 });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0].message).toBe('行事曆連結格式不正確');
+  });
+});
