@@ -8,6 +8,18 @@ export const venuesListLimiter = rateLimit({
   message: { error: 'Too many venue list requests, please try again later', code: 'RATE_LIMITED' },
 });
 
+// Same limits as the list, but its own counter so dictionary fetches don't eat list quota
+export const venueTagDictionaryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many tag dictionary requests, please try again later',
+    code: 'RATE_LIMITED',
+  },
+});
+
 export const venueDetailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,

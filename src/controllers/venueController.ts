@@ -6,6 +6,7 @@ import * as venuePlaceReselectService from '../services/venuePlaceReselectServic
 import { venueSchemas } from '../middleware/validation';
 import {
   CreateVenueData,
+  CreateVenueSubmissionData,
   VenueBatchReviewItem,
   VenueBatchStatusItem,
   VenueFilterParams,
@@ -13,11 +14,18 @@ import {
 import { sendVenueSubmissionNotification } from '../services/emailService';
 import { cache } from '../utils/cache';
 import { AppError } from '../utils/AppError';
+import { VENUE_TAG_GROUPS, VENUE_TAGS } from '../constants/venueTags';
 
 // req.validatedQuery 在 route 層由 validateRequest({ query: venueSchemas.getVenues })
 // 寫入，已完成格式驗證與型別轉換（limit/page 已是 number、region 已正規化為合法地區）；
 // 這裡用同一份 schema 推導型別，而不是對 req.query（Express 的 ParsedQs）逐欄位 `as` 轉型。
 type GetVenuesQuery = z.infer<typeof venueSchemas.getVenues>;
+
+// Dictionary is a constant; build the public shape once
+const PUBLIC_TAG_DICTIONARY = {
+  groups: VENUE_TAG_GROUPS,
+  tags: VENUE_TAGS.filter(t => t.active).map(({ active: _active, ...tag }) => tag),
+};
 
 export class VenueController {
   private venueService: VenueService;
@@ -33,10 +41,15 @@ export class VenueController {
   };
 
   createVenueSubmission = async (req: Request, res: Response): Promise<void> => {
-    const data = req.body as CreateVenueData;
-    const venue = await this.venueService.createVenue(data);
+    const data = req.body as CreateVenueSubmissionData;
+    const venue = await this.venueService.createVenueSubmission(data);
     void sendVenueSubmissionNotification(venue.name);
     res.status(201).json(venue);
+  };
+
+  getTagDictionary = (_req: Request, res: Response): void => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json(PUBLIC_TAG_DICTIONARY);
   };
 
   // 注意：region/capacityRange/search/sort/limit/page/status 的格式驗證

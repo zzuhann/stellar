@@ -1,4 +1,5 @@
 import { VenueService } from '../../src/services/venueService';
+import { AdminService } from '../../src/services/adminService';
 import { cache } from '../../src/utils/cache';
 import { CapacityRange, Venue, VenueStatus } from '../../src/models/types';
 
@@ -29,6 +30,38 @@ jest.mock('../../src/config/firebase', () => ({
 jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
+
+describe('VenueService.createVenueSubmission', () => {
+  it('TC-080（service 層）呼叫端夾帶正式欄位也不寫入', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
+    mockSet.mockResolvedValue(undefined);
+
+    await new VenueService().createVenueSubmission({
+      name: '測試場地',
+      address: '台北市測試路 1 號',
+      region: '台北',
+      capacityRange: '20-40',
+      preferredContact: 'instagram',
+      coverPhoto: 'https://example.com/cover.jpg',
+      socialMedia: { instagram: 'venue' },
+      tags: [{ slug: 'free_venue' }],
+      sourceLinks: ['https://a.com'],
+      equipmentNote: '投影機',
+      infoUpdatedOn: '2026-10-15',
+      calendarUrl: 'https://calendar.example.com',
+    } as never);
+
+    expect(mockSet.mock.calls[0][0]).toMatchObject({
+      tags: [],
+      sourceLinks: [],
+      equipmentNote: '',
+      infoUpdatedOn: null,
+      calendarUrl: null,
+      status: 'pending',
+    });
+  });
+});
 
 describe('VenueService.createVenue', () => {
   it('pending 場地不清公開列表 cache，但清除 admin cache', async () => {
@@ -393,6 +426,7 @@ function makeBaseVenue(): VenueFixture {
     otherPhotos: [],
     description: '',
     hostTags: [],
+    tags: [],
     status: 'active',
   };
 }
@@ -1229,5 +1263,251 @@ describe('VenueService.getVenues — sort=distance', () => {
     }
     expect(withCoords.venues.map(v => v.id)).toEqual(withoutCoords.venues.map(v => v.id));
     expect(withCoords.venues.map(v => v.id)).toEqual(['v2', 'v1']);
+  });
+});
+
+describe('VenueService — venue-tags 欄位', () => {
+  const ts = (iso: string) => ({
+    toMillis: () => new Date(iso).getTime(),
+    toDate: () => new Date(iso),
+  });
+  const eventRef = (id: string) => ({ id });
+
+  // 場地 A：有新欄位與私密欄位；場地 B：舊文件，沒有任何新欄位
+  const venueA = {
+    name: 'A',
+    region: '台北',
+    status: 'active',
+    eventCount: 1,
+    createdAt: ts('2026-01-01T00:00:00Z'),
+    tags: [
+      { slug: 'goods_distribution' },
+      { slug: 'free_venue', limited: true, until: '2026-10-15' },
+    ],
+    sourceLinks: ['https://a.com/doc'],
+    equipmentNote: '投影機',
+    infoUpdatedOn: '2026-10-01',
+    calendarUrl: 'https://calendar.example.com/a',
+    submission: { submittedAt: ts('2026-10-01T00:00:00Z'), confirmedAt: null },
+    eventRefs: [eventRef('ev-1')],
+  };
+  const venueB = { name: 'B', region: '台北', status: 'active', eventCount: 0, eventRefs: [] };
+  const docsById: Record<string, Record<string, unknown>> = { a: venueA, b: venueB };
+
+  // 活動台北 10/16 00:00 開始、10/20 23:59:59 結束
+  const eventDoc = {
+    id: 'ev-1',
+    exists: true,
+    data: () => ({
+      status: 'approved',
+      title: '生咖',
+      artists: [{ name: 'X' }],
+      datetime: { start: ts('2026-10-15T16:00:00.000Z'), end: ts('2026-10-20T15:59:59.000Z') },
+    }),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'venueViewDaily') {
+        return { where: () => ({ get: () => Promise.resolve({ docs: [] }) }) };
+      }
+      return {
+        orderBy: () => ({
+          get: () =>
+            Promise.resolve({
+              docs: Object.entries(docsById).map(([id, data]) => ({ id, data: () => data })),
+            }),
+        }),
+        doc: (id: string) => ({
+          id,
+          get: () =>
+            Promise.resolve(
+              docsById[id]
+                ? { id, exists: true, data: () => docsById[id] }
+                : { id, exists: false, data: () => undefined }
+            ),
+          update: mockUpdate,
+          set: mockSet,
+        }),
+      };
+    });
+    (firebase.db.getAll as jest.Mock).mockResolvedValue([eventDoc]);
+    mockUpdate.mockResolvedValue(undefined);
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-10-15T04:00:00Z')); // 台北 10/15 12:00
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const listVenues = async (params = {}) => {
+    const result = await new VenueService().getVenues(params);
+    return (Array.isArray(result) ? result : result.venues) as unknown as Record<string, unknown>[];
+  };
+
+  it('TC-001 列表每筆都有 tags（舊文件為 []），不含詳情專屬欄位；詳情帶四欄與預設值', async () => {
+    const list = await listVenues({ sort: 'name' });
+    const a = list.find(v => v.id === 'a')!;
+    const b = list.find(v => v.id === 'b')!;
+    expect(a.tags).toEqual(venueA.tags);
+    expect(b.tags).toEqual([]);
+    for (const v of [a, b]) {
+      expect(v).not.toHaveProperty('sourceLinks');
+      expect(v).not.toHaveProperty('equipmentNote');
+      expect(v).not.toHaveProperty('infoUpdatedOn');
+    }
+
+    const service = new VenueService();
+    const detailA = await service.getVenueById('a');
+    expect(detailA).toMatchObject({
+      tags: venueA.tags,
+      sourceLinks: ['https://a.com/doc'],
+      equipmentNote: '投影機',
+      infoUpdatedOn: '2026-10-01',
+    });
+    const detailB = await service.getVenueById('b');
+    expect(detailB).toMatchObject({
+      tags: [],
+      sourceLinks: [],
+      equipmentNote: '',
+      infoUpdatedOn: null,
+    });
+  });
+
+  it('TC-083 公開 API 不洩漏 calendarUrl、submission；只有 admin 詳情有', async () => {
+    const service = new VenueService();
+    const lists = [await listVenues({}), await listVenues({ status: 'all' })];
+    for (const v of lists.flat()) {
+      expect(v).not.toHaveProperty('calendarUrl');
+      expect(v).not.toHaveProperty('submission');
+    }
+    const detail = await service.getVenueById('a');
+    expect(detail).not.toHaveProperty('calendarUrl');
+    expect(detail).not.toHaveProperty('submission');
+
+    const admin = await service.getAdminVenueById('a');
+    expect(admin).toHaveProperty('calendarUrl', 'https://calendar.example.com/a');
+  });
+
+  it('TC-028 讀出快取後才過濾：跨過台北午夜後不清快取，過期標籤消失，快取物件保留原始 tags', async () => {
+    const service = new VenueService();
+    jest.setSystemTime(new Date('2026-10-15T15:00:00Z'));
+    expect((await service.getVenueById('a'))!.tags).toHaveLength(2);
+    expect((await listVenues({}))[0].tags).toHaveLength(2);
+
+    jest.setSystemTime(new Date('2026-10-15T16:01:00Z')); // 台北 10/16 00:01
+    expect((await service.getVenueById('a'))!.tags).toEqual([{ slug: 'goods_distribution' }]);
+    expect((await listVenues({})).find(v => v.id === 'a')!.tags).toEqual([
+      { slug: 'goods_distribution' },
+    ]);
+
+    expect(cache.get<{ tags: unknown[] }>('venue:detail:a')!.tags).toHaveLength(2);
+    const all = cache.get<{ id: string; tags: unknown[] }[]>('venues:all')!;
+    expect(all.find(v => v.id === 'a')!.tags).toHaveLength(2);
+  });
+
+  it.each([
+    ['無 sort（分頁）', {}],
+    ['sort=random&limit=8', { sort: 'random', limit: 8 }],
+    ['sort=distance', { sort: 'distance', userCoords: { lat: 25, lng: 121 } }],
+  ])('TC-029 列表回傳路徑都過濾過期標籤：%s', async (_name, params) => {
+    jest.setSystemTime(new Date('2026-10-16T04:00:00Z'));
+    const a = (await listVenues(params)).find(v => v.id === 'a')!;
+    expect(a.tags).toEqual([{ slug: 'goods_distribution' }]);
+  });
+
+  it('TC-031 timeStatus 在讀出快取後才算（公開與 admin 詳情），快取不寫入 timeStatus', async () => {
+    const service = new VenueService();
+    jest.setSystemTime(new Date('2026-10-15T15:59:00Z')); // 台北 10/15 23:59
+    expect((await service.getVenueById('a'))!.events[0].timeStatus).toBe('upcoming');
+    expect((await service.getAdminVenueById('a'))!.events[0].timeStatus).toBe('upcoming');
+
+    jest.setSystemTime(new Date('2026-10-15T16:00:00Z')); // 台北 10/16 00:00
+    expect((await service.getVenueById('a'))!.events[0].timeStatus).toBe('ongoing');
+    expect((await service.getAdminVenueById('a'))!.events[0].timeStatus).toBe('ongoing');
+
+    for (const key of ['venue:detail:a', 'venue:admin:detail:a']) {
+      expect(cache.get<{ events: object[] }>(key)!.events[0]).not.toHaveProperty('timeStatus');
+    }
+  });
+
+  describe('TC-003 admin PATCH 寫入、清空新欄位', () => {
+    it('a：寫入五欄（整個覆蓋）、清四個快取 key；admin 詳情回原始 tags（含過期）與 calendarUrl', async () => {
+      jest.setSystemTime(new Date('2026-10-20T04:00:00Z')); // free_venue 已過期
+      const deleteSpy = jest.spyOn(cache, 'delete');
+      const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
+      const body = {
+        tags: [{ slug: 'private_booking' }],
+        sourceLinks: ['https://b.com'],
+        equipmentNote: '音響',
+        infoUpdatedOn: '2026-10-20',
+        calendarUrl: 'https://calendar.example.com/new',
+      };
+
+      await new VenueService().updateVenue('a', body);
+
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject(body);
+      expect(deleteSpy).toHaveBeenCalledWith('venues:all');
+      expect(deleteSpy).toHaveBeenCalledWith('venue:detail:a');
+      expect(deleteSpy).toHaveBeenCalledWith('venue:admin:detail:a');
+      expect(clearPatternSpy).toHaveBeenCalledWith('admin:venues:');
+      deleteSpy.mockRestore();
+      clearPatternSpy.mockRestore();
+
+      const admin = await new VenueService().getAdminVenueById('a');
+      expect(admin!.tags).toEqual(venueA.tags);
+      expect(admin!.calendarUrl).toBe('https://calendar.example.com/a');
+    });
+
+    it('b：空值也照寫（不當成沒帶）', async () => {
+      await new VenueService().updateVenue('a', {
+        tags: [],
+        sourceLinks: [],
+        equipmentNote: '',
+        infoUpdatedOn: null,
+        calendarUrl: null,
+      });
+
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject({
+        tags: [],
+        sourceLinks: [],
+        equipmentNote: '',
+        infoUpdatedOn: null,
+        calendarUrl: null,
+      });
+    });
+  });
+
+  it('TC-058（後端）body 沒帶的標籤區欄位，update() 也不含', async () => {
+    await new VenueService().updateVenue('a', { name: '新店名' });
+
+    const written = mockUpdate.mock.calls[0][0];
+    expect(written.name).toBe('新店名');
+    for (const key of ['tags', 'sourceLinks', 'equipmentNote', 'infoUpdatedOn', 'calendarUrl']) {
+      expect(written).not.toHaveProperty(key);
+    }
+  });
+
+  it('TC-029 admin 列表（adminService.getAdminVenues）保留原始 tags', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      get: () => Promise.resolve({ docs: [{ id: 'a', data: () => venueA }] }),
+      where: () => ({ get: () => Promise.resolve({ docs: [{ id: 'a', data: () => venueA }] }) }),
+    });
+    jest.setSystemTime(new Date('2026-10-20T04:00:00Z'));
+    const result = await new AdminService().getAdminVenues({});
+    expect(result.data[0].tags).toEqual(venueA.tags);
+  });
+
+  it('admin 列表：舊文件沒有 tags 欄位時回 []', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      get: () => Promise.resolve({ docs: [{ id: 'b', data: () => venueB }] }),
+    });
+    const result = await new AdminService().getAdminVenues({});
+    expect(result.data[0].tags).toEqual([]);
   });
 });
