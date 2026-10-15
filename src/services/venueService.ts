@@ -2,14 +2,16 @@ import { db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import { AppError } from '../utils/AppError';
 import {
+  AdminVenueDetail,
   CreateVenueData,
+  CreateVenueSubmissionData,
   PaginatedVenues,
   UpdateVenueData,
   Venue,
   VenueBatchReviewItem,
   VenueBatchStatusItem,
   VenueDetail,
-  VenueEventCard,
+  VenueEventCardBase,
   VenueFilterParams,
   VenueStatus,
   VenueWithScore,
@@ -18,6 +20,8 @@ import { cache } from '../utils/cache';
 import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
 import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
+import { getTaipeiDateString } from '../utils/taipeiDate';
+import { computeEventTimeStatus, filterVisibleTags } from './venueTags';
 import {
   DocumentData,
   DocumentReference,
@@ -119,11 +123,24 @@ export function computeActiveWeeks(
 
 const formatUtcDate = (date: Date): string => date.toISOString().slice(0, 10);
 
-const stripScore = (v: VenueWithScore): Venue => {
-  const rest: Partial<VenueWithScore> = { ...v };
+// Cached detail shape: raw tags, events without timeStatus (both resolved per request)
+type CachedVenueDetail = Omit<VenueDetail, 'events'> & { events: VenueEventCardBase[] };
+type CachedAdminVenueDetail = Omit<AdminVenueDetail, 'events'> & { events: VenueEventCardBase[] };
+
+// Returns a new object: cached venues must keep raw tags
+const toPublicVenue = (v: VenueWithScore, today: string): Venue => {
+  const rest: Partial<VenueWithScore> = { ...v, tags: filterVisibleTags(v.tags, today) };
   delete rest.compositeScore;
   return rest as Venue;
 };
+
+const withTimeStatus = <T extends { events: VenueEventCardBase[] }>(detail: T, today: string) => ({
+  ...detail,
+  events: detail.events.map(e => ({
+    ...e,
+    timeStatus: computeEventTimeStatus(e.startDate, e.endDate, today),
+  })),
+});
 
 // compositeScore desc → createdAt desc → id asc，確保排序具決定性（deterministic）。
 // 抽出自既有 composite 排序分支，與 sort=distance 的 tie-break 共用，避免重複程式碼。
@@ -166,6 +183,7 @@ export class VenueService {
       otherPhotos: d.otherPhotos ?? [],
       description: d.description ?? '',
       hostTags: d.hostTags ?? [],
+      tags: d.tags ?? [],
       status: (d.status as VenueStatus) ?? 'pending',
       createdAt: d.createdAt ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
@@ -275,6 +293,11 @@ export class VenueService {
         coverPhoto: data.coverPhoto,
         otherPhotos: data.otherPhotos ?? [],
         socialMedia: data.socialMedia,
+        tags: data.tags ?? [],
+        sourceLinks: data.sourceLinks ?? [],
+        equipmentNote: data.equipmentNote ?? '',
+        infoUpdatedOn: data.infoUpdatedOn ?? null,
+        calendarUrl: data.calendarUrl ?? null,
         status: 'pending',
         eventCount: 0,
         eventRefs: [],
@@ -303,17 +326,40 @@ export class VenueService {
       coverPhoto: data.coverPhoto,
       otherPhotos: data.otherPhotos ?? [],
       socialMedia: data.socialMedia,
+      tags: data.tags ?? [],
+      sourceLinks: data.sourceLinks ?? [],
+      equipmentNote: data.equipmentNote ?? '',
+      infoUpdatedOn: data.infoUpdatedOn ?? null,
       status: 'pending',
       eventCount: 0,
       events: [],
     };
   }
 
+  // Public submission path: curated fields are never written, even if a caller passes them
+  async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
+    return this.createVenue({
+      ...data,
+      tags: undefined,
+      sourceLinks: undefined,
+      equipmentNote: undefined,
+      infoUpdatedOn: undefined,
+      calendarUrl: undefined,
+    });
+  }
+
   async getVenueById(id: string): Promise<VenueDetail | null> {
+    const detail = await this.getCachedVenueDetail(id);
+    if (!detail) return null;
+    const today = getTaipeiDateString(new Date());
+    return withTimeStatus({ ...detail, tags: filterVisibleTags(detail.tags, today) }, today);
+  }
+
+  private async getCachedVenueDetail(id: string): Promise<CachedVenueDetail | null> {
     this.checkFirebaseConfig();
 
     const cacheKey = `venue:detail:${id}`;
-    const cached = cache.get<VenueDetail>(cacheKey);
+    const cached = cache.get<CachedVenueDetail>(cacheKey);
     if (cached) return cached;
 
     const doc = await withTimeoutAndRetry(() => this.collection!.doc(id).get());
@@ -325,7 +371,7 @@ export class VenueService {
 
     const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
 
-    let events: VenueEventCard[] = [];
+    let events: VenueEventCardBase[] = [];
 
     if (eventRefs.length > 0) {
       const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
@@ -350,7 +396,7 @@ export class VenueService {
         .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
     }
 
-    const detail: VenueDetail = {
+    const detail: CachedVenueDetail = {
       id: doc.id,
       name: d.name ?? '',
       address: d.address ?? '',
@@ -367,6 +413,10 @@ export class VenueService {
       status: (d.status as VenueStatus) ?? 'pending',
       description: d.description ?? '',
       hostTags: d.hostTags ?? [],
+      tags: d.tags ?? [],
+      sourceLinks: d.sourceLinks ?? [],
+      equipmentNote: d.equipmentNote ?? '',
+      infoUpdatedOn: d.infoUpdatedOn ?? null,
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
@@ -424,6 +474,11 @@ export class VenueService {
       'coverPhoto',
       'otherPhotos',
       'socialMedia',
+      'tags',
+      'sourceLinks',
+      'equipmentNote',
+      'infoUpdatedOn',
+      'calendarUrl',
     ];
 
     const updateData: Record<string, unknown> = {
@@ -447,11 +502,17 @@ export class VenueService {
     return true;
   }
 
-  async getAdminVenueById(id: string): Promise<VenueDetail | null> {
+  // Admin sees raw tags (incl. expired) so the editor can flag them
+  async getAdminVenueById(id: string): Promise<AdminVenueDetail | null> {
+    const detail = await this.getCachedAdminVenueDetail(id);
+    return detail && withTimeStatus(detail, getTaipeiDateString(new Date()));
+  }
+
+  private async getCachedAdminVenueDetail(id: string): Promise<CachedAdminVenueDetail | null> {
     this.checkFirebaseConfig();
 
     const cacheKey = `venue:admin:detail:${id}`;
-    const cached = cache.get<VenueDetail>(cacheKey);
+    const cached = cache.get<CachedAdminVenueDetail>(cacheKey);
     if (cached) return cached;
 
     const doc = await withTimeoutAndRetry(() => this.collection!.doc(id).get());
@@ -461,7 +522,7 @@ export class VenueService {
 
     const eventRefs = (d.eventRefs ?? []) as DocumentReference[];
 
-    let events: VenueEventCard[] = [];
+    let events: VenueEventCardBase[] = [];
 
     if (eventRefs.length > 0) {
       const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
@@ -486,7 +547,7 @@ export class VenueService {
         .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
     }
 
-    const detail: VenueDetail = {
+    const detail: CachedAdminVenueDetail = {
       id: doc.id,
       name: d.name ?? '',
       address: d.address ?? '',
@@ -503,6 +564,11 @@ export class VenueService {
       status: (d.status as VenueStatus) ?? 'pending',
       description: d.description ?? '',
       hostTags: d.hostTags ?? [],
+      tags: d.tags ?? [],
+      sourceLinks: d.sourceLinks ?? [],
+      equipmentNote: d.equipmentNote ?? '',
+      infoUpdatedOn: d.infoUpdatedOn ?? null,
+      calendarUrl: d.calendarUrl ?? null,
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       socialMedia: d.socialMedia ?? undefined,
@@ -652,6 +718,7 @@ export class VenueService {
     const { region, capacityRange, search, sort, limit, page, status, userCoords } = params;
 
     let venues = await this.fetchAll();
+    const today = getTaipeiDateString(new Date());
 
     if (status !== 'all') {
       venues = venues.filter(v => v.status === (status ?? 'active'));
@@ -680,7 +747,7 @@ export class VenueService {
         [sampled[index], sampled[swapIndex]] = [sampled[swapIndex], sampled[index]];
       }
 
-      return sampled.slice(0, sampleSize).map(stripScore);
+      return sampled.slice(0, sampleSize).map(v => toPublicVenue(v, today));
     }
 
     // 未帶 sort 時預設套用綜合排序（Phase 2.8 新預設，取代舊有的「回退到 Firestore
@@ -737,7 +804,7 @@ export class VenueService {
     const totalPages = total === 0 ? 0 : Math.ceil(total / resolvedLimit);
 
     return {
-      venues: venues.slice(skip, skip + resolvedLimit).map(stripScore),
+      venues: venues.slice(skip, skip + resolvedLimit).map(v => toPublicVenue(v, today)),
       pagination: { page: resolvedPage, limit: resolvedLimit, total, totalPages },
     };
   }

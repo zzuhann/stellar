@@ -108,6 +108,22 @@ export type VenueStatus = 'pending' | 'active' | 'inactive' | 'rejected';
 
 export type CapacityRange = '20以下' | '20-40' | '40-60' | '60以上';
 
+// STELLAR-curated tag. Three states: { slug } | { slug, limited } | { slug, limited, until }
+export interface VenueTag {
+  slug: string;
+  limited?: true;
+  until?: string; // Taipei calendar date YYYY-MM-DD; still shown on that day
+}
+
+// Admin-editable tag fields on the venue doc; all optional on legacy docs
+export interface VenueTagFields {
+  tags: VenueTag[];
+  sourceLinks: string[];
+  equipmentNote: string;
+  infoUpdatedOn: string | null; // YYYY-MM-DD
+  calendarUrl: string | null; // admin only, never in public responses
+}
+
 // 場地卡片（列表頁回傳，不含 eventRefs）
 export interface Venue {
   id: string;
@@ -125,6 +141,7 @@ export interface Venue {
   otherPhotos: string[];
   description: string;
   hostTags: string[];
+  tags: VenueTag[];
   status: VenueStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -172,7 +189,10 @@ export interface PaginatedVenues {
   pagination: VenuePagination;
 }
 
-export interface VenueEventCard {
+export type VenueEventTimeStatus = 'ongoing' | 'upcoming' | 'ended' | null;
+
+// Cached shape; timeStatus is computed per request after the cache read
+export interface VenueEventCardBase {
   id: string;
   title: string;
   artistName: string;
@@ -180,6 +200,10 @@ export interface VenueEventCard {
   endDate: string;
   coverImage: string;
   slug: string | null;
+}
+
+export interface VenueEventCard extends VenueEventCardBase {
+  timeStatus: VenueEventTimeStatus;
 }
 
 export interface VenueDetail {
@@ -199,6 +223,10 @@ export interface VenueDetail {
   status: VenueStatus;
   description: string;
   hostTags: string[];
+  tags: VenueTag[];
+  sourceLinks: string[];
+  equipmentNote: string;
+  infoUpdatedOn: string | null;
   preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
   socialMedia?: {
@@ -210,7 +238,9 @@ export interface VenueDetail {
   events: VenueEventCard[];
 }
 
-export interface CreateVenueData {
+export type AdminVenueDetail = VenueDetail & { calendarUrl: string | null };
+
+export interface CreateVenueSubmissionData {
   name: string;
   address: string;
   region: string;
@@ -233,6 +263,8 @@ export interface CreateVenueData {
   };
 }
 
+export type CreateVenueData = CreateVenueSubmissionData & Partial<VenueTagFields>;
+
 export interface UpdateVenueData {
   name?: string;
   address?: string;
@@ -252,6 +284,11 @@ export interface UpdateVenueData {
     instagram?: string;
     line?: string;
   };
+  tags?: VenueTag[];
+  sourceLinks?: string[];
+  equipmentNote?: string;
+  infoUpdatedOn?: string | null;
+  calendarUrl?: string | null;
 }
 
 // Batch review request item

@@ -28,6 +28,7 @@ router.get(
 );
 
 // Batch routes must come before /:id to avoid being matched as an id param
+router.get('/tag-dictionary', venuesListLimiter, venueController.getTagDictionary);
 router.patch(
   '/batch-review',
   authenticateToken,

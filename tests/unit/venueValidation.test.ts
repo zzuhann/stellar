@@ -1,5 +1,16 @@
 import { venueSchemas } from '../../src/middleware/validation';
 
+jest.mock('../../src/constants/venueTags', () => {
+  const actual = jest.requireActual('../../src/constants/venueTags');
+  return {
+    ...actual,
+    VENUE_TAGS: [
+      ...actual.VENUE_TAGS,
+      { slug: 'retired_tag', group: 'service', label: '停用', order: 99, active: false },
+    ],
+  };
+});
+
 const regionSchema = venueSchemas.create.shape.region;
 
 describe('venue region validation', () => {
@@ -441,5 +452,131 @@ describe('venue submission error messages (Traditional Chinese)', () => {
       expect(firstIssue('update', { mrtWalkMinutes: '5' }).message).toBe('步行分鐘數必須是數字');
       expect(firstIssue('update', { socialMedia: 'x' }).message).toBe('請填寫社群帳號');
     });
+  });
+});
+
+describe('venue tag fields (venue-tags)', () => {
+  const parseUpdate = (body: unknown) => venueSchemas.update.safeParse(body);
+  const venueBase = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40',
+    coverPhoto: 'https://example.com/cover.jpg',
+    preferredContact: 'instagram',
+    socialMedia: { instagram: 'venue' },
+  } as const;
+
+  describe('TC-068 update schema 的 tags', () => {
+    it.each([
+      ['未知 slug', [{ slug: 'unknown_tag' }]],
+      ['active:false', [{ slug: 'retired_tag' }]],
+      ['重複 slug', [{ slug: 'free_venue' }, { slug: 'free_venue', limited: true }]],
+      ['有 until 沒有 limited', [{ slug: 'free_venue', until: '2026-12-31' }]],
+      ['until 不存在的日期', [{ slug: 'free_venue', limited: true, until: '2026-02-31' }]],
+      ['until 格式錯', [{ slug: 'free_venue', limited: true, until: '2026/12/31' }]],
+    ])('400：%s', (_name, tags) => {
+      expect(parseUpdate({ tags }).success).toBe(false);
+    });
+
+    it.each([
+      ['until 是過去日期', [{ slug: 'free_venue', limited: true, until: '2020-01-01' }]],
+      ['tags: []', []],
+    ])('通過：%s', (_name, tags) => {
+      const result = parseUpdate({ tags });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.tags).toEqual(tags);
+    });
+
+    it('limited:false 存檔時被拿掉', () => {
+      const result = parseUpdate({ tags: [{ slug: 'private_booking', limited: false }] });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.tags).toEqual([{ slug: 'private_booking' }]);
+    });
+  });
+
+  describe('TC-069 其他新欄位的 schema', () => {
+    const urls = (n: number) => Array.from({ length: n }, (_, i) => `https://example.com/${i}`);
+
+    it('sourceLinks：6 個 → 400；5 個通過；空字串被濾掉；[] 通過', () => {
+      expect(parseUpdate({ sourceLinks: urls(6) }).success).toBe(false);
+      expect(parseUpdate({ sourceLinks: urls(5) }).success).toBe(true);
+      const filtered = parseUpdate({ sourceLinks: ['', 'https://a.com', ''] });
+      expect(filtered.success && filtered.data.sourceLinks).toEqual(['https://a.com']);
+      const empty = parseUpdate({ sourceLinks: [] });
+      expect(empty.success && empty.data.sourceLinks).toEqual([]);
+    });
+
+    it.each([['javascript:alert(1)'], [`https://example.com/${'a'.repeat(500)}`]])(
+      'sourceLinks 不合法：%s',
+      link => {
+        expect(parseUpdate({ sourceLinks: [link] }).success).toBe(false);
+      }
+    );
+
+    it.each([[''], [null]])('calendarUrl %p → null', value => {
+      const result = parseUpdate({ calendarUrl: value });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.calendarUrl).toBeNull();
+    });
+
+    it('calendarUrl 不是 http/https → 400', () => {
+      expect(parseUpdate({ calendarUrl: 'ftp://example.com' }).success).toBe(false);
+    });
+
+    it('equipmentNote：trim；空字串通過；1001 字 400；含價格通過', () => {
+      const trimmed = parseUpdate({ equipmentNote: '  扭蛋機\n燈板  ' });
+      expect(trimmed.success && trimmed.data.equipmentNote).toBe('扭蛋機\n燈板');
+      const empty = parseUpdate({ equipmentNote: '' });
+      expect(empty.success && empty.data.equipmentNote).toBe('');
+      expect(parseUpdate({ equipmentNote: 'a'.repeat(1001) }).success).toBe(false);
+      expect(parseUpdate({ equipmentNote: '燈板租借 $300' }).success).toBe(true);
+    });
+
+    it('infoUpdatedOn：null 通過；合法日期通過；2026-13-01 → 400', () => {
+      expect(parseUpdate({ infoUpdatedOn: null }).success).toBe(true);
+      expect(parseUpdate({ infoUpdatedOn: '2026-10-15' }).success).toBe(true);
+      expect(parseUpdate({ infoUpdatedOn: '2026-13-01' }).success).toBe(false);
+    });
+  });
+
+  it('create（admin）接受五個新欄位', () => {
+    const result = venueSchemas.create.safeParse({
+      ...venueBase,
+      tags: [{ slug: 'free_venue', limited: true, until: '2026-12-31' }],
+      sourceLinks: ['https://a.com'],
+      equipmentNote: '投影機',
+      infoUpdatedOn: '2026-10-15',
+      calendarUrl: 'https://calendar.example.com',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({
+        tags: [{ slug: 'free_venue', limited: true, until: '2026-12-31' }],
+        sourceLinks: ['https://a.com'],
+        equipmentNote: '投影機',
+        infoUpdatedOn: '2026-10-15',
+        calendarUrl: 'https://calendar.example.com',
+      });
+    }
+  });
+
+  it('createSubmission（匿名投稿）靜默丟掉五個正式欄位，hostTags 照收', () => {
+    const result = venueSchemas.createSubmission.safeParse({
+      ...venueBase,
+      hostTags: ['大空間'],
+      tags: [{ slug: 'free_venue' }],
+      sourceLinks: ['https://a.com'],
+      equipmentNote: '投影機',
+      infoUpdatedOn: '2026-10-15',
+      calendarUrl: 'https://calendar.example.com',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hostTags).toEqual(['大空間']);
+      for (const key of ['tags', 'sourceLinks', 'equipmentNote', 'infoUpdatedOn', 'calendarUrl']) {
+        expect(result.data).not.toHaveProperty(key);
+      }
+    }
   });
 });

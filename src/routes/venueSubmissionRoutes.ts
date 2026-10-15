@@ -18,7 +18,7 @@ const placesController = new PlacesController();
 router.post(
   '/',
   venueSubmissionLimiter,
-  validateRequest({ body: venueSchemas.create }),
+  validateRequest({ body: venueSchemas.createSubmission }),
   venueController.createVenueSubmission
 );
 router.post('/images', venueSubmissionImageLimiter, uploadSingle, imageController.uploadImage);
