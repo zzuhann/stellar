@@ -1461,6 +1461,15 @@ components:
         limited: { type: boolean, enum: [true] }
         until: { type: string, format: date, description: 台灣時間的日期，有 until 一定要有 limited }
 
+    VenueTagInput:
+      type: object
+      required: [slug]
+      description: 寫入用；`limited:false` 視為不限期、存檔時拿掉。有 until 一定要 limited:true。until 可以是過去日期
+      properties:
+        slug: { type: string }
+        limited: { type: boolean }
+        until: { type: string, format: date }
+
     VenueTagDictionary:
       type: object
       properties:
@@ -1492,7 +1501,7 @@ components:
         tags:
           type: array
           description: slug 要在字典裡且 active、不能重複
-          items: { $ref: '#/components/schemas/VenueTag' }
+          items: { $ref: '#/components/schemas/VenueTagInput' }
         sourceLinks:
           type: array
           maxItems: 5
@@ -1502,9 +1511,9 @@ components:
         infoUpdatedOn: { type: string, format: date, nullable: true }
         calendarUrl:
           type: string
-          format: uri
           nullable: true
-          description: 空字串視為清空（存成 null）；只有 admin 看得到
+          maxLength: 500
+          description: http/https 網址；`''` 或 null 視為清空（存成 null）；只有 admin 看得到
 
     UpdateVenueData:
       allOf:

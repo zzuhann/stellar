@@ -31,6 +31,38 @@ jest.mock('../../src/utils/firestoreTimeout', () => ({
   withTimeoutAndRetry: jest.fn((fn: () => unknown) => fn()),
 }));
 
+describe('VenueService.createVenueSubmission', () => {
+  it('TC-080（service 層）呼叫端夾帶正式欄位也不寫入', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
+    mockSet.mockResolvedValue(undefined);
+
+    await new VenueService().createVenueSubmission({
+      name: '測試場地',
+      address: '台北市測試路 1 號',
+      region: '台北',
+      capacityRange: '20-40',
+      preferredContact: 'instagram',
+      coverPhoto: 'https://example.com/cover.jpg',
+      socialMedia: { instagram: 'venue' },
+      tags: [{ slug: 'free_venue' }],
+      sourceLinks: ['https://a.com'],
+      equipmentNote: '投影機',
+      infoUpdatedOn: '2026-10-15',
+      calendarUrl: 'https://calendar.example.com',
+    } as never);
+
+    expect(mockSet.mock.calls[0][0]).toMatchObject({
+      tags: [],
+      sourceLinks: [],
+      equipmentNote: '',
+      infoUpdatedOn: null,
+      calendarUrl: null,
+      status: 'pending',
+    });
+  });
+});
+
 describe('VenueService.createVenue', () => {
   it('pending 場地不清公開列表 cache，但清除 admin cache', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
