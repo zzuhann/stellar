@@ -104,6 +104,38 @@ describe('POST /api/venue-submissions 權限邊界', () => {
     expect(res.body).not.toHaveProperty('submission');
   });
 
+  it('TC-080 b（PR 2b）bookingFormUrl、contactUrl 照送的值寫進正式欄位，標籤區照樣清空', async () => {
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({
+        ...venueBody,
+        preferredContact: 'line',
+        contactUrl: 'https://lin.ee/x',
+        bookingFormUrl: 'https://forms.gle/x',
+        tags: [{ slug: 'free_venue' }],
+      });
+
+    expect(res.status).toBe(201);
+    const written = mockVenueSet.mock.calls[0][0];
+    expect(written.bookingFormUrl).toBe('https://forms.gle/x');
+    expect(written.contactUrl).toBe('https://lin.ee/x');
+    expect(written.tags).toEqual([]);
+    expect(written).not.toHaveProperty('submission');
+  });
+
+  it('TC-080 c（PR 2b）沒帶 bookingFormUrl 存 null；不合法回 400 且不寫入', async () => {
+    const ok = await request(app).post('/api/venue-submissions').send(venueBody);
+    expect(ok.status).toBe(201);
+    expect(mockVenueSet.mock.calls[0][0].bookingFormUrl).toBeNull();
+
+    mockVenueSet.mockClear();
+    const bad = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, bookingFormUrl: 'javascript:alert(1)' });
+    expect(bad.status).toBe(400);
+    expect(mockVenueSet).not.toHaveBeenCalled();
+  });
+
   it('TC-082 舊表單只送 hostTags：201，hostTags 照存，沒有 submission', async () => {
     const res = await request(app)
       .post('/api/venue-submissions')
