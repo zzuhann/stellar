@@ -455,7 +455,36 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CreateVenueData' }
       responses:
-        '201': { description: 建立成功 }
+        '201': { description: 建立成功（status 為 pending） }
+
+  /venues/tag-dictionary:
+    get:
+      tags: [venues]
+      summary: 場地標籤字典（只回 active 標籤）
+      description: |
+        常數，部署時才會改。Response header `Cache-Control: public, max-age=3600`。
+        Rate limit 沿用列表：每 IP 每 15 分鐘 180 次。
+      responses:
+        '200':
+          description: 標籤分組與標籤
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VenueTagDictionary' }
+
+  /venues/admin/{id}:
+    get:
+      tags: [venues]
+      summary: 取得場地詳情（僅 admin，含非 active 場地、原始標籤與 calendarUrl）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: 場地詳情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminVenueDetail' }
+        '404': { description: 場地不存在 }
 
   /venues/{id}:
     get:
@@ -472,11 +501,21 @@ paths:
     patch:
       tags: [venues]
       summary: 編輯場地（僅 admin）
+      description: 沒帶的欄位不動；有帶的 `tags`、`sourceLinks`、`hostTags`、`otherPhotos` 整個覆蓋。
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/idPath'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateVenueData' }
       responses:
         '200': { description: 更新成功 }
+        '400':
+          description: 輸入格式錯誤（例如標籤不在字典裡、slug 重複）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
     delete:
       tags: [venues]
       summary: 刪除場地（僅 admin）
@@ -672,11 +711,12 @@ paths:
     post:
       tags: [venues]
       summary: 公開場地投稿（建立為 pending）
+      description: 不接受 STELLAR 代貼的正式欄位（tags、sourceLinks、equipmentNote、infoUpdatedOn、calendarUrl），帶了會被靜默丟掉。
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateVenueData' }
+            schema: { $ref: '#/components/schemas/CreateVenueSubmissionData' }
       responses:
         '201':
           description: 投稿建立成功
@@ -1361,7 +1401,15 @@ components:
         coverPhoto: { type: string }
         otherPhotos: { type: array, items: { type: string } }
         description: { type: string }
-        hostTags: { type: array, items: { type: string } }
+        hostTags:
+          type: array
+          items: { type: string }
+          deprecated: true
+          description: 前台不再顯示；資料保留，寫入仍接受
+        tags:
+          type: array
+          description: 已過濾過期與停用的標籤；沒有標籤時為 []
+          items: { $ref: '#/components/schemas/VenueTag' }
         status: { type: string }
         socialMedia:
           type: object
@@ -1375,6 +1423,9 @@ components:
         - $ref: '#/components/schemas/Venue'
         - type: object
           properties:
+            sourceLinks: { type: array, maxItems: 5, items: { type: string, format: uri } }
+            equipmentNote: { type: string, description: 店家提供的設備原文，空字串代表沒有 }
+            infoUpdatedOn: { type: string, format: date, nullable: true }
             events:
               type: array
               items:
@@ -1387,8 +1438,107 @@ components:
                   endDate: { type: string }
                   coverImage: { type: string }
                   slug: { type: string, nullable: true }
+                  timeStatus:
+                    type: string
+                    nullable: true
+                    enum: [ongoing, upcoming, ended, null]
+                    description: 依台灣時間的今天計算；沒有開始或結束日時為 null
+
+    AdminVenueDetail:
+      description: VenueDetail 加上 calendarUrl；tags 為原始資料，含過期與停用的標籤
+      allOf:
+        - $ref: '#/components/schemas/VenueDetail'
+        - type: object
+          properties:
+            calendarUrl: { type: string, format: uri, nullable: true }
+
+    VenueTag:
+      type: object
+      required: [slug]
+      description: 不限期 `{slug}`；限期沒日期 `{slug, limited}`；限期到某天 `{slug, limited, until}`（until 當天仍顯示）
+      properties:
+        slug: { type: string }
+        limited: { type: boolean, enum: [true] }
+        until: { type: string, format: date, description: 台灣時間的日期，有 until 一定要有 limited }
+
+    VenueTagDictionary:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, enum: [price, service, transport, space, equipment] }
+              label: { type: string }
+              order: { type: integer }
+        tags:
+          type: array
+          items:
+            type: object
+            required: [slug, group, label, order]
+            properties:
+              slug: { type: string }
+              group: { type: string }
+              label: { type: string }
+              order: { type: integer, description: 組內順序 }
+              cardRank:
+                type: integer
+                description: 有值才能上卡片，數字小的優先
+
+    VenueTagFields:
+      type: object
+      properties:
+        tags:
+          type: array
+          description: slug 要在字典裡且 active、不能重複
+          items: { $ref: '#/components/schemas/VenueTag' }
+        sourceLinks:
+          type: array
+          maxItems: 5
+          description: http/https，各 500 字以內；空字串會被濾掉
+          items: { type: string, format: uri }
+        equipmentNote: { type: string, maxLength: 1000 }
+        infoUpdatedOn: { type: string, format: date, nullable: true }
+        calendarUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: 空字串視為清空（存成 null）；只有 admin 看得到
+
+    UpdateVenueData:
+      allOf:
+        - type: object
+          properties:
+            name: { type: string, maxLength: 200 }
+            address: { type: string, maxLength: 500 }
+            region: { type: string }
+            status: { type: string, enum: [active, inactive] }
+            nearestMrt: { type: string }
+            mrtWalkMinutes: { type: integer, nullable: true }
+            capacityRange:
+              { type: string, nullable: true, enum: [20以下, 20-40, 40-60, 60以上, null] }
+            description: { type: string }
+            hostTags: { type: array, items: { type: string } }
+            preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
+            contactUrl: { type: string, format: uri }
+            coverPhoto: { type: string, format: uri }
+            otherPhotos: { type: array, items: { type: string, format: uri } }
+            socialMedia:
+              type: object
+              properties:
+                threads: { type: string }
+                instagram: { type: string }
+                line: { type: string }
+        - $ref: '#/components/schemas/VenueTagFields'
 
     CreateVenueData:
+      description: admin 新增；可直接寫入正式標籤欄位
+      allOf:
+        - $ref: '#/components/schemas/CreateVenueSubmissionData'
+        - $ref: '#/components/schemas/VenueTagFields'
+
+    CreateVenueSubmissionData:
       type: object
       required: [name, address, region, capacityRange, coverPhoto, preferredContact, socialMedia]
       properties:
