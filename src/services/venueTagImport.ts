@@ -74,7 +74,8 @@ const isExtraHeader = (h: string): h is keyof typeof EXTRA_COLUMNS => h in EXTRA
 
 // Cells mix labels with URLs (「表單：https://…」), so stop at whitespace, brackets, quotes,
 // full-width punctuation and CJK characters
-const URL_IN_TEXT = /https?:\/\/[^\s（）「」『』，。、；：！？()[\]<>"'\u3400-\u9fff]+/gi;
+// `*` not `+`: a bare or broken "https://" still matches and then fails validation
+const URL_IN_TEXT = /https?:\/\/[^\s（）「」『』，。、；：！？()[\]<>"'\u3400-\u9fff]*/gi;
 const MAX_SOURCE_LINKS = 5;
 // Same rules as admin PATCH, so imported values can be saved again from the admin form
 const sourceLinksSchema = venueSchemas.update.shape.sourceLinks;
@@ -240,6 +241,13 @@ export const buildImportPlan = (
     const rowNumber = index + 2;
     const cell = (col: number) => row[col] ?? '';
     if (row.every(c => (c ?? '').trim() === '')) return;
+    // A short row usually means a truncated file; treating missing cells as blank would clear data
+    if (row.length !== headers.length) {
+      errors.push(
+        `第 ${rowNumber} 列：有 ${row.length} 欄，表頭有 ${headers.length} 欄，檔案可能不完整`
+      );
+      return;
+    }
     if (cell(statusCol).trim() !== '已確認') {
       stats.skipped++;
       return;

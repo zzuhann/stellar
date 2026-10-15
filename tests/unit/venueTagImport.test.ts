@@ -220,6 +220,15 @@ describe('buildImportPlan', () => {
     expect(plan.errors[0]).toContain('v?');
   });
 
+  it('資料列欄數跟表頭不同（檔案被截斷）→ 整批拒絕，不當成清空', () => {
+    const rows = sheet([{ id: 'a', cells: okCells }], [...BASE_HEADERS, '店家提供的設備']);
+    rows[1] = rows[1].slice(0, 3);
+    const plan = buildImportPlan(rows, existing({ a: { equipmentNote: '音響' } }));
+    expect(plan.errors).toHaveLength(1);
+    expect(plan.errors[0]).toContain('第 2 列');
+    expect(plan.changes).toEqual([]);
+  });
+
   it('「整理中」的列不解析格子（v? 不擋）', () => {
     const plan = buildImportPlan(
       sheet([{ id: 'a', status: '整理中', cells: { free_venue: 'v?' } }]),
@@ -370,6 +379,8 @@ describe('buildImportPlan', () => {
     it('抽出來的網址不合法（admin API 也不會接受）→ 整批拒絕', () => {
       expect(run({ 原始說明連結: 'https://[bad' }).errors).toHaveLength(1);
       expect(run({ 檔期行事曆連結: 'https://[bad' }).errors).toHaveLength(1);
+      // a valid link in the same cell must not hide the broken one
+      expect(run({ 原始說明連結: 'https://good.com https://[bad' }).errors).toHaveLength(1);
     });
 
     it('6 個網址 → 整批拒絕', () => {
