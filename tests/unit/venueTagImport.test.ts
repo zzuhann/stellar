@@ -302,6 +302,13 @@ describe('buildImportPlan', () => {
         ],
       ],
       ['格子空白', [{ id: '', cells: okCells }]],
+      [
+        '重複的另一列不是已確認',
+        [
+          { id: 'a', cells: okCells },
+          { id: 'a', status: '待整理', cells: { free_venue: 'v' } },
+        ],
+      ],
     ])('%s → 整批拒絕', (_name, rows) => {
       const plan = buildImportPlan(sheet(rows), existing());
       expect(plan.errors.length).toBeGreaterThan(0);
@@ -347,10 +354,22 @@ describe('buildImportPlan', () => {
       ],
       ['https://forms.gle/abc（需登入）', ['https://forms.gle/abc']],
       ['https://x.com/a。', ['https://x.com/a']],
+      // code review 2026-10-15
+      [
+        'Canva(https://canva.com/x) 表單https://forms.gle/a看這裡',
+        ['https://canva.com/x', 'https://forms.gle/a'],
+      ],
+      ['https://a.com HTTPS://B.COM/x', ['https://a.com', 'HTTPS://B.COM/x']],
+      ['https://a.com\nhttps://a.com', ['https://a.com']],
     ])('抽出網址：%p', (cell, expected) => {
       const plan = run({ 原始說明連結: cell });
       expect(plan.errors).toEqual([]);
       expect(plan.changes[0].update.sourceLinks).toEqual(expected);
+    });
+
+    it('抽出來的網址不合法（admin API 也不會接受）→ 整批拒絕', () => {
+      expect(run({ 原始說明連結: 'https://[bad' }).errors).toHaveLength(1);
+      expect(run({ 檔期行事曆連結: 'https://[bad' }).errors).toHaveLength(1);
     });
 
     it('6 個網址 → 整批拒絕', () => {

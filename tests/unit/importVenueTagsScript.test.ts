@@ -12,7 +12,7 @@ jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
   db: {
     collection: () => ({
-      get: () => mockVenuesGet(),
+      select: () => ({ get: () => mockVenuesGet() }),
       doc: (id: string) => ({ id, update: mockDocUpdate, set: mockDocSet }),
     }),
     batch: () => ({ update: mockBatchUpdate, commit: mockBatchCommit }),
@@ -132,6 +132,12 @@ describe('import-venue-tags 腳本主流程', () => {
     expect(out).toContain('unknown_tag');
     expect(out).toContain('v?');
     expect(out).toMatch(/venue_id.*重複|重複.*venue_id/);
+  });
+
+  it('CSV 路徑不存在 → reject（交給外層印錯誤），不會 uncaught crash', async () => {
+    await expect(run({ csvPath: '/nonexistent/sheet.csv', commit: false })).rejects.toThrow(
+      /ENOENT/
+    );
   });
 
   it('TC-079 b：batch.commit 失敗 → exit 非 0，印出原因，不印成功與清快取提醒', async () => {

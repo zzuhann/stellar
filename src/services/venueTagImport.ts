@@ -4,6 +4,7 @@
 import { VENUE_TAGS } from '../constants/venueTags';
 import { VenueTag } from '../models/types';
 import { isValidCalendarDate } from '../utils/calendarDate';
+import { venueSchemas } from '../middleware/validation';
 
 export interface ExistingVenueTagFields {
   name?: string;
@@ -71,10 +72,13 @@ const EXTRA_COLUMNS = {
 type ExtraField = (typeof EXTRA_COLUMNS)[keyof typeof EXTRA_COLUMNS];
 const isExtraHeader = (h: string): h is keyof typeof EXTRA_COLUMNS => h in EXTRA_COLUMNS;
 
-// Stops at whitespace and full-width punctuation (cells mix labels like「表單：」with URLs)
-const URL_IN_TEXT = /https?:\/\/[^\s（）「」『』，。、；！？]+/g;
-const MAX_URL_LENGTH = 500;
+// Cells mix labels with URLs (「表單：https://…」), so stop at whitespace, brackets, quotes,
+// full-width punctuation and CJK characters
+const URL_IN_TEXT = /https?:\/\/[^\s（）「」『』，。、；：！？()[\]<>"'\u3400-\u9fff]+/gi;
 const MAX_SOURCE_LINKS = 5;
+// Same rules as admin PATCH, so imported values can be saved again from the admin form
+const sourceLinksSchema = venueSchemas.update.shape.sourceLinks;
+const calendarUrlSchema = venueSchemas.update.shape.calendarUrl;
 const MAX_EQUIPMENT_NOTE = 1000;
 
 type ParsedExtra = { ok: true; value: unknown } | { ok: false; reason: string };
@@ -84,14 +88,17 @@ const parseExtra = (field: ExtraField, raw: string): ParsedExtra => {
   if (/^[?？]/.test(cell)) return { ok: false, reason: '開頭有 ?，代表預填未確認，確認後刪掉 ?' };
   switch (field) {
     case 'sourceLinks': {
-      const links = (cell.match(URL_IN_TEXT) ?? []).map(u => u.replace(/[.,;:!?]+$/, ''));
+      const links = [
+        ...new Set((cell.match(URL_IN_TEXT) ?? []).map(u => u.replace(/[.,;:!?]+$/, ''))),
+      ];
       if (cell !== '' && links.length === 0) return { ok: false, reason: '沒有找到網址' };
       if (links.length > MAX_SOURCE_LINKS) {
         return { ok: false, reason: `最多 ${MAX_SOURCE_LINKS} 個連結，這格有 ${links.length} 個` };
       }
-      if (links.some(u => u.length > MAX_URL_LENGTH))
-        return { ok: false, reason: '網址超過 500 字' };
-      return { ok: true, value: links };
+      const parsed = sourceLinksSchema.safeParse(links);
+      return parsed.success
+        ? { ok: true, value: parsed.data }
+        : { ok: false, reason: `網址不合法：${parsed.error.issues[0].message}` };
     }
     case 'equipmentNote':
       return cell.length > MAX_EQUIPMENT_NOTE
@@ -102,11 +109,12 @@ const parseExtra = (field: ExtraField, raw: string): ParsedExtra => {
       return isValidCalendarDate(cell)
         ? { ok: true, value: cell }
         : { ok: false, reason: '日期要是 YYYY-MM-DD，而且是真的日期' };
-    case 'calendarUrl':
-      if (cell === '') return { ok: true, value: null };
-      return /^https?:\/\/\S+$/i.test(cell) && cell.length <= MAX_URL_LENGTH
-        ? { ok: true, value: cell }
+    case 'calendarUrl': {
+      const parsed = calendarUrlSchema.safeParse(cell);
+      return parsed.success
+        ? { ok: true, value: parsed.data }
         : { ok: false, reason: '要是一個 http/https 網址' };
+    }
   }
 };
 
@@ -220,7 +228,13 @@ export const buildImportPlan = (
   }
 
   const changes: VenueTagChange[] = [];
-  const idRows = new Map<string, number>();
+  // Count ids across every row, not just confirmed ones: a duplicate anywhere means the sheet
+  // holds two conflicting versions of the same venue
+  const idRows = new Map<string, number[]>();
+  rows.slice(1).forEach((row, index) => {
+    const id = (row[idCol] ?? '').trim();
+    if (id) idRows.set(id, [...(idRows.get(id) ?? []), index + 2]);
+  });
 
   rows.slice(1).forEach((row, index) => {
     const rowNumber = index + 2;
@@ -237,10 +251,9 @@ export const buildImportPlan = (
 
     const venueId = cell(idCol).trim();
     if (venueId === '') fail('venue_id', '', 'venue_id 空白');
-    else if (idRows.has(venueId)) {
-      fail('venue_id', venueId, `venue_id 在表上重複（第 ${idRows.get(venueId)} 列）`);
+    else if (idRows.get(venueId)!.length > 1) {
+      fail('venue_id', venueId, `venue_id 在表上重複（第 ${idRows.get(venueId).join('、')} 列）`);
     } else if (!existing.has(venueId)) fail('venue_id', venueId, 'Firestore 找不到這個場地');
-    if (venueId) idRows.set(venueId, idRows.get(venueId) ?? rowNumber);
 
     const tags: VenueTag[] = [];
     for (const { col, slug, header } of tagColumns) {

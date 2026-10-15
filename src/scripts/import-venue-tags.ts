@@ -30,6 +30,7 @@ const readCsvRows = (filePath: string): Promise<string[][]> =>
   new Promise((resolve, reject) => {
     const rows: string[][] = [];
     fs.createReadStream(filePath)
+      .on('error', reject) // pipe() does not forward source errors (e.g. wrong path)
       // headers: false keeps duplicate header names visible (row objects would merge them)
       .pipe(csv({ headers: false }))
       .on('data', (row: Record<string, string>) => rows.push(Object.values(row)))
@@ -45,7 +46,10 @@ export async function run({ csvPath, commit }: { csvPath: string; commit: boolea
   console.log(`模式：${commit ? '⚠️  COMMIT（會寫入）' : 'DRY RUN（不會寫入）'}\n`);
 
   const rows = await readCsvRows(csvPath);
-  const snapshot = await db.collection('venues').get();
+  const snapshot = await db
+    .collection('venues')
+    .select('name', 'tags', 'sourceLinks', 'equipmentNote', 'infoUpdatedOn', 'calendarUrl')
+    .get();
   const existing = new Map<string, ExistingVenueTagFields>(
     snapshot.docs.map(doc => [doc.id, doc.data() as ExistingVenueTagFields])
   );
@@ -74,6 +78,7 @@ export async function run({ csvPath, commit }: { csvPath: string; commit: boolea
   }
   if (changed === 0) return 0;
 
+  // ponytail: one batch keeps the import all-or-nothing; Firestore caps a batch at 500 writes
   const batch = db.batch();
   for (const change of plan.changes) {
     batch.update(db.collection('venues').doc(change.venueId), {
