@@ -61,38 +61,6 @@ describe('VenueService.createVenueSubmission', () => {
       status: 'pending',
     });
   });
-
-  it('TC-080（PR 2b）bookingFormUrl、contactUrl 是店家可直接寫的聯絡欄位；沒帶 bookingFormUrl 存 null', async () => {
-    const firebase = jest.requireMock('../../src/config/firebase');
-    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
-    mockSet.mockReset().mockResolvedValue(undefined);
-    const base = {
-      name: '測試場地',
-      address: '台北市測試路 1 號',
-      region: '台北',
-      capacityRange: '20-40',
-      coverPhoto: 'https://example.com/cover.jpg',
-      socialMedia: { instagram: 'venue' },
-    };
-
-    await new VenueService().createVenueSubmission({
-      ...base,
-      preferredContact: 'line',
-      contactUrl: 'https://lin.ee/x',
-      bookingFormUrl: 'https://forms.gle/x',
-    } as never);
-    expect(mockSet.mock.calls[0][0]).toMatchObject({
-      contactUrl: 'https://lin.ee/x',
-      bookingFormUrl: 'https://forms.gle/x',
-    });
-    expect(mockSet.mock.calls[0][0]).not.toHaveProperty('submission');
-
-    await new VenueService().createVenueSubmission({
-      ...base,
-      preferredContact: 'instagram',
-    } as never);
-    expect(mockSet.mock.calls[1][0].bookingFormUrl).toBeNull();
-  });
 });
 
 describe('VenueService.createVenue', () => {

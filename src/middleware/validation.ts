@@ -186,12 +186,14 @@ const httpUrlSchema = (typeError: string) =>
     .refine(val => /^https?:\/\//i.test(val), VENUE_CONTACT_URL_MESSAGE);
 const venueContactUrlSchema = httpUrlSchema('聯絡連結格式不正確');
 // Unlike contactUrl, '' / blank / null clear the field (stored as null)
-const venueBookingFormUrlSchema = z
-  .preprocess(
-    val => (typeof val === 'string' ? val.trim() || null : val),
-    httpUrlSchema('預約表單網址格式不正確').nullable()
-  )
-  .optional();
+const clearableHttpUrlSchema = (typeError: string) =>
+  z
+    .preprocess(
+      val => (typeof val === 'string' ? val.trim() || null : val),
+      httpUrlSchema(typeError).nullable()
+    )
+    .optional();
+const venueBookingFormUrlSchema = clearableHttpUrlSchema('預約表單網址格式不正確');
 
 const venueCapacityRangeEnum = z.enum(['20以下', '20-40', '40-60', '60以上'], {
   error: '請選擇有效的容納人數範圍',
@@ -261,12 +263,7 @@ const venueTagFieldSchemas = {
     .refine(isValidCalendarDate, '資料更新日期格式不正確或日期不存在')
     .nullable()
     .optional(),
-  calendarUrl: z
-    .preprocess(
-      val => (typeof val === 'string' ? val.trim() || null : val),
-      httpUrlSchema('行事曆連結格式不正確').nullable()
-    )
-    .optional(),
+  calendarUrl: clearableHttpUrlSchema('行事曆連結格式不正確'),
 };
 
 const venueLimitQuerySchema = z
