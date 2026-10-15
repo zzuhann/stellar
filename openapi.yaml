@@ -1504,9 +1504,8 @@ components:
           items: { $ref: '#/components/schemas/VenueTagInput' }
         sourceLinks:
           type: array
-          maxItems: 5
-          description: http/https，各 500 字以內；空字串會被濾掉
-          items: { type: string, format: uri }
+          description: http/https，各 500 字以內；空字串（含只有空白）先濾掉，濾掉後最多 5 個
+          items: { type: string, maxLength: 500 }
         equipmentNote: { type: string, maxLength: 1000 }
         infoUpdatedOn: { type: string, format: date, nullable: true }
         calendarUrl:
