@@ -184,7 +184,16 @@ const httpUrlSchema = (typeError: string) =>
     .url(VENUE_CONTACT_URL_MESSAGE)
     .max(500, '網址不能超過 500 個字')
     .refine(val => /^https?:\/\//i.test(val), VENUE_CONTACT_URL_MESSAGE);
-const venueContactUrlSchema = httpUrlSchema('預約表單連結格式不正確');
+const venueContactUrlSchema = httpUrlSchema('聯絡連結格式不正確');
+// Unlike contactUrl, '' / blank / null clear the field (stored as null)
+const clearableHttpUrlSchema = (typeError: string) =>
+  z
+    .preprocess(
+      val => (typeof val === 'string' ? val.trim() || null : val),
+      httpUrlSchema(typeError).nullable()
+    )
+    .optional();
+const venueBookingFormUrlSchema = clearableHttpUrlSchema('預約表單網址格式不正確');
 
 const venueCapacityRangeEnum = z.enum(['20以下', '20-40', '40-60', '60以上'], {
   error: '請選擇有效的容納人數範圍',
@@ -254,12 +263,7 @@ const venueTagFieldSchemas = {
     .refine(isValidCalendarDate, '資料更新日期格式不正確或日期不存在')
     .nullable()
     .optional(),
-  calendarUrl: z
-    .preprocess(
-      val => (typeof val === 'string' ? val.trim() || null : val),
-      httpUrlSchema('行事曆連結格式不正確').nullable()
-    )
-    .optional(),
+  calendarUrl: clearableHttpUrlSchema('行事曆連結格式不正確'),
 };
 
 const venueLimitQuerySchema = z
@@ -349,6 +353,7 @@ const venueCreateSubmissionSchema = z.object({
     .optional(),
   preferredContact: venuePreferredContactEnum,
   contactUrl: venueContactUrlSchema.optional(),
+  bookingFormUrl: venueBookingFormUrlSchema,
   coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確'),
   otherPhotos: z
     .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
@@ -494,6 +499,7 @@ export const venueSchemas = {
       .optional(),
     preferredContact: venuePreferredContactEnum.optional(),
     contactUrl: venueContactUrlSchema.optional(),
+    bookingFormUrl: venueBookingFormUrlSchema,
     coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確').optional(),
     otherPhotos: z
       .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {

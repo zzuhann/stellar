@@ -1288,6 +1288,7 @@ describe('VenueService — venue-tags 欄位', () => {
     equipmentNote: '投影機',
     infoUpdatedOn: '2026-10-01',
     calendarUrl: 'https://calendar.example.com/a',
+    bookingFormUrl: 'https://forms.gle/a',
     submission: { submittedAt: ts('2026-10-01T00:00:00Z'), confirmedAt: null },
     eventRefs: [eventRef('ev-1')],
   };
@@ -1358,6 +1359,7 @@ describe('VenueService — venue-tags 欄位', () => {
       expect(v).not.toHaveProperty('sourceLinks');
       expect(v).not.toHaveProperty('equipmentNote');
       expect(v).not.toHaveProperty('infoUpdatedOn');
+      expect(v).not.toHaveProperty('bookingFormUrl');
     }
 
     const service = new VenueService();
@@ -1367,6 +1369,7 @@ describe('VenueService — venue-tags 欄位', () => {
       sourceLinks: ['https://a.com/doc'],
       equipmentNote: '投影機',
       infoUpdatedOn: '2026-10-01',
+      bookingFormUrl: 'https://forms.gle/a',
     });
     const detailB = await service.getVenueById('b');
     expect(detailB).toMatchObject({
@@ -1375,6 +1378,14 @@ describe('VenueService — venue-tags 欄位', () => {
       equipmentNote: '',
       infoUpdatedOn: null,
     });
+    // 舊文件也要有 key（null），不能是 undefined
+    expect(detailB).toHaveProperty('bookingFormUrl', null);
+
+    expect(await service.getAdminVenueById('a')).toHaveProperty(
+      'bookingFormUrl',
+      'https://forms.gle/a'
+    );
+    expect(await service.getAdminVenueById('b')).toHaveProperty('bookingFormUrl', null);
   });
 
   it('TC-083 公開 API 不洩漏 calendarUrl、submission；只有 admin 詳情有', async () => {
@@ -1445,6 +1456,7 @@ describe('VenueService — venue-tags 欄位', () => {
         equipmentNote: '音響',
         infoUpdatedOn: '2026-10-20',
         calendarUrl: 'https://calendar.example.com/new',
+        bookingFormUrl: 'https://forms.gle/new',
       };
 
       await new VenueService().updateVenue('a', body);
@@ -1469,6 +1481,7 @@ describe('VenueService — venue-tags 欄位', () => {
         equipmentNote: '',
         infoUpdatedOn: null,
         calendarUrl: null,
+        bookingFormUrl: null,
       });
 
       expect(mockUpdate.mock.calls[0][0]).toMatchObject({
@@ -1477,6 +1490,7 @@ describe('VenueService — venue-tags 欄位', () => {
         equipmentNote: '',
         infoUpdatedOn: null,
         calendarUrl: null,
+        bookingFormUrl: null,
       });
     });
   });
@@ -1486,7 +1500,14 @@ describe('VenueService — venue-tags 欄位', () => {
 
     const written = mockUpdate.mock.calls[0][0];
     expect(written.name).toBe('新店名');
-    for (const key of ['tags', 'sourceLinks', 'equipmentNote', 'infoUpdatedOn', 'calendarUrl']) {
+    for (const key of [
+      'tags',
+      'sourceLinks',
+      'equipmentNote',
+      'infoUpdatedOn',
+      'calendarUrl',
+      'bookingFormUrl',
+    ]) {
       expect(written).not.toHaveProperty(key);
     }
   });

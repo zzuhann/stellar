@@ -229,6 +229,7 @@ export interface VenueDetail {
   infoUpdatedOn: string | null;
   preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
+  bookingFormUrl: string | null;
   socialMedia?: {
     threads?: string;
     instagram?: string;
@@ -254,6 +255,7 @@ export interface CreateVenueSubmissionData {
   hostTags?: string[];
   preferredContact: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
+  bookingFormUrl?: string | null;
   coverPhoto: string;
   otherPhotos?: string[];
   socialMedia: {
@@ -277,6 +279,7 @@ export interface UpdateVenueData {
   hostTags?: string[];
   preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
+  bookingFormUrl?: string | null;
   coverPhoto?: string;
   otherPhotos?: string[];
   socialMedia?: {

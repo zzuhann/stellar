@@ -1426,6 +1426,7 @@ components:
             sourceLinks: { type: array, maxItems: 5, items: { type: string, format: uri } }
             equipmentNote: { type: string, description: 店家提供的設備原文，空字串代表沒有 }
             infoUpdatedOn: { type: string, format: date, nullable: true }
+            bookingFormUrl: { type: string, format: uri, nullable: true, description: 預約表單網址；沒有時為 null，key 一定存在 }
             events:
               type: array
               items:
@@ -1528,8 +1529,9 @@ components:
               { type: string, nullable: true, enum: [20以下, 20-40, 40-60, 60以上, null] }
             description: { type: string }
             hostTags: { type: array, items: { type: string } }
-            preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
-            contactUrl: { type: string, format: uri }
+            preferredContact: { type: string, enum: [instagram, threads, line, form, other], description: 新前端只送 instagram／threads／line；form、other 為舊資料相容 }
+            contactUrl: { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
+            bookingFormUrl: { type: string, format: uri, maxLength: 500, nullable: true, description: 預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內。清空送 null（後端也把空字串當清空） }
             coverPhoto: { type: string, format: uri }
             otherPhotos: { type: array, items: { type: string, format: uri } }
             socialMedia:
@@ -1561,8 +1563,9 @@ components:
         capacityRange: { type: string, enum: [20以下, 20-40, 40-60, 60以上] }
         description: { type: string }
         hostTags: { type: array, maxItems: 5, items: { type: string } }
-        preferredContact: { type: string, enum: [instagram, threads, line, form, other] }
-        contactUrl: { type: string, format: uri }
+        preferredContact: { type: string, enum: [instagram, threads, line, form, other], description: 新前端只送 instagram／threads／line；form、other 為舊資料相容 }
+        contactUrl: { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
+        bookingFormUrl: { type: string, format: uri, maxLength: 500, nullable: true, description: 預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內。清空送 null（後端也把空字串當清空） }
         coverPhoto: { type: string, format: uri }
         otherPhotos: { type: array, maxItems: 9, items: { type: string, format: uri } }
         socialMedia:

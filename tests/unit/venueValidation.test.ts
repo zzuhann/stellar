@@ -411,9 +411,8 @@ describe('venue submission error messages (Traditional Chinese)', () => {
     });
 
     it.each(['create', 'update'] as const)('(%s) rejects null, empty and blank', schema => {
-      expect(firstIssue(schema, { ...base, contactUrl: null }).message).toBe(
-        '預約表單連結格式不正確'
-      );
+      // TC-069（PR 2b）：不再寫「預約表單」，避免跟 bookingFormUrl 撞名
+      expect(firstIssue(schema, { ...base, contactUrl: null }).message).toBe('聯絡連結格式不正確');
       expect(firstIssue(schema, { ...base, contactUrl: '' }).message).toBe(URL_MESSAGE);
       expect(firstIssue(schema, { ...base, contactUrl: '   ' }).message).toBe(URL_MESSAGE);
     });
@@ -560,6 +559,46 @@ describe('venue tag fields (venue-tags)', () => {
       });
     }
   });
+
+  describe('TC-069 bookingFormUrl（PR 2b）', () => {
+    const parse = (schema: 'create' | 'createSubmission' | 'update', bookingFormUrl: unknown) =>
+      venueSchemas[schema].safeParse(
+        schema === 'update' ? { bookingFormUrl } : { ...venueBase, bookingFormUrl }
+      );
+
+    describe.each(['create', 'createSubmission', 'update'] as const)('%s', schema => {
+      it('合法 https 保留，前後空白 trim', () => {
+        const result = parse(schema, ' https://forms.gle/x ');
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.bookingFormUrl).toBe('https://forms.gle/x');
+      });
+
+      it.each([
+        ['javascript:alert(1)'],
+        ['ftp://example.com'],
+        [`https://a.com/${'a'.repeat(500)}`],
+      ])('不合法：%s', value => {
+        expect(parse(schema, value).success).toBe(false);
+      });
+
+      it.each([[''], ['   '], [null]])('%p → null', value => {
+        const result = parse(schema, value);
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.bookingFormUrl).toBeNull();
+      });
+    });
+  });
+
+  it.each(['create', 'update'] as const)(
+    'TC-069 preferredContact 舊值 form、other 在 %s 仍通過（PR 2b regression）',
+    schema => {
+      for (const preferredContact of ['form', 'other']) {
+        const body =
+          schema === 'update' ? { preferredContact } : { ...venueBase, preferredContact };
+        expect(venueSchemas[schema].safeParse(body).success).toBe(true);
+      }
+    }
+  );
 
   it('createSubmission（匿名投稿）靜默丟掉五個正式欄位，hostTags 照收', () => {
     const result = venueSchemas.createSubmission.safeParse({
