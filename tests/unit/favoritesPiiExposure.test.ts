@@ -2,20 +2,8 @@ import express from 'express';
 import request from 'supertest';
 import { Timestamp } from 'firebase-admin/firestore';
 import userRoutes from '../../src/routes/userRoutes';
-import { cache } from '../../src/utils/cache';
 
-/**
- * Regression test for the createdByEmail leak (F-01, fixed in d83d96c).
- * Drives the real Express route — router → authenticateToken → controller →
- * service → res.json() — via supertest, instead of calling UserService
- * directly. This exercises the actual HTTP response body, which is where
- * F-01 was observed, so a future call site that bypasses toPublicEvent()
- * when building the nested event object fails this test instead of shipping.
- *
- * All routes in userRoutes.ts require authenticateToken, so the request
- * below carries a Bearer token; auth.verifyIdToken and the Firestore user
- * role lookup it triggers are mocked.
- */
+// Regression for F-01 (d83d96c): favorites' nested event must not expose createdByEmail, cached or not.
 
 const makeTimestamp = (isoDate: string): Timestamp =>
   ({ toDate: () => new Date(isoDate), toMillis: () => new Date(isoDate).getTime() }) as Timestamp;
@@ -57,7 +45,6 @@ const buildApp = () => {
 describe('GET /api/users/favorites（帶有效 Authorization header）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    cache.clear();
 
     mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email: 'user@example.com' });
     mockUserRoleGet.mockResolvedValue({ data: () => ({ role: 'user' }) });
@@ -95,14 +82,18 @@ describe('GET /api/users/favorites（帶有效 Authorization header）', () => {
     });
   });
 
-  it('回應 body 巢狀的 event 物件不含 createdByEmail', async () => {
-    const response = await request(buildApp())
-      .get('/api/users/favorites')
-      .query({ status: 'all' }) // 避免因活動日期已過而被 notEnded 預設篩選掉
-      .set('Authorization', 'Bearer valid-token');
+  it('回應 body 不含投稿者 email（含第二次走快取）', async () => {
+    const app = buildApp();
 
-    expect(response.status).toBe(200);
-    expect(response.body.favorites).toHaveLength(1);
-    expect(response.body.favorites[0].event).not.toHaveProperty('createdByEmail');
+    for (let i = 0; i < 2; i++) {
+      const response = await request(app)
+        .get('/api/users/favorites')
+        .query({ status: 'all' }) // 避免因活動日期已過而被 notEnded 預設篩選掉
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.favorites).toHaveLength(1);
+      expect(JSON.stringify(response.body)).not.toContain('owner@example.com');
+    }
   });
 });
