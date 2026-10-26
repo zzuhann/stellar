@@ -93,7 +93,13 @@ describe('GET /api/users/favorites（帶有效 Authorization header）', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.favorites).toHaveLength(1);
+      expect(response.body.favorites[0].event).toMatchObject({ id: 'event-1', title: 'Event' });
+      expect(response.body.favorites[0].event).not.toHaveProperty('createdByEmail');
       expect(JSON.stringify(response.body)).not.toContain('owner@example.com');
     }
+
+    // second request was served from cache
+    expect(mockFavoritesGet).toHaveBeenCalledTimes(1);
+    expect(mockEventsGet).toHaveBeenCalledTimes(1);
   });
 });

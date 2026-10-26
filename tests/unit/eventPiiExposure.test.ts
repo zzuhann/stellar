@@ -56,7 +56,11 @@ describe('GET /api/events/:id（匿名，未帶 Authorization header）', () => 
       const response = await request(app).get('/api/events/event-1');
 
       expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ id: 'event-1', title: 'Event' });
+      expect(response.body).not.toHaveProperty('createdByEmail');
       expect(JSON.stringify(response.body)).not.toContain('owner@example.com');
     }
+
+    expect(mockEventGet).toHaveBeenCalledTimes(1); // second request was served from cache
   });
 });
