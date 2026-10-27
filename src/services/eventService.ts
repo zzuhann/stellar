@@ -31,8 +31,8 @@ export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
   private userService = new UserService();
 
-  // 取得所有已審核且未過期的活動（基礎資料層，使用 Lock 防止雪崩）
-  private async getApprovedActiveEventsBase(): Promise<CoffeeEvent[]> {
+  // 取得所有已審核且未過期的活動（基礎資料層，使用 Lock 防止雪崩）；已剝除投稿者 email
+  private async getApprovedActiveEventsBase(): Promise<Omit<CoffeeEvent, 'createdByEmail'>[]> {
     this.checkFirebaseConfig();
 
     return cache.getWithLock(
@@ -44,10 +44,12 @@ export class EventService {
 
         const now = Date.now();
         const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
-        // Logged once per cache refresh, not per cache hit, since this runs
-        // inside getWithLock's fetchFn.
-        return this.filterOutCorruptedDatetime(events).filter(
-          event => event.datetime.end.toMillis() >= now
+        // Strip PII before caching so no reader of this shared layer can leak it.
+        return toPublicEvents(
+          // Corrupted-datetime logging fires once per cache refresh, not per hit.
+          this.filterOutCorruptedDatetime(events).filter(
+            event => event.datetime.end.toMillis() >= now
+          )
         );
       },
       1440 // 24 小時 TTL
@@ -116,38 +118,6 @@ export class EventService {
     // 使用 cos(latitude) 進行修正
     const latRad = (latitude * Math.PI) / 180;
     return latitudeDelta / Math.cos(latRad);
-  }
-
-  async getActiveEvents(): Promise<CoffeeEvent[]> {
-    this.checkFirebaseConfig();
-
-    const cacheKey = 'events:active';
-    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
-    // 使用複合索引按開始時間排序
-    const snapshot = await withTimeoutAndRetry(() =>
-      this.collection.where('status', '==', 'approved').orderBy('datetime.start', 'asc').get()
-    );
-
-    // 只需過濾未結束的活動（已按開始時間排序）
-    const now = Date.now();
-    const events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
-
-    const activeEvents = events.filter(event => event.datetime.end.toMillis() >= now);
-
-    // 設定 24 小時快取
-    cache.set(cacheKey, activeEvents, 1440);
-
-    return activeEvents;
   }
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {
@@ -1393,11 +1363,9 @@ export class EventService {
       `events:trending:${clampedLimit}`,
       async () => {
         const activeEvents = await this.getApprovedActiveEventsBase();
-        return toPublicEvents(
-          [...activeEvents]
-            .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
-            .slice(0, clampedLimit)
-        );
+        return [...activeEvents]
+          .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
+          .slice(0, clampedLimit);
       },
       360 // 6 小時 TTL
     );
