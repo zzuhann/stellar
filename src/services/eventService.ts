@@ -1217,8 +1217,12 @@ export class EventService {
       return cachedResult;
     }
 
-    // 共用基礎資料層：已審核、未過期、已排除壞掉的 datetime、已剝除投稿者 email
-    let events = await this.getApprovedActiveEventsBase();
+    // 共用基礎資料層：已審核、已排除壞掉的 datetime、已剝除投稿者 email
+    // 基礎層只在建立時（最長 24h 前）濾過期，這裡以當下時間再濾一次
+    const now = Date.now();
+    let events = (await this.getApprovedActiveEventsBase()).filter(
+      event => event.datetime.end.toMillis() >= now
+    );
 
     // 客戶端過濾
     if (criteria.query) {
@@ -1243,10 +1247,8 @@ export class EventService {
       );
     }
 
-    // Copy before sorting: with no criteria, events is the shared cached array.
-    const result = [...events].sort(
-      (a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis()
-    );
+    // events is a filtered copy, so sorting leaves the shared cached array untouched.
+    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
 
     // 設定 4 小時快取
     cache.set(cacheKey, result, 240);
