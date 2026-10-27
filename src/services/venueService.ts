@@ -23,6 +23,7 @@ import { getIsoWeekString } from '../utils/isoWeek';
 import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
 import { getTaipeiDateString } from '../utils/taipeiDate';
 import { computeEventTimeStatus, filterVisibleTags, mapAnswersToSuggestedTags } from './venueTags';
+import { pickLegacyTransit } from './venueTransit';
 import {
   DocumentData,
   DocumentReference,
@@ -281,7 +282,9 @@ export class VenueService {
     const submission = venueConditions && {
       submittedAt: FieldValue.serverTimestamp(),
       answers: venueConditions,
-      suggestedTags: mapAnswersToSuggestedTags(venueConditions),
+      suggestedTags: mapAnswersToSuggestedTags(venueConditions, {
+        transitStops: data.transitStops,
+      }),
       confirmedAt: null,
     };
     return this.writeNewVenue(
@@ -306,6 +309,11 @@ export class VenueService {
 
     const docRef = this.collection.doc();
     const now = FieldValue.serverTimestamp();
+    // When transitStops is sent, it is the source of truth for the legacy fields (§10.3)
+    const legacyTransit =
+      data.transitStops !== undefined
+        ? pickLegacyTransit(data.transitStops)
+        : { nearestMrt: data.nearestMrt ?? '', mrtWalkMinutes: data.mrtWalkMinutes ?? null };
 
     await withTimeoutAndRetry(() =>
       docRef.set({
@@ -315,8 +323,8 @@ export class VenueService {
         lat: data.lat ?? 0,
         lng: data.lng ?? 0,
         placeId: data.placeId ?? '',
-        nearestMrt: data.nearestMrt ?? '',
-        mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+        ...legacyTransit,
+        ...(data.transitStops !== undefined ? { transitStops: data.transitStops } : {}),
         capacityRange: data.capacityRange,
         description: data.description ?? '',
         hostTags: data.hostTags ?? [],
@@ -350,8 +358,8 @@ export class VenueService {
       lat: data.lat ?? 0,
       lng: data.lng ?? 0,
       placeId: data.placeId ?? '',
-      nearestMrt: data.nearestMrt ?? '',
-      mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+      ...legacyTransit,
+      transitStops: data.transitStops ?? null,
       capacityRange: data.capacityRange,
       description: data.description ?? '',
       hostTags: data.hostTags ?? [],
@@ -443,6 +451,7 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       bookingFormUrl: d.bookingFormUrl ?? null,
+      transitStops: d.transitStops ?? null,
       socialMedia: d.socialMedia ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
       events,
@@ -515,6 +524,12 @@ export class VenueService {
         updateData[field] =
           field === 'region' ? normalizeRegion(data[field] as string) : data[field];
       }
+    }
+
+    if (data.transitStops !== undefined) {
+      const stops = data.transitStops ?? [];
+      updateData.transitStops = stops;
+      Object.assign(updateData, pickLegacyTransit(stops));
     }
 
     // Decided on the doc just read, not the admin cache, so a stale cache can't re-confirm
@@ -603,6 +618,7 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       bookingFormUrl: d.bookingFormUrl ?? null,
+      transitStops: d.transitStops ?? null,
       socialMedia: d.socialMedia ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
       ...(d.submission ? { submission: d.submission as VenueSubmissionRecord } : {}),

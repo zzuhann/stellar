@@ -124,6 +124,14 @@ export interface VenueTagFields {
   calendarUrl: string | null; // admin only, never in public responses
 }
 
+export type TransitType = 'mrt' | 'light_rail' | 'train' | 'hsr' | 'bus';
+
+export interface TransitStop {
+  type: TransitType;
+  station: string;
+  walkMinutes: number | null; // integer 0–999
+}
+
 // Store questionnaire answers (design-backend.md §3.2); options are dictionary slugs
 export interface VenueConditionAnswers {
   uses: {
@@ -268,6 +276,7 @@ export interface VenueDetail {
   preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
   bookingFormUrl: string | null;
+  transitStops: TransitStop[] | null; // null = legacy doc that never used the field
   socialMedia?: {
     threads?: string;
     instagram?: string;
@@ -297,6 +306,7 @@ export interface CreateVenueSubmissionData {
   preferredContact: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
   bookingFormUrl?: string | null;
+  transitStops?: TransitStop[];
   coverPhoto: string;
   otherPhotos?: string[];
   socialMedia: {
@@ -335,6 +345,7 @@ export interface UpdateVenueData {
   equipmentNote?: string;
   infoUpdatedOn?: string | null;
   calendarUrl?: string | null;
+  transitStops?: TransitStop[] | null; // null clears, stored as []
   confirmSuggestions?: boolean;
 }
 

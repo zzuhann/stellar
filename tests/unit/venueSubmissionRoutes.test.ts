@@ -139,5 +139,63 @@ describe('POST /api/venue-submissions 帶 venueConditions', () => {
     expect(written.mrtWalkMinutes).toBe(3);
     expect(written.calendarUrl).toBeNull();
     expect(written).not.toHaveProperty('submission');
+    expect(written).not.toHaveProperty('transitStops');
+  });
+});
+
+describe('POST /api/venue-submissions 帶 transitStops（第 2 階段）', () => {
+  it('TC-080 d 寫進正式欄位（照送的順序）、不在 submission；照類型優先序回寫舊欄位；pending', async () => {
+    const transitStops = [
+      { type: 'bus', station: '復興新和街口', walkMinutes: 3 },
+      { type: 'mrt', station: '中山', walkMinutes: 5 },
+    ];
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, transitStops, venueConditions, nearestMrt: '舊表單的值' });
+
+    expect(res.status).toBe(201);
+    const written = mockVenueSet.mock.calls[0][0];
+    expect(written.transitStops).toEqual(transitStops);
+    expect(written.nearestMrt).toBe('中山');
+    expect(written.mrtWalkMinutes).toBe(5);
+    expect(written.status).toBe('pending');
+    expect(written.submission).not.toHaveProperty('transitStops');
+    expect(written.submission.answers).not.toHaveProperty('transitStops');
+    // 投稿當下的交通快照算出 auto 的 near_mrt
+    expect(written.submission.suggestedTags).toContainEqual({ slug: 'near_mrt', source: 'auto' });
+  });
+
+  it('TC-080 d transitStops: [] → 存 []、nearestMrt: ""、mrtWalkMinutes: null', async () => {
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, transitStops: [], nearestMrt: '中山', mrtWalkMinutes: 3 });
+
+    expect(res.status).toBe(201);
+    expect(mockVenueSet.mock.calls[0][0]).toMatchObject({
+      transitStops: [],
+      nearestMrt: '',
+      mrtWalkMinutes: null,
+    });
+  });
+
+  it('TC-072（route 層）沒帶 transitStops、payload 有 nearestMrt 3 分鐘 → 不產生 near_mrt（不退回讀舊欄位）', async () => {
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, venueConditions, nearestMrt: '中山', mrtWalkMinutes: 3 });
+
+    expect(res.status).toBe(201);
+    const slugs = mockVenueSet.mock.calls[0][0].submission.suggestedTags.map(
+      (t: { slug: string }) => t.slug
+    );
+    expect(slugs).not.toContain('near_mrt');
+    expect(slugs).not.toContain('near_train');
+  });
+
+  it('TC-134 不合法的 transitStops → 400、不寫入', async () => {
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, transitStops: [{ type: 'mrt' }] });
+    expect(res.status).toBe(400);
+    expect(mockVenueSet).not.toHaveBeenCalled();
   });
 });

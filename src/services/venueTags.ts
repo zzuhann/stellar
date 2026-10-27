@@ -1,6 +1,7 @@
 import { VENUE_TAGS } from '../constants/venueTags';
 import {
   SuggestedVenueTag,
+  TransitStop,
   VenueConditionAnswers,
   VenueEventTimeStatus,
   VenueTag,
@@ -51,7 +52,15 @@ const feeTags = (fees: VenueConditionAnswers['fees']): VenueTag[] => {
 };
 
 // Snapshot of store suggestions at submission time (design-backend.md §3.3); deduped by slug
-export const mapAnswersToSuggestedTags = (answers: VenueConditionAnswers): SuggestedVenueTag[] => {
+const isNearStop = (stops: TransitStop[], types: TransitStop['type'][]) =>
+  stops.some(
+    s => types.includes(s.type) && typeof s.walkMinutes === 'number' && s.walkMinutes <= 10
+  );
+
+export const mapAnswersToSuggestedTags = (
+  answers: VenueConditionAnswers,
+  { transitStops }: { transitStops?: TransitStop[] } = {}
+): SuggestedVenueTag[] => {
   const result: SuggestedVenueTag[] = [];
   const seen = new Set<string>();
   const add = (tag: VenueTag, source: SuggestedVenueTag['source']) => {
@@ -72,6 +81,9 @@ export const mapAnswersToSuggestedTags = (answers: VenueConditionAnswers): Sugge
   ) {
     add({ slug: 'can_decorate' }, 'auto');
   }
+  // Only transitStops counts; no fallback to legacy nearestMrt (type unknown) — §10.4
+  if (isNearStop(transitStops ?? [], ['mrt', 'light_rail'])) add({ slug: 'near_mrt' }, 'auto');
+  if (isNearStop(transitStops ?? [], ['train', 'hsr'])) add({ slug: 'near_train' }, 'auto');
 
   return result;
 };

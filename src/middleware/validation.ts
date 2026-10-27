@@ -267,6 +267,44 @@ const venueTagFieldSchemas = {
   calendarUrl: clearableHttpUrlSchema('行事曆連結格式不正確'),
 };
 
+// Transit stops (design-backend.md §10.2); fully blank rows are dropped before counting
+const isBlankTransitRow = (row: unknown): boolean =>
+  typeof row === 'object' &&
+  row !== null &&
+  !Array.isArray(row) &&
+  ['type', 'station', 'walkMinutes'].every(key => {
+    const value = (row as Record<string, unknown>)[key];
+    return value === undefined || value === null || (typeof value === 'string' && !value.trim());
+  });
+
+const transitStopsSchema = z.preprocess(
+  val => (Array.isArray(val) ? val.filter(row => !isBlankTransitRow(row)) : val),
+  z
+    .array(
+      z.object(
+        {
+          type: z.enum(['mrt', 'light_rail', 'train', 'hsr', 'bus'], { error: '請選交通類型' }),
+          station: z
+            .string({ error: '請填站名' })
+            .trim()
+            .min(1, '請填站名')
+            .max(100, '站名不能超過 100 個字'),
+          walkMinutes: z
+            .number({ error: '步行分鐘數必須是數字' })
+            .int('步行分鐘數必須是 0–999 的整數')
+            .min(0, '步行分鐘數必須是 0–999 的整數')
+            .max(999, '步行分鐘數必須是 0–999 的整數')
+            .nullable()
+            .optional()
+            .transform(v => v ?? null),
+        },
+        { error: '交通方式格式不正確' }
+      ),
+      { error: '交通方式格式不正確' }
+    )
+    .max(5, '最多只能新增 5 個交通方式')
+);
+
 // Store questionnaire (design-backend.md §3.2); option values are dictionary slugs
 const isPlainObject = (val: unknown): val is Record<string, unknown> =>
   typeof val === 'object' && val !== null && !Array.isArray(val);
@@ -475,6 +513,7 @@ const venueCreateSubmissionSchema = z.object({
   preferredContact: venuePreferredContactEnum,
   contactUrl: venueContactUrlSchema.optional(),
   bookingFormUrl: venueBookingFormUrlSchema,
+  transitStops: transitStopsSchema.optional(),
   coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確'),
   otherPhotos: z
     .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
@@ -623,6 +662,11 @@ export const venueSchemas = {
     preferredContact: venuePreferredContactEnum.optional(),
     contactUrl: venueContactUrlSchema.optional(),
     bookingFormUrl: venueBookingFormUrlSchema,
+    // null clears like [] (null is reserved for legacy docs that never used the field)
+    transitStops: transitStopsSchema
+      .nullable()
+      .optional()
+      .transform(v => (v === null ? [] : v)),
     coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確').optional(),
     otherPhotos: z
       .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {

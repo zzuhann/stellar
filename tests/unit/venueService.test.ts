@@ -1701,3 +1701,186 @@ describe('VenueService — 店家建議 submission（第 2 階段）', () => {
     expect(await service.getVenueById('a')).not.toHaveProperty('submission');
   });
 });
+
+describe('VenueService — 交通 transitStops（第 2 階段，design-backend §10）', () => {
+  const docsById: Record<string, Record<string, unknown>> = {};
+  const venueInput = {
+    name: '測試場地',
+    address: '台中市測試路 1 號',
+    region: '台中',
+    capacityRange: '20-40' as CapacityRange,
+    preferredContact: 'instagram' as const,
+    coverPhoto: 'https://example.com/cover.jpg',
+    socialMedia: { instagram: 'venue' },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    for (const key of Object.keys(docsById)) delete docsById[key];
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'venueViewDaily') {
+        return { where: () => ({ get: () => Promise.resolve({ docs: [] }) }) };
+      }
+      return {
+        orderBy: () => ({
+          get: () =>
+            Promise.resolve({
+              docs: Object.entries(docsById).map(([id, data]) => ({ id, data: () => data })),
+            }),
+        }),
+        doc: (id?: string) => ({
+          id: id ?? 'new-venue',
+          get: () =>
+            Promise.resolve(
+              id && docsById[id]
+                ? { id, exists: true, data: () => docsById[id] }
+                : { id, exists: false, data: () => undefined }
+            ),
+          update: mockUpdate,
+          set: mockSet,
+        }),
+      };
+    });
+    (firebase.db.getAll as jest.Mock).mockResolvedValue([]);
+    mockUpdate.mockResolvedValue(undefined);
+    mockSet.mockResolvedValue(undefined);
+  });
+
+  it('TC-135 createVenue 帶 transitStops：同一次寫入回寫 nearestMrt（站名已有類型字不再加）、mrtWalkMinutes；body 的 nearestMrt 被忽略', async () => {
+    const transitStops = [{ type: 'train' as const, station: '台中火車站', walkMinutes: 8 }];
+    const result = await new VenueService().createVenue({
+      ...venueInput,
+      nearestMrt: '中山',
+      mrtWalkMinutes: 1,
+      transitStops,
+    });
+
+    expect(mockSet).toHaveBeenCalledTimes(1);
+    expect(mockSet.mock.calls[0][0]).toMatchObject({
+      transitStops,
+      nearestMrt: '台中火車站',
+      mrtWalkMinutes: 8,
+    });
+    expect(result).toMatchObject({ transitStops, nearestMrt: '台中火車站', mrtWalkMinutes: 8 });
+  });
+
+  it('createVenue 沒帶 transitStops：不寫這個 key，nearestMrt 照舊（舊表單）', async () => {
+    const result = await new VenueService().createVenue({
+      ...venueInput,
+      nearestMrt: '中山',
+      mrtWalkMinutes: 3,
+    });
+    const written = mockSet.mock.calls[0][0];
+    expect(written).not.toHaveProperty('transitStops');
+    expect(written).toMatchObject({ nearestMrt: '中山', mrtWalkMinutes: 3 });
+    expect(result.transitStops).toBeNull();
+  });
+
+  describe('TC-136 updateVenue 的交通覆蓋、清空與回寫', () => {
+    beforeEach(() => {
+      docsById.a = {
+        name: 'A',
+        status: 'active',
+        nearestMrt: '舊站',
+        mrtWalkMinutes: 9,
+        transitStops: [{ type: 'mrt', station: '舊站', walkMinutes: 9 }],
+      };
+    });
+
+    it('a：整個覆蓋；照類型優先序、同類型取陣列最前面那筆回寫', async () => {
+      const transitStops = [
+        { type: 'bus' as const, station: '復興新和街口', walkMinutes: 3 },
+        { type: 'mrt' as const, station: '中山', walkMinutes: 5 },
+        { type: 'mrt' as const, station: '雙連', walkMinutes: 2 },
+      ];
+      await new VenueService().updateVenue('a', { transitStops });
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject({
+        transitStops,
+        nearestMrt: '中山',
+        mrtWalkMinutes: 5,
+      });
+    });
+
+    it('b：沒帶 transitStops、帶 nearestMrt → update() 不含 transitStops，nearestMrt 照現行規則寫', async () => {
+      await new VenueService().updateVenue('a', { nearestMrt: '中山' });
+      const written = mockUpdate.mock.calls[0][0];
+      expect(written).not.toHaveProperty('transitStops');
+      expect(written.nearestMrt).toBe('中山');
+      expect(written).not.toHaveProperty('mrtWalkMinutes');
+    });
+
+    it.each([
+      ['c：[]', []],
+      ['d：null', null],
+    ])('%s → transitStops: []、nearestMrt: ""、mrtWalkMinutes: null', async (_name, value) => {
+      await new VenueService().updateVenue('a', {
+        transitStops: value,
+        nearestMrt: '不該被採用',
+        mrtWalkMinutes: 4,
+      });
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject({
+        transitStops: [],
+        nearestMrt: '',
+        mrtWalkMinutes: null,
+      });
+    });
+
+    it.each([
+      [
+        '輕軌、walkMinutes: null',
+        [{ type: 'light_rail' as const, station: '凱旋武昌', walkMinutes: null }],
+        { nearestMrt: '輕軌 凱旋武昌', mrtWalkMinutes: null },
+      ],
+      [
+        '公車、walkMinutes: 0（不是 null）',
+        [{ type: 'bus' as const, station: '市政府', walkMinutes: 0 }],
+        { nearestMrt: '公車 市政府', mrtWalkMinutes: 0 },
+      ],
+    ])('e：%s', async (_name, transitStops, expected) => {
+      await new VenueService().updateVenue('a', { transitStops });
+      expect(mockUpdate.mock.calls[0][0]).toMatchObject(expected);
+    });
+
+    it('清快取的 key 跟既有的一樣', async () => {
+      const deleteSpy = jest.spyOn(cache, 'delete');
+      const clearPatternSpy = jest.spyOn(cache, 'clearPattern');
+      await new VenueService().updateVenue('a', { transitStops: [] });
+      expect(deleteSpy.mock.calls.map(c => c[0]).sort()).toEqual(
+        ['venues:all', 'venue:detail:a', 'venue:admin:detail:a'].sort()
+      );
+      expect(clearPatternSpy.mock.calls).toEqual([['admin:venues:']]);
+      deleteSpy.mockRestore();
+      clearPatternSpy.mockRestore();
+    });
+  });
+
+  it('TC-137 詳情讀回交通：多筆照順序、沒有 key → null、[] → []、walkMinutes 0 與 null 原樣；列表沒有 transitStops', async () => {
+    const many = [
+      { type: 'bus', station: '復興新和街口', walkMinutes: 0 },
+      { type: 'mrt', station: '中山', walkMinutes: null },
+      { type: 'train', station: '台北車站', walkMinutes: 12 },
+    ];
+    docsById.many = { name: 'M', status: 'active', transitStops: many };
+    docsById.legacy = { name: 'L', status: 'active', nearestMrt: '中山', mrtWalkMinutes: 5 };
+    docsById.cleared = { name: 'C', status: 'active', transitStops: [] };
+    const service = new VenueService();
+
+    for (const get of [
+      (id: string) => service.getVenueById(id),
+      (id: string) => service.getAdminVenueById(id),
+    ]) {
+      expect((await get('many'))!.transitStops).toEqual(many);
+      const legacy = await get('legacy');
+      expect(legacy).toHaveProperty('transitStops', null);
+      expect(legacy).toMatchObject({ nearestMrt: '中山', mrtWalkMinutes: 5 });
+      expect((await get('cleared'))!.transitStops).toEqual([]);
+    }
+
+    const list = await service.getVenues({ sort: 'name' });
+    const venues = Array.isArray(list) ? list : list.venues;
+    expect(venues).toHaveLength(3);
+    for (const v of venues) expect(v).not.toHaveProperty('transitStops');
+  });
+});

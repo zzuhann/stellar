@@ -3,7 +3,7 @@ import {
   filterVisibleTags,
   mapAnswersToSuggestedTags,
 } from '../../src/services/venueTags';
-import { VenueConditionAnswers, VenueTag } from '../../src/models/types';
+import { TransitStop, VenueConditionAnswers, VenueTag } from '../../src/models/types';
 
 jest.mock('../../src/constants/venueTags', () => {
   const actual = jest.requireActual('../../src/constants/venueTags');
@@ -77,9 +77,12 @@ describe('mapAnswersToSuggestedTags（TC-072）', () => {
     { slug: 'parcel_receiving', source: 'store' },
     { slug: 'cafe', source: 'store' },
   ];
-  const map = (answers: Partial<VenueConditionAnswers>) =>
-    mapAnswersToSuggestedTags({ ...base, ...answers });
-  const slugs = (answers: Partial<VenueConditionAnswers>) => map(answers).map(t => t.slug);
+  const map = (
+    answers: Partial<VenueConditionAnswers>,
+    ctx: { transitStops?: TransitStop[] } = {}
+  ) => mapAnswersToSuggestedTags({ ...base, ...answers }, ctx);
+  const slugs = (answers: Partial<VenueConditionAnswers>, ctx = {}) =>
+    map(answers, ctx).map(t => t.slug);
 
   it('A、C、D、E 勾的選項 → 同名 slug、source: store', () => {
     expect(
@@ -180,5 +183,45 @@ describe('mapAnswersToSuggestedTags（TC-072）', () => {
     expect(result).toEqual([...new Set(result)]);
     expect(result.filter(s => s === 'goods_distribution')).toHaveLength(1);
     expect(result.filter(s => s === 'projector')).toHaveLength(1);
+  });
+
+  describe('交通（§10.4）', () => {
+    const stop = (type: TransitStop['type'], walkMinutes: number | null): TransitStop => ({
+      type,
+      station: '某站',
+      walkMinutes,
+    });
+    const transitTags = (transitStops?: TransitStop[]) =>
+      map({}, { transitStops }).filter(t => t.slug === 'near_mrt' || t.slug === 'near_train');
+
+    it.each([
+      ['捷運 0 分', [stop('mrt', 0)], ['near_mrt']],
+      ['捷運 10 分', [stop('mrt', 10)], ['near_mrt']],
+      ['捷運 11 分', [stop('mrt', 11)], []],
+      ['捷運 walkMinutes: null', [stop('mrt', null)], []],
+      ['輕軌 5 分', [stop('light_rail', 5)], ['near_mrt']],
+      ['公車 5 分', [stop('bus', 5)], []],
+      ['火車 0 分', [stop('train', 0)], ['near_train']],
+      ['火車 10 分', [stop('train', 10)], ['near_train']],
+      ['高鐵 0 分', [stop('hsr', 0)], ['near_train']],
+      ['高鐵 10 分', [stop('hsr', 10)], ['near_train']],
+      ['步行 999 分', [stop('mrt', 999), stop('train', 999)], []],
+      [
+        '混合：捷運 20＋輕軌 5＋火車 5',
+        [stop('mrt', 20), stop('light_rail', 5), stop('train', 5)],
+        ['near_mrt', 'near_train'],
+      ],
+      ['兩筆合格的捷運 → 只有一個 near_mrt', [stop('mrt', 3), stop('mrt', 8)], ['near_mrt']],
+    ])('%s', (_name, transitStops, expected) => {
+      const tags = transitTags(transitStops as TransitStop[]);
+      expect(tags.map(t => t.slug)).toEqual(expected);
+      for (const tag of tags) expect(tag).toEqual({ slug: tag.slug, source: 'auto' });
+    });
+
+    it('沒帶 transitStops → 兩個都沒有（route 層另測 payload 帶 nearestMrt 時也不退回讀舊欄位）', () => {
+      expect(transitTags(undefined)).toEqual([]);
+      expect(slugs({})).not.toContain('near_mrt');
+      expect(slugs({})).not.toContain('near_train');
+    });
   });
 });

@@ -113,6 +113,7 @@ describe('TC-092 投稿 → 上架 → 確認的完整流程', () => {
         preferredContact: 'instagram',
         socialMedia: { instagram: 'venue' },
         bookingFormUrl: 'https://forms.gle/x',
+        transitStops: [{ type: 'mrt', station: '中山', walkMinutes: 5 }],
         venueConditions,
       });
     expect(submit.status).toBe(201);
@@ -135,6 +136,7 @@ describe('TC-092 投稿 → 上架 → 確認的完整流程', () => {
       equipmentNote: '',
       infoUpdatedOn: null,
       bookingFormUrl: 'https://forms.gle/x',
+      transitStops: [{ type: 'mrt', station: '中山', walkMinutes: 5 }],
     });
     expect(detail.body).not.toHaveProperty('submission');
     expect(detail.body).not.toHaveProperty('calendarUrl');
@@ -143,6 +145,7 @@ describe('TC-092 投稿 → 上架 → 確認的完整流程', () => {
     const listed = list.body.venues.find((v: { id: string }) => v.id === id);
     expect(listed.tags).toEqual([]);
     expect(listed).not.toHaveProperty('bookingFormUrl');
+    expect(listed).not.toHaveProperty('transitStops');
     expect(listed).not.toHaveProperty('submission');
 
     // (4) 管理員確認：拿掉 free_venue、加 deposit
@@ -176,7 +179,10 @@ describe('TC-092 投稿 → 上架 → 確認的完整流程', () => {
     expect(adminDetail.body.submission.answers).toEqual(venueConditions);
     expect(adminDetail.body.submission.confirmedAt).not.toBeNull();
     expect(adminDetail.body.submission.suggestedTags).toEqual(
-      expect.arrayContaining([{ slug: 'free_venue', source: 'store' }])
+      expect.arrayContaining([
+        { slug: 'free_venue', source: 'store' },
+        { slug: 'near_mrt', source: 'auto' },
+      ])
     );
     // confirmSuggestions 不會被當成欄位存進文件
     expect(mockStore[id]).not.toHaveProperty('confirmSuggestions');

@@ -835,3 +835,82 @@ describe('update 的 confirmSuggestions', () => {
     expect(venueSchemas.update.safeParse({ confirmSuggestions: 'yes' }).success).toBe(false);
   });
 });
+
+describe('TC-134 transitStops schema（第 2 階段，design-backend §10.2）', () => {
+  const venueBase = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40',
+    coverPhoto: 'https://example.com/cover.jpg',
+    preferredContact: 'instagram',
+    socialMedia: { instagram: 'venue' },
+  } as const;
+  const stop = (overrides = {}) => ({ type: 'mrt', station: '中山', walkMinutes: 5, ...overrides });
+  const parse = (schema: 'create' | 'createSubmission' | 'update', transitStops: unknown) =>
+    venueSchemas[schema].safeParse(
+      schema === 'update' ? { transitStops } : { ...venueBase, transitStops }
+    );
+
+  describe.each(['create', 'createSubmission', 'update'] as const)('%s', schema => {
+    const parsedStops = (transitStops: unknown) => {
+      const result = parse(schema, transitStops);
+      expect(result.success).toBe(true);
+      return result.success ? result.data.transitStops : undefined;
+    };
+
+    it('合法的 transitStops 保留這個 key、值相同、照送的順序', () => {
+      const stops = [stop({ type: 'bus', station: '復興新和街口', walkMinutes: 3 }), stop()];
+      expect(parsedStops(stops)).toEqual(stops);
+    });
+
+    it('整列空白被丟掉、不算列數；station 前後空白 trim；walkMinutes 沒帶存 null', () => {
+      const blank = [{}, { type: '', station: '   ' }, { station: '', walkMinutes: null }];
+      expect(parsedStops([...blank, stop({ station: ' 中山 ', walkMinutes: undefined })])).toEqual([
+        { type: 'mrt', station: '中山', walkMinutes: null },
+      ]);
+      expect(parsedStops([...blank, ...Array(5).fill(stop())])).toHaveLength(5);
+    });
+
+    it('丟掉空白列後超過 5 列 → 400', () => {
+      expect(parse(schema, Array(6).fill(stop())).success).toBe(false);
+    });
+
+    it('丟掉空白列後是 [] → 清空', () => {
+      expect(parsedStops([{ station: ' ' }])).toEqual([]);
+      expect(parsedStops([])).toEqual([]);
+    });
+
+    it.each([
+      ['只有類型', { type: 'mrt' }],
+      ['只有站名', { station: '中山' }],
+      ['只有步行分鐘', { walkMinutes: 3 }],
+      ['類型不在 enum', stop({ type: 'ferry' })],
+      ['站名超過 100 字', stop({ station: 'a'.repeat(101) })],
+      ['walkMinutes 1000', stop({ walkMinutes: 1000 })],
+      ['walkMinutes 1.5', stop({ walkMinutes: 1.5 })],
+      ['walkMinutes -1', stop({ walkMinutes: -1 })],
+      ['walkMinutes 字串', stop({ walkMinutes: '5' })],
+    ])('400：%s', (_name, row) => {
+      expect(parse(schema, [row]).success).toBe(false);
+    });
+
+    it.each([0, 121, 999, null])('walkMinutes %p 通過', walkMinutes => {
+      expect(parsedStops([stop({ walkMinutes })])).toEqual([stop({ walkMinutes })]);
+    });
+  });
+
+  it('update 帶 null → 清空（[]）', () => {
+    const result = venueSchemas.update.safeParse({ transitStops: null });
+    expect(result.success && result.data.transitStops).toEqual([]);
+  });
+
+  it('沒帶 transitStops → 輸出沒有這個 key（不動舊欄位）', () => {
+    const update = venueSchemas.update.safeParse({ name: 'x' });
+    expect(update.success).toBe(true);
+    expect(update.data).not.toHaveProperty('transitStops');
+    const submission = venueSchemas.createSubmission.safeParse(venueBase);
+    expect(submission.success).toBe(true);
+    expect(submission.data).not.toHaveProperty('transitStops');
+  });
+});
