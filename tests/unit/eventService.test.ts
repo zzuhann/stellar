@@ -396,6 +396,52 @@ describe('EventService.updateEvent — 座標驗證', () => {
   });
 });
 
+describe('EventService.updateEvent — 快取清除', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({ doc: jest.fn(() => mockDocRef) });
+    (firebase.db.runTransaction as jest.Mock).mockResolvedValue(undefined);
+    cache.set('artists:top:50', ['stale ranking'], 360);
+  });
+
+  afterEach(() => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReset();
+    (firebase.db.runTransaction as jest.Mock).mockReset();
+  });
+
+  const editAs = async (status: string, updateData: Record<string, unknown>) => {
+    mockGet.mockResolvedValue({
+      id: 'event-1',
+      exists: true,
+      data: () => ({ createdBy: 'owner', status, artists: [{ id: 'artist-1' }] }),
+    });
+    await new EventService().updateEvent(
+      'event-1',
+      updateData as unknown as UpdateEventData,
+      'owner',
+      'user'
+    );
+  };
+  const newDates = {
+    datetime: { start: '2027-01-01T00:00:00.000Z', end: '2027-01-02T00:00:00.000Z' },
+  };
+
+  it('已上架活動改了日期：清除熱門藝人快取，排行不會停在舊的活動數', async () => {
+    await editAs('approved', newDates);
+    expect(cache.get('artists:top:50')).toBeNull();
+  });
+
+  it.each([
+    ['已上架活動只改標題', 'approved', { title: '新標題' }],
+    ['待審活動改日期（不在排行計算範圍）', 'pending', newDates],
+  ])('%s：不清熱門藝人快取，避免不必要的重算', async (_label, status, updateData) => {
+    await editAs(status, updateData);
+    expect(cache.get('artists:top:50')).toEqual(['stale ranking']);
+  });
+});
+
 describe('EventService.createEvent — 座標驗證', () => {
   let service: EventService;
   const mockArtistDocRef = { get: jest.fn() };

@@ -75,6 +75,46 @@ describe('MemoryCache', () => {
     });
   });
 
+  describe('getWithLock 重建途中被清除（例如重建時剛好有活動被核准）', () => {
+    const key = 'events:approved:active';
+    const deferredFetch = () => {
+      let resolve!: (value: string) => void;
+      const fn = jest.fn(() => new Promise<string>(r => (resolve = r)));
+      return { fn, resolve: (value: string) => resolve(value) };
+    };
+
+    it.each([
+      ['clearPattern', () => cache.clearPattern('events:')],
+      ['delete', () => cache.delete(key)],
+      ['clear', () => cache.clear()],
+    ])('%s：舊的重建結果不寫回快取，下一個請求會重新查詢', async (_label, invalidate) => {
+      const stale = deferredFetch();
+      const inFlight = cache.getWithLock(key, stale.fn, 60);
+
+      invalidate();
+      stale.resolve('stale');
+      await expect(inFlight).resolves.toBe('stale'); // the request that started before the write keeps its data
+
+      const freshFetch = jest.fn().mockResolvedValue('fresh');
+      await expect(cache.getWithLock(key, freshFetch, 60)).resolves.toBe('fresh');
+      expect(freshFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('清除後的新請求不會併入舊的查詢，且舊查詢較晚完成也不會蓋掉新資料', async () => {
+      const stale = deferredFetch();
+      const staleRequest = cache.getWithLock(key, stale.fn, 60);
+      cache.clearPattern('events:');
+
+      const freshFetch = jest.fn().mockResolvedValue('fresh');
+      await expect(cache.getWithLock(key, freshFetch, 60)).resolves.toBe('fresh');
+      expect(freshFetch).toHaveBeenCalledTimes(1);
+
+      stale.resolve('stale');
+      await staleRequest;
+      expect(cache.get(key)).toBe('fresh');
+    });
+  });
+
   describe('cache stampede prevention', () => {
     it('should handle high concurrency without multiple fetches', async () => {
       const fetchFn = jest

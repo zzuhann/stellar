@@ -730,6 +730,8 @@ export class EventService {
     cache.delete(`event:${eventId}`);
     if (eventData.slug) cache.delete(`event:${eventData.slug}`);
     cache.clearPattern('admin:events:');
+    // Top artists counts approved, not-ended events, so only a date change on one can shift it.
+    if (updateData.datetime && eventData.status === 'approved') cache.clearPattern('artists:top:');
 
     // 清除相關藝人的統計快取（編輯事件可能會影響藝人的活動統計）
     if (eventData?.artists && Array.isArray(eventData.artists)) {
