@@ -194,6 +194,31 @@ describe('EventService — 壞掉的 datetime 不應讓整批活動噴錯（GET 
     expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
   });
 
+  it('GET /events/search：依開始時間排序時不會改動共用快取陣列的順序', async () => {
+    const lateDoc = {
+      id: 'event-late',
+      data: () => ({
+        ...goodEventDoc.data(),
+        datetime: {
+          start: makeTimestamp('2027-02-01T00:00:00.000Z'),
+          end: makeTimestamp('2027-02-02T00:00:00.000Z'),
+        },
+      }),
+    };
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs: [lateDoc, goodEventDoc] }),
+    });
+    service = new EventService();
+
+    const result = await service.searchEvents({});
+
+    expect(result.map(e => e.id)).toEqual(['event-good', 'event-late']);
+    const cached = cache.get<{ id: string }[]>('events:approved:active');
+    expect(cached?.map(e => e.id)).toEqual(['event-late', 'event-good']);
+  });
+
   it('同一筆壞資料在快取命中期間（cache hit）不會重複記 log，只在真正抓到新鮮資料時記一次', async () => {
     mockDocsWithBadEvent(undefined);
 

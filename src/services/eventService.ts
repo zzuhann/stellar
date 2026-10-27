@@ -59,8 +59,8 @@ export class EventService {
   // Guards against manually-corrupted Firestore data (bypasses the normal
   // Zod-validated submit path) reaching downstream code that calls
   // Timestamp.toMillis() (time filters, sorting, serialization). Shared by
-  // getApprovedActiveEventsBase, searchEvents, and the createdBy/pending/rejected
-  // query branches in getEventsWithFilters, which otherwise skip that base layer.
+  // getApprovedActiveEventsBase and the createdBy/pending/rejected query
+  // branches in getEventsWithFilters, which otherwise skip that base layer.
   private filterOutCorruptedDatetime(events: CoffeeEvent[]): CoffeeEvent[] {
     return events.filter(event => {
       const invalidReason = getInvalidEventDatetimeReason(event);
@@ -1217,23 +1217,8 @@ export class EventService {
       return cachedResult;
     }
 
-    const now = Timestamp.now();
-    const query = this.collection.where('status', '==', 'approved');
-
-    // 基本的搜尋功能（Firestore 的搜尋功能有限）
-    const snapshot = await withTimeoutAndRetry(() => query.get());
-    let events = this.filterOutCorruptedDatetime(
-      snapshot.docs.map(
-        doc =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          }) as CoffeeEvent
-      )
-    );
-
-    // 過濾未過期的活動
-    events = events.filter(event => event.datetime.end.toMillis() >= now.toMillis());
+    // 共用基礎資料層：已審核、未過期、已排除壞掉的 datetime、已剝除投稿者 email
+    let events = await this.getApprovedActiveEventsBase();
 
     // 客戶端過濾
     if (criteria.query) {
@@ -1241,7 +1226,7 @@ export class EventService {
       events = events.filter(
         event =>
           event.title.toLowerCase().includes(searchTerm) ||
-          event.description.toLowerCase().includes(searchTerm)
+          (event.description && event.description.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -1258,8 +1243,9 @@ export class EventService {
       );
     }
 
-    const result = toPublicEvents(
-      events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis())
+    // Copy before sorting: with no criteria, events is the shared cached array.
+    const result = [...events].sort(
+      (a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis()
     );
 
     // 設定 4 小時快取
