@@ -74,3 +74,23 @@ export function getInvalidEventDatetimeReason(event: {
 
   return null;
 }
+
+/**
+ * Drop events whose datetime is corrupted, logging each skipped id, so one bad
+ * Firestore doc can't make a whole list throw on Timestamp.toMillis().
+ * Use on any raw coffeeEvents read before touching datetime.
+ */
+export function filterOutCorruptedDatetime<
+  T extends { id: string; datetime?: { start?: unknown; end?: unknown } },
+>(events: T[]): T[] {
+  return events.filter(event => {
+    const invalidReason = getInvalidEventDatetimeReason(event);
+    if (invalidReason) {
+      console.error(
+        `[events] skipping event ${event.id} with corrupted datetime: ${invalidReason}`
+      );
+      return false;
+    }
+    return true;
+  });
+}

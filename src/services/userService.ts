@@ -10,7 +10,7 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
-import { toPublicEvent } from '../utils/eventSanitizer';
+import { toPublicEvent, filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 
 export class UserService {
   private collection = hasFirebaseConfig && db ? db.collection('users') : null;
@@ -271,14 +271,11 @@ export class UserService {
         this.eventsCollection.where('__name__', 'in', batchEventIds).get()
       );
 
-      eventsSnapshot.docs.forEach(doc => {
-        eventsMap.set(
-          doc.id,
-          toPublicEvent({
-            id: doc.id,
-            ...doc.data(),
-          } as CoffeeEvent)
-        );
+      // Corrupted-datetime events are dropped like deleted ones, so filters/sort below can't throw.
+      filterOutCorruptedDatetime(
+        eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
+      ).forEach(event => {
+        eventsMap.set(event.id, toPublicEvent(event));
       });
     }
 

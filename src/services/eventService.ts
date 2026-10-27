@@ -22,7 +22,7 @@ import {
   toPublicEvents,
   serializeEventDatetime,
   serializeEventsDatetime,
-  getInvalidEventDatetimeReason,
+  filterOutCorruptedDatetime,
 } from '../utils/eventSanitizer';
 import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
 import { AppError } from '../utils/AppError';
@@ -47,31 +47,11 @@ export class EventService {
         // Strip PII before caching so no reader of this shared layer can leak it.
         return toPublicEvents(
           // Corrupted-datetime logging fires once per cache refresh, not per hit.
-          this.filterOutCorruptedDatetime(events).filter(
-            event => event.datetime.end.toMillis() >= now
-          )
+          filterOutCorruptedDatetime(events).filter(event => event.datetime.end.toMillis() >= now)
         );
       },
       1440 // 24 小時 TTL
     );
-  }
-
-  // Guards against manually-corrupted Firestore data (bypasses the normal
-  // Zod-validated submit path) reaching downstream code that calls
-  // Timestamp.toMillis() (time filters, sorting, serialization). Shared by
-  // getApprovedActiveEventsBase and the createdBy/pending/rejected query
-  // branches in getEventsWithFilters, which otherwise skip that base layer.
-  private filterOutCorruptedDatetime(events: CoffeeEvent[]): CoffeeEvent[] {
-    return events.filter(event => {
-      const invalidReason = getInvalidEventDatetimeReason(event);
-      if (invalidReason) {
-        console.error(
-          `[events] skipping event ${event.id} with corrupted datetime: ${invalidReason}`
-        );
-        return false;
-      }
-      return true;
-    });
   }
 
   private checkFirebaseConfig() {
@@ -154,7 +134,7 @@ export class EventService {
     if (filters.createdBy) {
       const query = this.collection.where('createdBy', '==', filters.createdBy);
       const snapshot = await withTimeoutAndRetry(() => query.get());
-      events = this.filterOutCorruptedDatetime(
+      events = filterOutCorruptedDatetime(
         snapshot.docs.map(
           doc =>
             ({
@@ -176,7 +156,7 @@ export class EventService {
       const snapshot = await withTimeoutAndRetry(() =>
         this.collection.where('status', '==', filters.status).get()
       );
-      events = this.filterOutCorruptedDatetime(
+      events = filterOutCorruptedDatetime(
         snapshot.docs.map(
           doc =>
             ({

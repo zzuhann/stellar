@@ -16,6 +16,7 @@ import { cache } from '../utils/cache';
 import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
 import { UserService } from './userService';
 import { AppError } from '../utils/AppError';
+import { filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
@@ -903,9 +904,9 @@ export class ArtistService {
     );
 
     const now = Date.now();
-    const upcomingEvents = eventsSnapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
-      .filter(event => event.datetime.end.toMillis() >= now);
+    const upcomingEvents = filterOutCorruptedDatetime(
+      eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
+    ).filter(event => event.datetime.end.toMillis() >= now);
 
     // 計算每個藝人的即將到來活動數量
     const artistEventCount = new Map<string, number>();
