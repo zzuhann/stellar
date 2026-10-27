@@ -1532,3 +1532,172 @@ describe('VenueService — venue-tags 欄位', () => {
     expect(result.data[0].tags).toEqual([]);
   });
 });
+
+describe('VenueService — 店家建議 submission（第 2 階段）', () => {
+  const ts = (iso: string) => ({
+    toMillis: () => new Date(iso).getTime(),
+    toDate: () => new Date(iso),
+  });
+  const docsById: Record<string, Record<string, unknown> | undefined> = {};
+
+  const submissionBase = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40' as CapacityRange,
+    preferredContact: 'instagram' as const,
+    coverPhoto: 'https://example.com/cover.jpg',
+    socialMedia: { instagram: 'venue' },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    for (const key of Object.keys(docsById)) delete docsById[key];
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockImplementation(() => ({
+      doc: (id?: string) => ({
+        id: id ?? 'new-venue',
+        get: () =>
+          Promise.resolve(
+            id && docsById[id]
+              ? { id, exists: true, data: () => docsById[id] }
+              : { id, exists: false, data: () => undefined }
+          ),
+        update: mockUpdate,
+        set: mockSet,
+      }),
+    }));
+    mockUpdate.mockResolvedValue(undefined);
+    mockSet.mockResolvedValue(undefined);
+  });
+
+  describe('createVenueSubmission 帶 venueConditions', () => {
+    const venueConditions = {
+      uses: { options: ['goods_distribution' as const, 'can_decorate' as const] },
+      fees: { venueFee: 'free' as const },
+      services: { options: ['early_setup' as const] },
+      spaceTypes: { options: ['cafe' as const] },
+      note: '可租扭蛋機',
+      sourceLinks: ['https://a.com/doc'],
+      calendarUrl: 'https://calendar.example.com/a',
+    };
+
+    it('寫入 submission（answers、suggestedTags、confirmedAt: null）；calendarUrl 寫進正式欄位；標籤區其他欄位留空', async () => {
+      const result = await new VenueService().createVenueSubmission({
+        ...submissionBase,
+        venueConditions,
+      });
+
+      const written = mockSet.mock.calls[0][0];
+      expect(written).toMatchObject({
+        tags: [],
+        sourceLinks: [],
+        equipmentNote: '',
+        infoUpdatedOn: null,
+        calendarUrl: 'https://calendar.example.com/a',
+        status: 'pending',
+      });
+      expect(written.submission.answers).toEqual(venueConditions);
+      expect(written.submission.confirmedAt).toBeNull();
+      expect(written.submission.submittedAt).toBeDefined();
+      expect(written.submission.suggestedTags).toEqual([
+        { slug: 'goods_distribution', source: 'store' },
+        { slug: 'can_decorate', source: 'store' },
+        { slug: 'free_venue', source: 'store' },
+        { slug: 'early_setup', source: 'store' },
+        { slug: 'cafe', source: 'store' },
+      ]);
+      // 回應不帶 submission、calendarUrl
+      expect(result).not.toHaveProperty('submission');
+      expect(result).not.toHaveProperty('calendarUrl');
+    });
+
+    it('venueConditions 沒有 calendarUrl 時存 null', async () => {
+      await new VenueService().createVenueSubmission({
+        ...submissionBase,
+        venueConditions: { ...venueConditions, calendarUrl: undefined },
+      });
+      expect(mockSet.mock.calls[0][0].calendarUrl).toBeNull();
+    });
+
+    it('沒帶 venueConditions：沒有 submission，calendarUrl 為 null（舊表單）', async () => {
+      await new VenueService().createVenueSubmission(submissionBase);
+      const written = mockSet.mock.calls[0][0];
+      expect(written).not.toHaveProperty('submission');
+      expect(written.calendarUrl).toBeNull();
+    });
+  });
+
+  describe('TC-073 confirmSuggestions 讀的是最新文件', () => {
+    const confirmedAt = ts('2026-10-18T00:00:00Z');
+    const venue = (submission?: Record<string, unknown>) => ({
+      name: 'A',
+      status: 'active',
+      eventRefs: [],
+      ...(submission ? { submission } : {}),
+    });
+
+    it('沒有 submission → 忽略、不報錯，update() 不含 submission.confirmedAt', async () => {
+      docsById.a = venue();
+      await expect(
+        new VenueService().updateVenue('a', { confirmSuggestions: true, name: 'B' })
+      ).resolves.toBe(true);
+      expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty(['submission.confirmedAt']);
+      expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty('confirmSuggestions');
+    });
+
+    it('快取裡 confirmedAt 是 null、Firestore 最新文件已確認 → 忽略，既有確認時間不被覆寫', async () => {
+      const service = new VenueService();
+      docsById.a = venue({ submittedAt: ts('2026-10-14T17:00:00Z'), confirmedAt: null });
+      const cached = await service.getAdminVenueById('a'); // 寫入 venue:admin:detail:a
+      expect(cached!.submission!.confirmedAt).toBeNull();
+      expect(cache.get('venue:admin:detail:a')).not.toBeNull();
+
+      docsById.a = venue({ submittedAt: ts('2026-10-14T17:00:00Z'), confirmedAt });
+      await service.updateVenue('a', { confirmSuggestions: true });
+
+      const written = mockUpdate.mock.calls[0][0];
+      expect(written).not.toHaveProperty(['submission.confirmedAt']);
+      expect(written).not.toHaveProperty('submission');
+    });
+
+    it('快取和 Firestore 都是 null → 同一次 update() 寫入 submission.confirmedAt', async () => {
+      docsById.a = venue({ submittedAt: ts('2026-10-14T17:00:00Z'), confirmedAt: null });
+      await new VenueService().updateVenue('a', {
+        confirmSuggestions: true,
+        tags: [{ slug: 'deposit' }],
+      });
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      const written = mockUpdate.mock.calls[0][0];
+      expect(written).toHaveProperty(['submission.confirmedAt']);
+      expect(written['submission.confirmedAt']).not.toBeNull();
+      expect(written.tags).toEqual([{ slug: 'deposit' }]);
+    });
+
+    it.each([false, undefined])(
+      'confirmSuggestions 是 %p → 不寫 confirmedAt（「先不確認，只存其他欄位」）',
+      async confirmSuggestions => {
+        docsById.a = venue({ submittedAt: ts('2026-10-14T17:00:00Z'), confirmedAt: null });
+        await new VenueService().updateVenue('a', { confirmSuggestions, description: 'x' });
+        expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty(['submission.confirmedAt']);
+      }
+    );
+  });
+
+  it('TC-001／TC-003（第 2 階段）admin 詳情回 submission 原始資料；沒有 submission 的文件不回這個 key；公開詳情都沒有', async () => {
+    const submission = {
+      submittedAt: ts('2026-10-14T17:00:00Z'),
+      answers: { uses: { options: ['goods_distribution'] }, note: '可租扭蛋機' },
+      suggestedTags: [{ slug: 'goods_distribution', source: 'store' }],
+      confirmedAt: null,
+    };
+    docsById.a = { name: 'A', status: 'active', eventRefs: [], submission };
+    docsById.b = { name: 'B', status: 'active', eventRefs: [] };
+    const service = new VenueService();
+
+    expect((await service.getAdminVenueById('a'))!.submission).toEqual(submission);
+    expect(await service.getAdminVenueById('b')).not.toHaveProperty('submission');
+    expect(await service.getVenueById('a')).not.toHaveProperty('submission');
+  });
+});

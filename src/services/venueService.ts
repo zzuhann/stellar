@@ -14,6 +14,7 @@ import {
   VenueEventCardBase,
   VenueFilterParams,
   VenueStatus,
+  VenueSubmissionRecord,
   VenueWithScore,
 } from '../models/types';
 import { cache } from '../utils/cache';
@@ -21,7 +22,7 @@ import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
 import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
 import { getTaipeiDateString } from '../utils/taipeiDate';
-import { computeEventTimeStatus, filterVisibleTags } from './venueTags';
+import { computeEventTimeStatus, filterVisibleTags, mapAnswersToSuggestedTags } from './venueTags';
 import {
   DocumentData,
   DocumentReference,
@@ -270,6 +271,37 @@ export class VenueService {
   }
 
   async createVenue(data: CreateVenueData): Promise<VenueDetail> {
+    return this.writeNewVenue(data);
+  }
+
+  // Public submission path: curated fields are never written, even if a caller passes them.
+  // Questionnaire answers become suggestions in `submission`, confirmed later by an admin.
+  async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
+    const { venueConditions, ...rest } = data;
+    const submission = venueConditions && {
+      submittedAt: FieldValue.serverTimestamp(),
+      answers: venueConditions,
+      suggestedTags: mapAnswersToSuggestedTags(venueConditions),
+      confirmedAt: null,
+    };
+    return this.writeNewVenue(
+      {
+        ...rest,
+        tags: undefined,
+        sourceLinks: undefined,
+        equipmentNote: undefined,
+        infoUpdatedOn: undefined,
+        // Private and needs no confirmation, so it goes straight to the real field (§3.1)
+        calendarUrl: venueConditions?.calendarUrl ?? undefined,
+      },
+      submission
+    );
+  }
+
+  private async writeNewVenue(
+    data: CreateVenueData,
+    submission?: Record<string, unknown>
+  ): Promise<VenueDetail> {
     this.checkFirebaseConfig();
 
     const docRef = this.collection.doc();
@@ -299,6 +331,7 @@ export class VenueService {
         equipmentNote: data.equipmentNote ?? '',
         infoUpdatedOn: data.infoUpdatedOn ?? null,
         calendarUrl: data.calendarUrl ?? null,
+        ...(submission ? { submission } : {}),
         status: 'pending',
         eventCount: 0,
         eventRefs: [],
@@ -336,18 +369,6 @@ export class VenueService {
       eventCount: 0,
       events: [],
     };
-  }
-
-  // Public submission path: curated fields are never written, even if a caller passes them
-  async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
-    return this.createVenue({
-      ...data,
-      tags: undefined,
-      sourceLinks: undefined,
-      equipmentNote: undefined,
-      infoUpdatedOn: undefined,
-      calendarUrl: undefined,
-    });
   }
 
   async getVenueById(id: string): Promise<VenueDetail | null> {
@@ -496,6 +517,12 @@ export class VenueService {
       }
     }
 
+    // Decided on the doc just read, not the admin cache, so a stale cache can't re-confirm
+    const submission = existing.data()?.submission as { confirmedAt?: unknown } | undefined;
+    if (data.confirmSuggestions === true && submission && submission.confirmedAt === null) {
+      updateData['submission.confirmedAt'] = FieldValue.serverTimestamp();
+    }
+
     await withTimeoutAndRetry(() => docRef.update(updateData));
 
     cache.delete('venues:all');
@@ -578,6 +605,7 @@ export class VenueService {
       bookingFormUrl: d.bookingFormUrl ?? null,
       socialMedia: d.socialMedia ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
+      ...(d.submission ? { submission: d.submission as VenueSubmissionRecord } : {}),
       events,
     };
 
