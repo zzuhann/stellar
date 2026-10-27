@@ -87,4 +87,31 @@ describe('壞掉的 datetime 不讓整個列表噴錯', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
     }
   );
+
+  it('收藏列表（預設依收藏時間排序）：收藏紀錄的 createdAt 壞掉時不噴錯，視為最舊', async () => {
+    mockEventsGet.mockResolvedValue({
+      docs: [eventDoc('event-a', goodDatetime), eventDoc('event-b', goodDatetime)],
+    });
+    mockFavoritesGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: 'fav-a',
+          data: () => ({ userId: 'user-1', eventId: 'event-a', createdAt: '2025-01-01' }),
+        },
+        {
+          id: 'fav-b',
+          data: () => ({
+            userId: 'user-1',
+            eventId: 'event-b',
+            createdAt: makeTimestamp('2025-01-01'),
+          }),
+        },
+      ],
+    });
+
+    const result = await new UserService().getFavorites('user-1', {});
+
+    expect(result.favorites.map(f => f.event.id)).toEqual(['event-b', 'event-a']);
+  });
 });

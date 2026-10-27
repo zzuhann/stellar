@@ -70,6 +70,10 @@ export function getInvalidEventDatetimeReason(event: {
     if (isNaN((value as Timestamp).toDate().getTime())) {
       return `${field} produced an Invalid Date`;
     }
+    // Callers sort/filter with toMillis(), so it must exist too.
+    if (typeof (value as Timestamp).toMillis !== 'function') {
+      return `${field} has no toMillis()`;
+    }
   }
 
   return null;

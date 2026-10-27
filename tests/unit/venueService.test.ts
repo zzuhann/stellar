@@ -1349,6 +1349,28 @@ describe('VenueService — venue-tags 欄位', () => {
     return (Array.isArray(result) ? result : result.venues) as unknown as Record<string, unknown>[];
   };
 
+  it('詳情：連結的活動 datetime 壞掉時跳過該筆，其餘活動照常回傳（不噴 500）', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    const corruptedDoc = {
+      id: 'ev-bad',
+      exists: true,
+      data: () => ({
+        status: 'approved',
+        title: '壞掉的活動',
+        artists: [],
+        datetime: { start: ts('2026-10-15T16:00:00.000Z'), end: { _seconds: 1, _nanoseconds: 0 } },
+      }),
+    };
+    (firebase.db.getAll as jest.Mock).mockResolvedValue([eventDoc, corruptedDoc]);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const detail = await new VenueService().getVenueById('a');
+
+    expect(detail!.events.map(e => e.id)).toEqual(['ev-1']);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('ev-bad'));
+    consoleErrorSpy.mockRestore();
+  });
+
   it('TC-001 列表每筆都有 tags（舊文件為 []），不含詳情專屬欄位；詳情帶四欄與預設值', async () => {
     const list = await listVenues({ sort: 'name' });
     const a = list.find(v => v.id === 'a')!;

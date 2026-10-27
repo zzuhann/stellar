@@ -12,6 +12,9 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
 import { toPublicEvent, filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 
+// A hand-written favorite doc may lack a real Timestamp; treat it as oldest instead of throwing.
+const favoritedAtMs = (favorite: UserFavorite): number => favorite.createdAt?.toMillis?.() ?? 0;
+
 export class UserService {
   private collection = hasFirebaseConfig && db ? db.collection('users') : null;
   private favoritesCollection = hasFirebaseConfig && db ? db.collection('userFavorites') : null;
@@ -326,13 +329,13 @@ export class UserService {
 
       switch (sort) {
         case 'favoritedAt':
-          comparison = a.favorite.createdAt.toMillis() - b.favorite.createdAt.toMillis();
+          comparison = favoritedAtMs(a.favorite) - favoritedAtMs(b.favorite);
           break;
         case 'startTime':
           comparison = a.event.datetime.start.toMillis() - b.event.datetime.start.toMillis();
           break;
         default:
-          comparison = a.favorite.createdAt.toMillis() - b.favorite.createdAt.toMillis();
+          comparison = favoritedAtMs(a.favorite) - favoritedAtMs(b.favorite);
       }
 
       return sortOrder === 'desc' ? -comparison : comparison;
