@@ -276,7 +276,7 @@ export class UserService {
 
       // Corrupted-datetime events are dropped like deleted ones, so filters/sort below can't throw.
       filterOutCorruptedDatetime(
-        eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
+        eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as CoffeeEvent)
       ).forEach(event => {
         eventsMap.set(event.id, toPublicEvent(event));
       });

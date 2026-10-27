@@ -88,6 +88,34 @@ describe('壞掉的 datetime 不讓整個列表噴錯', () => {
     }
   );
 
+  it('收藏列表：活動文件內容帶了不同的 id 欄位時，仍以 Firestore 文件 ID 為準，收藏不會消失', async () => {
+    mockEventsGet.mockResolvedValue({
+      docs: [
+        {
+          id: 'event-good',
+          data: () => ({ ...eventDoc('event-good', goodDatetime).data(), id: 'stale-id' }),
+        },
+      ],
+    });
+    mockFavoritesGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: 'fav-0',
+          data: () => ({
+            userId: 'user-1',
+            eventId: 'event-good',
+            createdAt: makeTimestamp('2025-01-01'),
+          }),
+        },
+      ],
+    });
+
+    const result = await new UserService().getFavorites('user-1', {});
+
+    expect(result.favorites.map(f => f.event.id)).toEqual(['event-good']);
+  });
+
   it('收藏列表（預設依收藏時間排序）：收藏紀錄的 createdAt 壞掉時不噴錯，視為最舊', async () => {
     mockEventsGet.mockResolvedValue({
       docs: [eventDoc('event-a', goodDatetime), eventDoc('event-b', goodDatetime)],

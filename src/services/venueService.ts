@@ -383,7 +383,7 @@ export class VenueService {
       events = filterOutCorruptedDatetime(
         eventDocs
           .filter(ev => ev.exists && ev.data()?.status === 'approved')
-          .map(ev => ({ id: ev.id, ...ev.data() }) as DocumentData & { id: string })
+          .map(ev => ({ ...ev.data(), id: ev.id }) as DocumentData & { id: string })
       )
         .map(e => {
           const artists = (e.artists ?? []) as Array<{ name: string }>;
@@ -538,7 +538,7 @@ export class VenueService {
       events = filterOutCorruptedDatetime(
         eventDocs
           .filter(ev => ev.exists && ev.data()?.status === 'approved')
-          .map(ev => ({ id: ev.id, ...ev.data() }) as DocumentData & { id: string })
+          .map(ev => ({ ...ev.data(), id: ev.id }) as DocumentData & { id: string })
       )
         .map(e => {
           const artists = (e.artists ?? []) as Array<{ name: string }>;

@@ -1371,6 +1371,17 @@ describe('VenueService — venue-tags 欄位', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('詳情：活動文件內容帶了不同的 id 欄位時，活動卡片仍回傳 Firestore 文件 ID', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.getAll as jest.Mock).mockResolvedValue([
+      { ...eventDoc, data: () => ({ ...eventDoc.data(), id: 'stale-id' }) },
+    ]);
+
+    const detail = await new VenueService().getVenueById('a');
+
+    expect(detail!.events.map(e => e.id)).toEqual(['ev-1']);
+  });
+
   it('TC-001 列表每筆都有 tags（舊文件為 []），不含詳情專屬欄位；詳情帶四欄與預設值', async () => {
     const list = await listVenues({ sort: 'name' });
     const a = list.find(v => v.id === 'a')!;
