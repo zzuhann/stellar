@@ -7,7 +7,6 @@ import {
   ArtistFilterParams,
   AdminArtistUpdate,
   UserSubmissionsArtistsListResponse,
-  CoffeeEvent,
 } from '../models/types';
 import { Timestamp, Query } from 'firebase-admin/firestore';
 
@@ -15,12 +14,13 @@ type ArtistWithEventCount = Artist & { coffeeEventCount: number };
 import { cache } from '../utils/cache';
 import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
 import { UserService } from './userService';
+import { EventService } from './eventService';
 import { AppError } from '../utils/AppError';
-import { filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 
 export class ArtistService {
   private collection = hasFirebaseConfig && db ? db.collection('artists') : null;
   private userService = new UserService();
+  private eventService = new EventService();
 
   private checkFirebaseConfig() {
     if (!hasFirebaseConfig || !this.collection) {
@@ -897,16 +897,8 @@ export class ArtistService {
       return cachedResult;
     }
 
-    // 取得所有已審核且未結束的活動
-    const eventsCollection = db!.collection('coffeeEvents');
-    const eventsSnapshot = await withTimeoutAndRetry(() =>
-      eventsCollection.where('status', '==', 'approved').get()
-    );
-
-    const now = Date.now();
-    const upcomingEvents = filterOutCorruptedDatetime(
-      eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent)
-    ).filter(event => event.datetime.end.toMillis() >= now);
+    // Shared 24h base cache: approved, not ended, corrupted datetimes already dropped.
+    const upcomingEvents = await this.eventService.getApprovedActiveEventsBase();
 
     // 計算每個藝人的即將到來活動數量
     const artistEventCount = new Map<string, number>();

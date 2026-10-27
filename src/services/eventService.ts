@@ -31,11 +31,12 @@ export class EventService {
   private collection = hasFirebaseConfig && db ? db.collection('coffeeEvents') : null;
   private userService = new UserService();
 
-  // 取得所有已審核且未過期的活動（基礎資料層，使用 Lock 防止雪崩）；已剝除投稿者 email
-  private async getApprovedActiveEventsBase(): Promise<Omit<CoffeeEvent, 'createdByEmail'>[]> {
+  // Approved, not-ended events with corrupted datetimes dropped and submitter email stripped.
+  // Cached 24h with a lock; expiry is re-checked on every read so callers never see ended events.
+  async getApprovedActiveEventsBase(): Promise<Omit<CoffeeEvent, 'createdByEmail'>[]> {
     this.checkFirebaseConfig();
 
-    return cache.getWithLock(
+    const events = await cache.getWithLock(
       'events:approved:active',
       async () => {
         const snapshot = await withTimeoutAndRetry(() =>
@@ -52,6 +53,10 @@ export class EventService {
       },
       1440 // 24 小時 TTL
     );
+
+    // Also returns a fresh array, so callers may sort it without touching the cache.
+    const now = Date.now();
+    return events.filter(event => event.datetime.end.toMillis() >= now);
   }
 
   private checkFirebaseConfig() {
@@ -1252,7 +1257,7 @@ export class EventService {
       const ar = a.status === 'rejected' ? 0 : 1;
       const br = b.status === 'rejected' ? 0 : 1;
       if (ar !== br) return ar - br;
-      return b.createdAt.toMillis() - a.createdAt.toMillis();
+      return this.timestampToMillis(b.createdAt) - this.timestampToMillis(a.createdAt);
     });
   }
 
@@ -1351,8 +1356,9 @@ export class EventService {
     );
   }
 
-  private timestampToMillis(timestamp: Timestamp): number {
-    return timestamp.toMillis();
+  // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
+  private timestampToMillis(timestamp: Timestamp | undefined): number {
+    return timestamp?.toMillis?.() ?? 0;
   }
 
   // 私有方法：活動排序
