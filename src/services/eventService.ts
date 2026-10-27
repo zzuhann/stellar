@@ -59,8 +59,8 @@ export class EventService {
   // Guards against manually-corrupted Firestore data (bypasses the normal
   // Zod-validated submit path) reaching downstream code that calls
   // Timestamp.toMillis() (time filters, sorting, serialization). Shared by
-  // getApprovedActiveEventsBase and the createdBy/pending/rejected query
-  // branches in getEventsWithFilters, which otherwise skip that base layer.
+  // getApprovedActiveEventsBase, searchEvents, and the createdBy/pending/rejected
+  // query branches in getEventsWithFilters, which otherwise skip that base layer.
   private filterOutCorruptedDatetime(events: CoffeeEvent[]): CoffeeEvent[] {
     return events.filter(event => {
       const invalidReason = getInvalidEventDatetimeReason(event);
@@ -1222,12 +1222,14 @@ export class EventService {
 
     // 基本的搜尋功能（Firestore 的搜尋功能有限）
     const snapshot = await withTimeoutAndRetry(() => query.get());
-    let events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
+    let events = this.filterOutCorruptedDatetime(
+      snapshot.docs.map(
+        doc =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as CoffeeEvent
+      )
     );
 
     // 過濾未過期的活動

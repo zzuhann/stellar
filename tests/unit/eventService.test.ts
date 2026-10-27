@@ -185,6 +185,15 @@ describe('EventService — 壞掉的 datetime 不應讓整批活動噴錯（GET 
     expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
   });
 
+  it('GET /events/search：壞掉的 datetime 被跳過、其餘活動正常回傳（不噴 500），並記錄含活動 id 的 log', async () => {
+    mockDocsWithBadEvent(undefined);
+
+    const result = await service.searchEvents({});
+
+    expect(result.map(e => e.id)).toEqual(['event-good']);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('event-corrupted'));
+  });
+
   it('同一筆壞資料在快取命中期間（cache hit）不會重複記 log，只在真正抓到新鮮資料時記一次', async () => {
     mockDocsWithBadEvent(undefined);
 
