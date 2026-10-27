@@ -26,6 +26,7 @@ interface GooglePlaceDetails {
   formattedAddress?: string;
   displayName?: { text?: string };
   addressComponents?: AddressComponent[];
+  types?: string[];
 }
 
 export class PlacesController {
@@ -117,7 +118,8 @@ export class PlacesController {
         method: 'GET',
         headers: {
           'X-Goog-Api-Key': this.apiKey,
-          'X-Goog-FieldMask': 'location,formattedAddress,displayName,addressComponents',
+          // types is Essentials tier like location/formattedAddress; no extra cost
+          'X-Goog-FieldMask': 'location,formattedAddress,displayName,addressComponents,types',
           Referer: referer,
         },
       }
@@ -142,6 +144,8 @@ export class PlacesController {
         formatted_address: data.formattedAddress || '',
         name: data.displayName?.text || '',
         city,
+        // Store form checks for 'establishment' to tell a shop from a bare address
+        types: data.types ?? [],
       };
 
       res.json(result);
