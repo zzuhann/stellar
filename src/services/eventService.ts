@@ -46,8 +46,11 @@ export class EventService {
         const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as CoffeeEvent);
         // Logged once per cache refresh, not per cache hit, since this runs
         // inside getWithLock's fetchFn.
-        return this.filterOutCorruptedDatetime(events).filter(
-          event => event.datetime.end.toMillis() >= now
+        // Strip PII before caching so no reader of this shared layer can leak it.
+        return toPublicEvents(
+          this.filterOutCorruptedDatetime(events).filter(
+            event => event.datetime.end.toMillis() >= now
+          )
         );
       },
       1440 // 24 小時 TTL
@@ -116,38 +119,6 @@ export class EventService {
     // 使用 cos(latitude) 進行修正
     const latRad = (latitude * Math.PI) / 180;
     return latitudeDelta / Math.cos(latRad);
-  }
-
-  async getActiveEvents(): Promise<CoffeeEvent[]> {
-    this.checkFirebaseConfig();
-
-    const cacheKey = 'events:active';
-    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
-    // 使用複合索引按開始時間排序
-    const snapshot = await withTimeoutAndRetry(() =>
-      this.collection.where('status', '==', 'approved').orderBy('datetime.start', 'asc').get()
-    );
-
-    // 只需過濾未結束的活動（已按開始時間排序）
-    const now = Date.now();
-    const events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
-    );
-
-    const activeEvents = events.filter(event => event.datetime.end.toMillis() >= now);
-
-    // 設定 24 小時快取
-    cache.set(cacheKey, activeEvents, 1440);
-
-    return activeEvents;
   }
 
   async getPendingEvents(): Promise<CoffeeEvent[]> {

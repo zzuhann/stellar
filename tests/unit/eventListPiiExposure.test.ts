@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { Timestamp } from 'firebase-admin/firestore';
 import eventRoutes from '../../src/routes/eventRoutes';
+import { cache } from '../../src/utils/cache';
 
 // Regression for F-01 (d83d96c): anonymous list endpoints must not expose createdByEmail, cached or not.
 
@@ -76,4 +77,12 @@ describe('匿名呼叫活動列表端點', () => {
       expect(mockApprovedEventsGet).toHaveBeenCalledTimes(1); // second request was served from cache
     }
   );
+
+  it('共用快取層本身不存投稿者 email（新增的公開端點也拿不到）', async () => {
+    await request(buildApp()).get('/api/events/map-data');
+
+    const cached = cache.get('events:approved:active');
+    expect(cached).toHaveLength(1);
+    expect(JSON.stringify(cached)).not.toContain('owner@example.com');
+  });
 });
