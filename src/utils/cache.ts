@@ -6,6 +6,10 @@ interface CacheItem<T> {
 class MemoryCache {
   private cache = new Map<string, CacheItem<unknown>>();
   private pendingRequests = new Map<string, Promise<unknown>>();
+  // Bumped on every invalidation; read-through callers pass the value they saw to set().
+  // ponytail: one global counter, so any invalidation also drops unrelated in-flight fills
+  // (they just refetch next time); switch to per-key versions if hit rate suffers.
+  private invalidationVersion = 0;
 
   // 帶 Lock 的快取取得，防止快取過期時的雪崩效應
   async getWithLock<T>(key: string, fetchFn: () => Promise<T>, ttlMinutes: number): Promise<T> {
@@ -34,7 +38,14 @@ class MemoryCache {
     return promise;
   }
 
-  set<T>(key: string, data: T, ttlMinutes: number): void {
+  version(): number {
+    return this.invalidationVersion;
+  }
+
+  // Pass readVersion (from version(), taken before reading the source) on read-through fills:
+  // if anything was invalidated meanwhile, the data may predate that write, so it isn't stored.
+  set<T>(key: string, data: T, ttlMinutes: number, readVersion?: number): void {
+    if (readVersion !== undefined && readVersion !== this.invalidationVersion) return;
     const expires = Date.now() + ttlMinutes * 60 * 1000;
     this.cache.set(key, { data, expires });
   }
@@ -57,17 +68,20 @@ class MemoryCache {
 
   // Invalidation also drops in-flight getWithLock fetches so they can't store stale results.
   delete(key: string): void {
+    this.invalidationVersion++;
     this.cache.delete(key);
     this.pendingRequests.delete(key);
   }
 
   clear(): void {
+    this.invalidationVersion++;
     this.cache.clear();
     this.pendingRequests.clear();
   }
 
   // 清除特定 pattern 的 keys
   clearPattern(pattern: string): void {
+    this.invalidationVersion++;
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
         this.cache.delete(key);

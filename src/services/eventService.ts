@@ -508,6 +508,7 @@ export class EventService {
     };
 
     const cacheKey = `event:${eventId}`;
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<CoffeeEvent | null>(cacheKey);
 
     if (cachedResult) {
@@ -521,7 +522,7 @@ export class EventService {
     if (doc.exists) {
       const rawEvent = { id: doc.id, ...doc.data() } as CoffeeEvent;
       if (!isAllowed(rawEvent)) return null;
-      cache.set(cacheKey, rawEvent, 1440);
+      cache.set(cacheKey, rawEvent, 1440, cacheVersion);
       return this.prepareEventForResponse(rawEvent, userId);
     }
 
@@ -540,8 +541,8 @@ export class EventService {
     if (!isAllowed(rawEvent)) return null;
 
     // 同時以 slug 和實際 ID 快取
-    cache.set(`event:${rawEvent.id}`, rawEvent, 1440);
-    cache.set(cacheKey, rawEvent, 1440);
+    cache.set(`event:${rawEvent.id}`, rawEvent, 1440, cacheVersion);
+    cache.set(cacheKey, rawEvent, 1440, cacheVersion);
 
     return this.prepareEventForResponse(rawEvent, userId);
   }
@@ -1199,6 +1200,7 @@ export class EventService {
     this.checkFirebaseConfig();
 
     const cacheKey = `events:search:${JSON.stringify(criteria)}`;
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
     if (cachedResult) {
       return cachedResult;
@@ -1248,7 +1250,7 @@ export class EventService {
     );
 
     // 設定 4 小時快取
-    cache.set(cacheKey, result, 240);
+    cache.set(cacheKey, result, 240, cacheVersion);
 
     return result;
   }

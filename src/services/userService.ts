@@ -158,6 +158,7 @@ export class UserService {
 
     // 檢查快取
     const cacheKey = `favorite:${userId}:${eventId}`;
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<boolean>(cacheKey);
     if (cachedResult !== null) {
       return cachedResult;
@@ -182,7 +183,7 @@ export class UserService {
     }
 
     // 設定 24 小時快取
-    cache.set(cacheKey, result, 1440);
+    cache.set(cacheKey, result, 1440, cacheVersion);
 
     return result;
   }
@@ -231,6 +232,7 @@ export class UserService {
 
     // 檢查快取
     const cacheKey = `favorites:${userId}:${JSON.stringify(filters)}`;
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<FavoritesResponse>(cacheKey);
     if (cachedResult) {
       return cachedResult;
@@ -252,7 +254,7 @@ export class UserService {
         },
       };
       // 空結果也快取，避免重複查詢
-      cache.set(cacheKey, emptyResult, 1440);
+      cache.set(cacheKey, emptyResult, 1440, cacheVersion);
       return emptyResult;
     }
 
@@ -359,7 +361,7 @@ export class UserService {
     };
 
     // 設定 24 小時快取
-    cache.set(cacheKey, result, 1440);
+    cache.set(cacheKey, result, 1440, cacheVersion);
 
     return result;
   }
