@@ -1217,21 +1217,12 @@ export class EventService {
       return cachedResult;
     }
 
-    const now = Timestamp.now();
-    const query = this.collection.where('status', '==', 'approved');
-
-    // 基本的搜尋功能（Firestore 的搜尋功能有限）
-    const snapshot = await withTimeoutAndRetry(() => query.get());
-    let events = snapshot.docs.map(
-      doc =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as CoffeeEvent
+    // 共用基礎資料層：已審核、已排除壞掉的 datetime、已剝除投稿者 email
+    // 基礎層只在建立時（最長 24h 前）濾過期，這裡以當下時間再濾一次
+    const now = Date.now();
+    let events = (await this.getApprovedActiveEventsBase()).filter(
+      event => event.datetime.end.toMillis() >= now
     );
-
-    // 過濾未過期的活動
-    events = events.filter(event => event.datetime.end.toMillis() >= now.toMillis());
 
     // 客戶端過濾
     if (criteria.query) {
@@ -1239,7 +1230,7 @@ export class EventService {
       events = events.filter(
         event =>
           event.title.toLowerCase().includes(searchTerm) ||
-          event.description.toLowerCase().includes(searchTerm)
+          (event.description && event.description.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -1256,9 +1247,8 @@ export class EventService {
       );
     }
 
-    const result = toPublicEvents(
-      events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis())
-    );
+    // events is a filtered copy, so sorting leaves the shared cached array untouched.
+    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
 
     // 設定 4 小時快取
     cache.set(cacheKey, result, 240);
