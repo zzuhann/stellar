@@ -1574,6 +1574,29 @@ components:
         station: { type: string, minLength: 1, maxLength: 100, description: 前後空白會 trim }
         walkMinutes: { type: integer, minimum: 0, maximum: 999, nullable: true, description: 寫入時沒帶或送 '' 存成 null }
 
+    TransitStopInput:
+      type: object
+      description: >-
+        寫入用的一列交通方式。type、station、walkMinutes 都是空值（沒帶、''、只有空白或 null）的整列空白會被丟掉；
+        其他列 type 和 station 必填（只有其中一個回 400）。walkMinutes 沒帶、'' 或 null 都存成 null
+      properties:
+        type:
+          type: string
+          nullable: true
+          enum: [mrt, light_rail, train, hsr, bus, '', null]
+          description: 只有整列空白時才可以是 '' 或 null
+        station:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: 前後空白會 trim；只有整列空白時才可以是空的
+        walkMinutes:
+          oneOf:
+            - { type: integer, minimum: 0, maximum: 999 }
+            - { type: string, enum: [''] }
+          nullable: true
+          description: 0–999 的整數；沒帶、'' 或 null 存成 null
+
     TransitStopsInput:
       type: array
       maxItems: 5
@@ -1583,7 +1606,7 @@ components:
         （類型優先序 mrt → light_rail → train → hsr → bus，同類型取陣列最前面那筆；非捷運的站名前加
         輕軌／火車／高鐵／公車，站名已含類型字就不加；超過 100 字截到 100 字），body 裡的 nearestMrt、mrtWalkMinutes 會被忽略。
         丟掉空白列後是 [] 時兩個舊欄位清成 '' 與 null
-      items: { $ref: '#/components/schemas/TransitStop' }
+      items: { $ref: '#/components/schemas/TransitStopInput' }
 
     VenueTag:
       type: object
