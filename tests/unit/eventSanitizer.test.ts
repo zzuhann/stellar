@@ -158,6 +158,14 @@ describe('getInvalidEventDatetimeReason', () => {
     });
     expect(reason).toContain('Invalid Date');
   });
+
+  it('有 toDate 但沒有 toMillis 時回傳原因字串（呼叫端排序與篩選都用 toMillis）', () => {
+    const noMillis = { toDate: () => new Date('2025-01-01') } as Timestamp;
+    const reason = getInvalidEventDatetimeReason({
+      datetime: { start: makeTimestamp('2025-01-01'), end: noMillis },
+    });
+    expect(reason).toContain('toMillis');
+  });
 });
 
 describe('serializeEventsDatetime', () => {

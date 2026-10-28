@@ -50,6 +50,17 @@ describe('computeActiveWeeks', () => {
     expect(computeActiveWeeks(refsByVenue, eventDocs).get('v1')).toBe(1);
   });
 
+  it.each([
+    ['start 是字串', '2026-08-24'],
+    ['start 是 {_seconds} plain map', { _seconds: 1, _nanoseconds: 0 }],
+    ['start 的 toMillis 是 NaN', { toMillis: () => NaN, toDate: () => new Date('x') }],
+  ])('%s → 跳過不計入，不讓整個場地列表噴錯', (_label, start) => {
+    const refsByVenue = new Map([['v1', [ref('e1')]]]);
+    const eventDocs = [eventDoc('e1', { status: 'approved', datetime: { start } })];
+
+    expect(computeActiveWeeks(refsByVenue, eventDocs).get('v1')).toBe(0);
+  });
+
   it('同一場地同一 ISO 週有 2 場活動只計 1 週', () => {
     // 2026-08-24（週一）與 2026-08-28（週五）同一 ISO 週
     const refsByVenue = new Map([['v1', [ref('e1'), ref('e2')]]]);

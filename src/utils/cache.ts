@@ -20,13 +20,14 @@ class MemoryCache {
     }
 
     // 3. 沒人在查，執行查詢並設定 Lock
-    const promise = fetchFn()
+    const promise: Promise<T> = fetchFn()
       .then(result => {
-        this.set(key, result, ttlMinutes);
+        // Invalidated mid-fetch (e.g. an event was approved): the result may predate the write.
+        if (this.pendingRequests.get(key) === promise) this.set(key, result, ttlMinutes);
         return result;
       })
       .finally(() => {
-        this.pendingRequests.delete(key);
+        if (this.pendingRequests.get(key) === promise) this.pendingRequests.delete(key);
       });
 
     this.pendingRequests.set(key, promise);
@@ -54,12 +55,15 @@ class MemoryCache {
     return item.data as T;
   }
 
+  // Invalidation also drops in-flight getWithLock fetches so they can't store stale results.
   delete(key: string): void {
     this.cache.delete(key);
+    this.pendingRequests.delete(key);
   }
 
   clear(): void {
     this.cache.clear();
+    this.pendingRequests.clear();
   }
 
   // 清除特定 pattern 的 keys
@@ -67,6 +71,11 @@ class MemoryCache {
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
         this.cache.delete(key);
+      }
+    }
+    for (const key of this.pendingRequests.keys()) {
+      if (key.includes(pattern)) {
+        this.pendingRequests.delete(key);
       }
     }
   }

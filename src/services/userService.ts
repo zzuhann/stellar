@@ -10,7 +10,10 @@ import {
 } from '../models/types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { cache } from '../utils/cache';
-import { toPublicEvent } from '../utils/eventSanitizer';
+import { toPublicEvent, filterOutCorruptedDatetime } from '../utils/eventSanitizer';
+
+// A hand-written favorite doc may lack a real Timestamp; treat it as oldest instead of throwing.
+const favoritedAtMs = (favorite: UserFavorite): number => favorite.createdAt?.toMillis?.() ?? 0;
 
 export class UserService {
   private collection = hasFirebaseConfig && db ? db.collection('users') : null;
@@ -271,14 +274,11 @@ export class UserService {
         this.eventsCollection.where('__name__', 'in', batchEventIds).get()
       );
 
-      eventsSnapshot.docs.forEach(doc => {
-        eventsMap.set(
-          doc.id,
-          toPublicEvent({
-            id: doc.id,
-            ...doc.data(),
-          } as CoffeeEvent)
-        );
+      // Corrupted-datetime events are dropped like deleted ones, so filters/sort below can't throw.
+      filterOutCorruptedDatetime(
+        eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as CoffeeEvent)
+      ).forEach(event => {
+        eventsMap.set(event.id, toPublicEvent(event));
       });
     }
 
@@ -329,13 +329,13 @@ export class UserService {
 
       switch (sort) {
         case 'favoritedAt':
-          comparison = a.favorite.createdAt.toMillis() - b.favorite.createdAt.toMillis();
+          comparison = favoritedAtMs(a.favorite) - favoritedAtMs(b.favorite);
           break;
         case 'startTime':
           comparison = a.event.datetime.start.toMillis() - b.event.datetime.start.toMillis();
           break;
         default:
-          comparison = a.favorite.createdAt.toMillis() - b.favorite.createdAt.toMillis();
+          comparison = favoritedAtMs(a.favorite) - favoritedAtMs(b.favorite);
       }
 
       return sortOrder === 'desc' ? -comparison : comparison;

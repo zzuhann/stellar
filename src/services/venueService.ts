@@ -19,6 +19,7 @@ import {
 import { cache } from '../utils/cache';
 import { syncEventVenue } from './eventVenueSync';
 import { getIsoWeekString } from '../utils/isoWeek';
+import { filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
 import { getTaipeiDateString } from '../utils/taipeiDate';
 import { computeEventTimeStatus, filterVisibleTags } from './venueTags';
@@ -110,7 +111,8 @@ export function computeActiveWeeks(
       if (!data || data.status !== 'approved') continue;
 
       const start = data.datetime?.start as Timestamp | undefined;
-      if (!start || start.toMillis() <= cutoffMs) continue;
+      // Negated > also skips a corrupted start (not a Timestamp, or NaN millis).
+      if (typeof start?.toMillis !== 'function' || !(start.toMillis() > cutoffMs)) continue;
 
       weeks.add(getIsoWeekString(start.toDate()));
     }
@@ -378,19 +380,21 @@ export class VenueService {
     if (eventRefs.length > 0) {
       const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
 
-      events = eventDocs
-        .filter(ev => ev.exists && ev.data()?.status === 'approved')
-        .map(ev => {
-          const e = ev.data()!;
+      events = filterOutCorruptedDatetime(
+        eventDocs
+          .filter(ev => ev.exists && ev.data()?.status === 'approved')
+          .map(ev => ({ ...ev.data(), id: ev.id }) as DocumentData & { id: string })
+      )
+        .map(e => {
           const artists = (e.artists ?? []) as Array<{ name: string }>;
-          const start = e.datetime?.start as Timestamp | undefined;
-          const end = e.datetime?.end as Timestamp | undefined;
+          const start = e.datetime.start as Timestamp;
+          const end = e.datetime.end as Timestamp;
           return {
-            id: ev.id,
+            id: e.id,
             title: e.title ?? '',
             artistName: artists.map(a => a.name).join(' x '),
-            startDate: start?.toDate().toISOString() ?? '',
-            endDate: end?.toDate().toISOString() ?? '',
+            startDate: start.toDate().toISOString(),
+            endDate: end.toDate().toISOString(),
             coverImage: e.mainImage ?? '',
             slug: (e.slug as string | null | undefined) ?? null,
           };
@@ -531,19 +535,21 @@ export class VenueService {
     if (eventRefs.length > 0) {
       const eventDocs = await withTimeoutAndRetry(() => db!.getAll(...eventRefs));
 
-      events = eventDocs
-        .filter(ev => ev.exists && ev.data()?.status === 'approved')
-        .map(ev => {
-          const e = ev.data()!;
+      events = filterOutCorruptedDatetime(
+        eventDocs
+          .filter(ev => ev.exists && ev.data()?.status === 'approved')
+          .map(ev => ({ ...ev.data(), id: ev.id }) as DocumentData & { id: string })
+      )
+        .map(e => {
           const artists = (e.artists ?? []) as Array<{ name: string }>;
-          const start = e.datetime?.start as Timestamp | undefined;
-          const end = e.datetime?.end as Timestamp | undefined;
+          const start = e.datetime.start as Timestamp;
+          const end = e.datetime.end as Timestamp;
           return {
-            id: ev.id,
+            id: e.id,
             title: e.title ?? '',
             artistName: artists.map(a => a.name).join(' x '),
-            startDate: start?.toDate().toISOString() ?? '',
-            endDate: end?.toDate().toISOString() ?? '',
+            startDate: start.toDate().toISOString(),
+            endDate: end.toDate().toISOString(),
             coverImage: e.mainImage ?? '',
             slug: (e.slug as string | null | undefined) ?? null,
           };
