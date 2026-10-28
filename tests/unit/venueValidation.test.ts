@@ -815,6 +815,29 @@ describe('createSubmission 的 venueConditions（第 2 階段，design-backend �
     if (result.success) expect(result.data).not.toHaveProperty('venueConditions');
   });
 
+  it.each([[''], ['   '], [null]])(
+    'venueFee: free 的 freeVenueUntil %p 視為沒填：通過、不存日期、不變成限期（review #3）',
+    freeVenueUntil => {
+      const answers = parsedConditions(decorate({ venueFee: 'free', freeVenueUntil }));
+      expect(answers.fees).toEqual({ venueFee: 'free' });
+    }
+  );
+
+  it('fees: null 視為沒答：勾了 can_decorate 時回必答訊息（review #7）', () => {
+    const result = parse(decorate(null));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('請回答佈置、辦生咖的費用');
+      expect(result.error.issues[0].path).toEqual(['venueConditions', 'fees']);
+    }
+    // 沒勾 can_decorate 時 null 一樣被丟掉
+    expect(parsedConditions({ ...minimal, fees: null })).not.toHaveProperty('fees');
+  });
+
+  it('equipment: null 視為沒選：通過、不存 equipment（review #7）', () => {
+    expect(parsedConditions({ ...minimal, equipment: null })).not.toHaveProperty('equipment');
+  });
+
   describe('TC-071 freeVenueUntil 用台灣今天比較', () => {
     it('台北 10/15 00:30：2026-10-15 通過、2026-10-14 → 400', () => {
       jest.setSystemTime(new Date('2026-10-14T16:30:00Z'));
@@ -893,6 +916,14 @@ describe('TC-134 transitStops schema（第 2 階段，design-backend §10.2）',
       ['walkMinutes 字串', stop({ walkMinutes: '5' })],
     ])('400：%s', (_name, row) => {
       expect(parse(schema, [row]).success).toBe(false);
+    });
+
+    it("walkMinutes: '' 視為沒填 → null（review #2）", () => {
+      expect(parsedStops([stop({ walkMinutes: '' })])).toEqual([stop({ walkMinutes: null })]);
+    });
+
+    it('transitStops: null 通過（create／createSubmission 視為沒帶，update 視為清空）', () => {
+      expect(parsedStops(null)).toEqual(schema === 'update' ? [] : undefined);
     });
 
     it.each([0, 121, 999, null])('walkMinutes %p 通過', walkMinutes => {

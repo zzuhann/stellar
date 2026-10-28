@@ -289,13 +289,18 @@ const transitStopsSchema = z.preprocess(
             .trim()
             .min(1, '請填站名')
             .max(100, '站名不能超過 100 個字'),
+          // An emptied number input arrives as ''; same as not filled
           walkMinutes: z
-            .number({ error: '步行分鐘數必須是數字' })
-            .int('步行分鐘數必須是 0–999 的整數')
-            .min(0, '步行分鐘數必須是 0–999 的整數')
-            .max(999, '步行分鐘數必須是 0–999 的整數')
-            .nullable()
-            .optional()
+            .preprocess(
+              v => (v === '' ? null : v),
+              z
+                .number({ error: '步行分鐘數必須是數字' })
+                .int('步行分鐘數必須是 0–999 的整數')
+                .min(0, '步行分鐘數必須是 0–999 的整數')
+                .max(999, '步行分鐘數必須是 0–999 的整數')
+                .nullable()
+                .optional()
+            )
             .transform(v => v ?? null),
         },
         { error: '交通方式格式不正確' }
@@ -331,11 +336,18 @@ const choiceQuestionSchema = <T extends readonly [string, ...string[]]>(
 
 const venueFeesSchema = z
   .preprocess(
-    // Limit fields only mean something for a free venue; drop them otherwise, even if invalid
-    raw =>
-      isPlainObject(raw) && raw.venueFee !== 'free'
-        ? { ...raw, freeVenueLimited: undefined, freeVenueUntil: undefined }
-        : raw,
+    // Limit fields only mean something for a free venue; drop them otherwise, even if invalid.
+    // An empty/null date is "no date", not an invalid one.
+    raw => {
+      if (!isPlainObject(raw)) return raw;
+      const blankUntil =
+        raw.freeVenueUntil === null ||
+        (typeof raw.freeVenueUntil === 'string' && !raw.freeVenueUntil.trim());
+      if (raw.venueFee !== 'free') {
+        return { ...raw, freeVenueLimited: undefined, freeVenueUntil: undefined };
+      }
+      return blankUntil ? { ...raw, freeVenueUntil: undefined } : raw;
+    },
     z.object(
       {
         venueFee: z.enum(['free', 'paid', 'depends'], { error: '場地費選項不正確' }).optional(),
@@ -363,16 +375,20 @@ const venueFeesSchema = z
 
 const venueConditionsSchema = z
   .preprocess(
-    // B only applies when A includes can_decorate; otherwise drop it without validating
-    raw =>
-      isPlainObject(raw) &&
-      !(
+    // B only applies when A includes can_decorate; otherwise drop it without validating.
+    // null fees/equipment mean "not answered", so fees still hits the required rule below.
+    raw => {
+      if (!isPlainObject(raw)) return raw;
+      const decorates =
         isPlainObject(raw.uses) &&
         Array.isArray(raw.uses.options) &&
-        raw.uses.options.includes('can_decorate')
-      )
-        ? { ...raw, fees: undefined }
-        : raw,
+        raw.uses.options.includes('can_decorate');
+      return {
+        ...raw,
+        fees: decorates && raw.fees !== null ? raw.fees : undefined,
+        equipment: raw.equipment === null ? undefined : raw.equipment,
+      };
+    },
     z.object(
       {
         uses: choiceQuestionSchema(
@@ -513,7 +529,11 @@ const venueCreateSubmissionSchema = z.object({
   preferredContact: venuePreferredContactEnum,
   contactUrl: venueContactUrlSchema.optional(),
   bookingFormUrl: venueBookingFormUrlSchema,
-  transitStops: transitStopsSchema.optional(),
+  // null = not sent (no key written), so all three schemas accept it
+  transitStops: transitStopsSchema
+    .nullable()
+    .optional()
+    .transform(v => v ?? undefined),
   coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確'),
   otherPhotos: z
     .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {

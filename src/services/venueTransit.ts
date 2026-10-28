@@ -2,6 +2,8 @@ import { TransitStop, TransitType } from '../models/types';
 
 // Legacy pages show nearestMrt behind a metro icon, so non-metro stations carry their type word
 const TRANSIT_PRIORITY: TransitType[] = ['mrt', 'light_rail', 'train', 'hsr', 'bus'];
+const LEGACY_NEAREST_MRT_MAX = 100; // same cap as the nearestMrt schema
+
 const TYPE_PREFIX: Record<TransitType, string> = {
   mrt: '',
   light_rail: '輕軌',
@@ -20,7 +22,10 @@ export const pickLegacyTransit = (
     const prefix = TYPE_PREFIX[type];
     const nearestMrt =
       prefix && !stop.station.includes(prefix) ? `${prefix} ${stop.station}` : stop.station;
-    return { nearestMrt, mrtWalkMinutes: stop.walkMinutes };
+    return {
+      nearestMrt: nearestMrt.slice(0, LEGACY_NEAREST_MRT_MAX),
+      mrtWalkMinutes: stop.walkMinutes,
+    };
   }
   return { nearestMrt: '', mrtWalkMinutes: null };
 };

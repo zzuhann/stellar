@@ -113,7 +113,8 @@ export class PlacesController {
 
     const referer = process.env.FRONTEND_URL || 'http://localhost:3000';
     const response = await fetchWithRetry(
-      `https://places.googleapis.com/v1/places/${placeId as string}?languageCode=zh-TW`,
+      // Public route: encode so a decoded "../" in placeId can't reach other Google paths
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId as string)}?languageCode=zh-TW`,
       {
         method: 'GET',
         headers: {

@@ -80,10 +80,11 @@ describe('POST /api/venue-submissions 帶 venueConditions', () => {
     expect(written.equipmentNote).toBe('');
     expect(written.calendarUrl).toBe('https://calendar.example.com/a');
     expect(written.status).toBe('pending');
-    expect(written.submission).toMatchObject({
-      answers: venueConditions,
-      confirmedAt: null,
-    });
+    const { calendarUrl: _calendarUrl, ...answersWithoutCalendar } = venueConditions;
+    void _calendarUrl;
+    expect(written.submission).toMatchObject({ confirmedAt: null });
+    // calendarUrl is only kept in the formal field (review #8)
+    expect(written.submission.answers).toEqual(answersWithoutCalendar);
     expect(written.submission.submittedAt).toBeDefined();
     expect(written.submission.suggestedTags.map((t: { slug: string }) => t.slug)).toEqual([
       'goods_distribution',
@@ -189,6 +190,17 @@ describe('POST /api/venue-submissions 帶 transitStops（第 2 階段）', () =>
     );
     expect(slugs).not.toContain('near_mrt');
     expect(slugs).not.toContain('near_train');
+  });
+
+  it('transitStops: null 等於沒帶：不寫這個 key，nearestMrt 照送的值（review #6）', async () => {
+    const res = await request(app)
+      .post('/api/venue-submissions')
+      .send({ ...venueBody, transitStops: null, nearestMrt: '中山', mrtWalkMinutes: 3 });
+
+    expect(res.status).toBe(201);
+    const written = mockVenueSet.mock.calls[0][0];
+    expect(written).not.toHaveProperty('transitStops');
+    expect(written).toMatchObject({ nearestMrt: '中山', mrtWalkMinutes: 3 });
   });
 
   it('TC-134 不合法的 transitStops → 400、不寫入', async () => {

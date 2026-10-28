@@ -56,6 +56,11 @@ describe('pickLegacyTransit（design-backend §10.3）', () => {
       { nearestMrt: '公車 市政府', mrtWalkMinutes: 0 },
     ],
     ['[] → 清空', [], { nearestMrt: '', mrtWalkMinutes: null }],
+    [
+      '加類型字後超過舊欄位上限 100 字 → 截到 100 字',
+      [s('bus', 'a'.repeat(100), 2)],
+      { nearestMrt: `公車 ${'a'.repeat(97)}`, mrtWalkMinutes: 2 },
+    ],
   ])('%s', (_name, stops, expected) => {
     expect(pickLegacyTransit(stops as TransitStop[])).toEqual(expected);
   });

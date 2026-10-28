@@ -64,6 +64,16 @@ describe('TC-138 GET /api/venue-submissions/places/:placeId 回傳 types', () =>
     });
   });
 
+  it('placeId 帶編碼過的 ../ 也只會打到 /v1/places/{id}，不會跑到其他 googleapis 路徑', async () => {
+    googleReplies(place);
+
+    await request(app).get('/api/venue-submissions/places/x%2F..%2F..%2Fv1%2Fother');
+
+    const url = new URL(mockFetch.mock.calls[0][0] as string);
+    expect(url.host).toBe('places.googleapis.com');
+    expect(url.pathname).toBe('/v1/places/x%2F..%2F..%2Fv1%2Fother');
+  });
+
   it('Google 沒回 types → types: []，請求不失敗', async () => {
     googleReplies(place);
 

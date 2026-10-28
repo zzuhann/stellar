@@ -1488,7 +1488,10 @@ components:
       required: [submittedAt, answers, suggestedTags, confirmedAt]
       properties:
         submittedAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
-        answers: { $ref: '#/components/schemas/VenueConditionAnswers' }
+        answers:
+          allOf:
+            - $ref: '#/components/schemas/VenueConditionAnswers'
+          description: 驗證後的問卷答案，不含 calendarUrl（只存在正式欄位 calendarUrl）
         suggestedTags:
           type: array
           description: 投稿當下算出的建議快照，之後改交通欄位不會跟著變
@@ -1509,7 +1512,8 @@ components:
       description: >-
         店家問卷（A–E、補充、F、G）。A 沒勾 can_decorate 時 fees 會被丟掉、不回 400；
         A、C 至少一個選項或 discussable: true；A 勾 can_decorate 時 B 至少答一題或 discussable: true；
-        D 至少一個選項（discussable 會被丟掉）。選項重複不報錯。舊的 other、otherEquipment 會被丟掉
+        D 至少一個選項（discussable 會被丟掉）。選項重複不報錯。舊的 other、otherEquipment 會被丟掉。
+        fees、equipment 為 null 視為沒答
       required: [uses, services, spaceTypes]
       properties:
         uses:
@@ -1528,7 +1532,8 @@ components:
             freeVenueUntil:
               type: string
               format: date
-              description: venueFee 不是 free 時被丟掉；有日期就視為限期（存成 freeVenueLimited true）；不能早於台灣時間的今天
+              nullable: true
+              description: venueFee 不是 free 時被丟掉；''、只有空白、null 視為沒填；有日期就視為限期（存成 freeVenueLimited true）；不能早於台灣時間的今天
             guarantee: { type: string, enum: ['yes', 'no'] }
             deposit: { type: string, enum: ['yes', 'no'] }
             discussable: { type: boolean }
@@ -1559,7 +1564,7 @@ components:
           type: string
           nullable: true
           maxLength: 500
-          description: G 檔期行事曆連結（http/https）；投稿時直接寫進正式欄位 calendarUrl（不公開、不需確認）
+          description: G 檔期行事曆連結（http/https）；投稿時直接寫進正式欄位 calendarUrl（不公開、不需確認），不存進 submission.answers
 
     TransitStop:
       type: object
@@ -1567,7 +1572,7 @@ components:
       properties:
         type: { type: string, enum: [mrt, light_rail, train, hsr, bus], description: 捷運／輕軌／火車站／高鐵／公車站 }
         station: { type: string, minLength: 1, maxLength: 100, description: 前後空白會 trim }
-        walkMinutes: { type: integer, minimum: 0, maximum: 999, nullable: true, description: 寫入時沒帶存成 null }
+        walkMinutes: { type: integer, minimum: 0, maximum: 999, nullable: true, description: 寫入時沒帶或送 '' 存成 null }
 
     TransitStopsInput:
       type: array
@@ -1576,7 +1581,7 @@ components:
         交通方式，存放順序＝送的順序。整列空白（沒有 type、station 空白、沒有 walkMinutes）先丟掉才算列數；
         只有類型或只有站名回 400。有帶就整個覆蓋，並在同一次寫入回寫 nearestMrt、mrtWalkMinutes
         （類型優先序 mrt → light_rail → train → hsr → bus，同類型取陣列最前面那筆；非捷運的站名前加
-        輕軌／火車／高鐵／公車，站名已含類型字就不加），body 裡的 nearestMrt、mrtWalkMinutes 會被忽略。
+        輕軌／火車／高鐵／公車，站名已含類型字就不加；超過 100 字截到 100 字），body 裡的 nearestMrt、mrtWalkMinutes 會被忽略。
         丟掉空白列後是 [] 時兩個舊欄位清成 '' 與 null
       items: { $ref: '#/components/schemas/TransitStop' }
 
@@ -1704,7 +1709,8 @@ components:
         transitStops:
           allOf:
             - $ref: '#/components/schemas/TransitStopsInput'
-          description: 選填；直接寫正式欄位（不進 submission）。沒帶時不寫這個 key，nearestMrt、mrtWalkMinutes 照送的值存
+          nullable: true
+          description: 選填；直接寫正式欄位（不進 submission）。沒帶或 null 時不寫這個 key，nearestMrt、mrtWalkMinutes 照送的值存
         coverPhoto: { type: string, format: uri }
         otherPhotos: { type: array, maxItems: 9, items: { type: string, format: uri } }
         socialMedia:

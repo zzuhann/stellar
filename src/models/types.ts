@@ -165,7 +165,7 @@ export type SuggestedVenueTag = VenueTag & { source: 'store' | 'auto' };
 // venues/{id}.submission — store suggestions, never read by public endpoints
 export interface VenueSubmissionRecord {
   submittedAt: Timestamp;
-  answers: VenueConditionAnswers;
+  answers: Omit<VenueConditionAnswers, 'calendarUrl'>; // calendarUrl is stored on the venue
   suggestedTags: SuggestedVenueTag[];
   confirmedAt: Timestamp | null;
 }

@@ -1512,6 +1512,18 @@ describe('VenueService — venue-tags 欄位', () => {
     }
   });
 
+  it('admin 列表（getAdminVenues）不帶 submission，回應與快取都沒有（詳情回 submission 見 TC-001／TC-003 第 2 階段）', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      get: () => Promise.resolve({ docs: [{ id: 'a', data: () => venueA }] }),
+    });
+    const result = await new AdminService().getAdminVenues({});
+    expect(result.data[0]).not.toHaveProperty('submission');
+    expect(result.data[0].tags).toEqual(venueA.tags);
+    expect(cache.get<object[]>('admin:venues:all')![0]).not.toHaveProperty('submission');
+    expect(venueA).toHaveProperty('submission'); // source doc data not mutated
+  });
+
   it('TC-029 admin 列表（adminService.getAdminVenues）保留原始 tags', async () => {
     const firebase = jest.requireMock('../../src/config/firebase');
     (firebase.db.collection as jest.Mock).mockReturnValue({
@@ -1597,7 +1609,11 @@ describe('VenueService — 店家建議 submission（第 2 階段）', () => {
         calendarUrl: 'https://calendar.example.com/a',
         status: 'pending',
       });
-      expect(written.submission.answers).toEqual(venueConditions);
+      // calendarUrl lives only in the formal field (review #8)
+      const { calendarUrl: _calendarUrl, ...answersWithoutCalendar } = venueConditions;
+      void _calendarUrl;
+      expect(written.submission.answers).toEqual(answersWithoutCalendar);
+      expect(written.submission.answers).not.toHaveProperty('calendarUrl');
       expect(written.submission.confirmedAt).toBeNull();
       expect(written.submission.submittedAt).toBeDefined();
       expect(written.submission.suggestedTags).toEqual([

@@ -279,9 +279,11 @@ export class VenueService {
   // Questionnaire answers become suggestions in `submission`, confirmed later by an admin.
   async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
     const { venueConditions, ...rest } = data;
+    // calendarUrl lives only in the formal field, so no stale copy can be prefilled later
+    const { calendarUrl, ...answers } = venueConditions ?? {};
     const submission = venueConditions && {
       submittedAt: FieldValue.serverTimestamp(),
-      answers: venueConditions,
+      answers,
       suggestedTags: mapAnswersToSuggestedTags(venueConditions, {
         transitStops: data.transitStops,
       }),
@@ -295,7 +297,7 @@ export class VenueService {
         equipmentNote: undefined,
         infoUpdatedOn: undefined,
         // Private and needs no confirmation, so it goes straight to the real field (§3.1)
-        calendarUrl: venueConditions?.calendarUrl ?? undefined,
+        calendarUrl: calendarUrl ?? undefined,
       },
       submission
     );
@@ -532,7 +534,8 @@ export class VenueService {
       Object.assign(updateData, pickLegacyTransit(stops));
     }
 
-    // Decided on the doc just read, not the admin cache, so a stale cache can't re-confirm
+    // Decided on the doc just read, not the admin cache, so a stale cache can't re-confirm.
+    // ponytail: read-then-update isn't atomic; fine with one admin, use runTransaction if several
     const submission = existing.data()?.submission as { confirmedAt?: unknown } | undefined;
     if (data.confirmSuggestions === true && submission && submission.confirmedAt === null) {
       updateData['submission.confirmedAt'] = FieldValue.serverTimestamp();
