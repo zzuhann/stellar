@@ -1225,8 +1225,8 @@ export class EventService {
       );
     }
 
-    // Copy before sorting so the shared cached array keeps its order.
-    return [...events].sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
+    // The base returns a fresh array, so sorting in place leaves the cache untouched.
+    return events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
   }
 
   /** 與前端「我的投稿」一致：rejected 置頂，其餘依建立時間新到舊 */
@@ -1320,19 +1320,12 @@ export class EventService {
 
   async getTrendingEvents(limit: number = 10): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
-    const clampedLimit = Math.min(limit, 20);
+    // Untrusted query value: NaN falls back to 10, then clamp to 1..20.
+    const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit) : 10, 1), 20);
 
-    // Cache the full ranking and filter on read, so an event ending mid-TTL is replaced, not lost.
-    const ranked = await cache.getWithLock(
-      `events:trending:${clampedLimit}`,
-      async () => {
-        const activeEvents = await this.getApprovedActiveEventsBase();
-        return [...activeEvents].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-      },
-      360 // 6 小時 TTL
-    );
-    const now = Date.now();
-    return ranked.filter(event => event.datetime.end.toMillis() >= now).slice(0, clampedLimit);
+    // No ranking cache: sorting the in-memory base is cheap and never serves ended events.
+    const activeEvents = await this.getApprovedActiveEventsBase();
+    return activeEvents.sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, safeLimit);
   }
 
   // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
