@@ -32,6 +32,7 @@ export class ArtistService {
     this.checkFirebaseConfig();
 
     const cacheKey = 'artists:approved';
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<Artist[]>(cacheKey);
     if (cachedResult) {
       return cachedResult;
@@ -51,7 +52,7 @@ export class ArtistService {
     );
 
     // 設定 24 小時快取（基礎資料變動不頻繁）
-    cache.set(cacheKey, sortedArtists, 1440);
+    cache.set(cacheKey, sortedArtists, 1440, cacheVersion);
 
     return sortedArtists;
   }
@@ -76,6 +77,7 @@ export class ArtistService {
     createdBy?: string
   ): Promise<Artist[]> {
     this.checkFirebaseConfig();
+    const cacheVersion = cache.version();
 
     // 只有非 pending 狀態才快取
     let cacheKey: string | null = null;
@@ -121,7 +123,7 @@ export class ArtistService {
 
     // 設定快取（僅非 pending 狀態）
     if (cacheKey && ttl > 0) {
-      cache.set(cacheKey, result, ttl);
+      cache.set(cacheKey, result, ttl, cacheVersion);
     }
 
     return result;
@@ -568,6 +570,7 @@ export class ArtistService {
 
   async getArtistById(slugOrId: string): Promise<Artist | null> {
     this.checkFirebaseConfig();
+    const cacheVersion = cache.version();
 
     // Firestore 自動產生的 ID 為 20 碼英數字
     const isFirestoreId = /^[a-zA-Z0-9]{20}$/.test(slugOrId);
@@ -582,12 +585,12 @@ export class ArtistService {
       const doc = await withTimeoutAndRetry(() => this.collection.doc(slugOrId).get());
 
       if (!doc.exists) {
-        cache.set(cacheKey, null, 15);
+        cache.set(cacheKey, null, 15, cacheVersion);
         return null;
       }
 
       const artist = { id: doc.id, ...doc.data() } as Artist;
-      cache.set(cacheKey, artist, 360);
+      cache.set(cacheKey, artist, 360, cacheVersion);
       return artist;
     }
 
@@ -603,7 +606,7 @@ export class ArtistService {
     );
 
     if (snapshot.empty) {
-      cache.set(slugCacheKey, null, 15);
+      cache.set(slugCacheKey, null, 15, cacheVersion);
       return null;
     }
 
@@ -611,8 +614,8 @@ export class ArtistService {
     const artist = { id: doc.id, ...doc.data() } as Artist;
 
     // 同時以 slug 和 ID 快取
-    cache.set(slugCacheKey, artist, 360);
-    cache.set(`artist:${doc.id}`, artist, 360);
+    cache.set(slugCacheKey, artist, 360, cacheVersion);
+    cache.set(`artist:${doc.id}`, artist, 360, cacheVersion);
 
     return artist;
   }
@@ -626,6 +629,7 @@ export class ArtistService {
     }
 
     const cacheKey = `artists:filters:${JSON.stringify(filters)}`;
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<ArtistWithEventCount[]>(cacheKey);
     if (cachedResult) {
       return cachedResult;
@@ -653,7 +657,7 @@ export class ArtistService {
       filters.sortBy,
       filters.sortOrder
     ) as ArtistWithEventCount[];
-    cache.set(cacheKey, sortedArtists, 240);
+    cache.set(cacheKey, sortedArtists, 240, cacheVersion);
 
     return sortedArtists;
   }
@@ -662,6 +666,7 @@ export class ArtistService {
   private async getApprovedArtistsWithFilters(
     filters: ArtistFilterParams
   ): Promise<ArtistWithEventCount[]> {
+    const cacheVersion = cache.version();
     let approvedArtists = cache.get<Artist[]>('artists:approved');
 
     if (!approvedArtists) {
@@ -671,7 +676,7 @@ export class ArtistService {
 
       approvedArtists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Artist);
 
-      cache.set('artists:approved', approvedArtists, 1440);
+      cache.set('artists:approved', approvedArtists, 1440, cacheVersion);
     }
 
     const withCount: ArtistWithEventCount[] = this.filterArtistsInMemory(
@@ -892,6 +897,7 @@ export class ArtistService {
     const safeLimit = Math.min(Math.max(1, limit), 50);
     const cacheKey = `artists:top:${safeLimit}`;
 
+    const cacheVersion = cache.version();
     const cachedResult = cache.get<Array<Artist & { upcomingEventCount: number }>>(cacheKey);
     if (cachedResult) {
       return cachedResult;
@@ -918,7 +924,7 @@ export class ArtistService {
       .map(([id]) => id);
 
     if (sortedArtistIds.length === 0) {
-      cache.set(cacheKey, [], 360); // 6 小時快取
+      cache.set(cacheKey, [], 360, cacheVersion); // 6 小時快取
       return [];
     }
 
@@ -945,7 +951,7 @@ export class ArtistService {
     result.sort((a, b) => b.upcomingEventCount - a.upcomingEventCount);
 
     // 設定 6 小時快取
-    cache.set(cacheKey, result, 360);
+    cache.set(cacheKey, result, 360, cacheVersion);
 
     return result;
   }

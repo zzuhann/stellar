@@ -446,6 +446,59 @@ describe('EventService.updateEvent — 座標驗證', () => {
   });
 });
 
+describe('EventService.getEventById — 讀取途中活動被改動', () => {
+  const approvedEventData = {
+    title: '活動',
+    description: '',
+    artists: [],
+    location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+    datetime: {
+      start: makeTimestamp('2027-01-01T00:00:00.000Z'),
+      end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+    },
+    createdBy: 'owner',
+  };
+
+  afterEach(() => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReset();
+  });
+
+  it('管理員載入待審活動的同時活動被核准：不把核准前的資料存進快取，之後一般使用者看得到', async () => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    // userFavorites query chain for the isFavorited check: no favorite
+    const noFavorites = {
+      where: () => noFavorites,
+      limit: () => noFavorites,
+      get: () => Promise.resolve({ empty: true }),
+    };
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => mockDocRef),
+      where: () => noFavorites,
+    });
+    mockGet.mockImplementationOnce(() => {
+      cache.delete('event:event-1'); // updateEventStatus invalidates while this read is in flight
+      return Promise.resolve({
+        id: 'event-1',
+        exists: true,
+        data: () => ({ ...approvedEventData, status: 'pending' }),
+      });
+    });
+
+    const service = new EventService();
+    await service.getEventById('event-1', 'admin-uid', 'admin');
+    expect(cache.get('event:event-1')).toBeNull();
+
+    // the next anonymous read goes to Firestore and gets the approved event
+    mockGet.mockResolvedValueOnce({
+      id: 'event-1',
+      exists: true,
+      data: () => ({ ...approvedEventData, status: 'approved' }),
+    });
+    await expect(service.getEventById('event-1')).resolves.toMatchObject({ id: 'event-1' });
+  });
+});
+
 describe('EventService.updateEvent — 快取清除', () => {
   beforeEach(() => {
     jest.clearAllMocks();

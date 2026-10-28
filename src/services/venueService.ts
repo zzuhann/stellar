@@ -363,6 +363,7 @@ export class VenueService {
     this.checkFirebaseConfig();
 
     const cacheKey = `venue:detail:${id}`;
+    const cacheVersion = cache.version();
     const cached = cache.get<CachedVenueDetail>(cacheKey);
     if (cached) return cached;
 
@@ -431,7 +432,7 @@ export class VenueService {
       events,
     };
 
-    cache.set(cacheKey, detail, 1440);
+    cache.set(cacheKey, detail, 1440, cacheVersion);
     return detail;
   }
 
@@ -520,6 +521,7 @@ export class VenueService {
     this.checkFirebaseConfig();
 
     const cacheKey = `venue:admin:detail:${id}`;
+    const cacheVersion = cache.version();
     const cached = cache.get<CachedAdminVenueDetail>(cacheKey);
     if (cached) return cached;
 
@@ -587,7 +589,7 @@ export class VenueService {
       events,
     };
 
-    cache.set(cacheKey, detail, 1440);
+    cache.set(cacheKey, detail, 1440, cacheVersion);
     return detail;
   }
 

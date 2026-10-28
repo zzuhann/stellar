@@ -95,6 +95,7 @@ export class AdminService {
 
     // Fetch all events for the given status, using in-memory cache to reduce Firestore reads
     const cacheKey = params.status ? `admin:events:status:${params.status}` : 'admin:events:all';
+    const cacheVersion = cache.version();
     let events = cache.get<CoffeeEvent[]>(cacheKey);
 
     if (!events) {
@@ -112,7 +113,7 @@ export class AdminService {
         return bMs - aMs;
       });
 
-      cache.set(cacheKey, events, ADMIN_CACHE_TTL_MINUTES);
+      cache.set(cacheKey, events, ADMIN_CACHE_TTL_MINUTES, cacheVersion);
     }
 
     // Apply search filter in memory (not cached, since search terms vary widely)
@@ -171,6 +172,7 @@ export class AdminService {
 
     // Fetch all artists for the given status, using in-memory cache to reduce Firestore reads
     const cacheKey = params.status ? `admin:artists:status:${params.status}` : 'admin:artists:all';
+    const cacheVersion = cache.version();
     let artists = cache.get<Artist[]>(cacheKey);
 
     if (!artists) {
@@ -188,7 +190,7 @@ export class AdminService {
         return bMs - aMs;
       });
 
-      cache.set(cacheKey, artists, ADMIN_CACHE_TTL_MINUTES);
+      cache.set(cacheKey, artists, ADMIN_CACHE_TTL_MINUTES, cacheVersion);
     }
 
     // Apply search filter in memory (not cached, since search terms vary widely)
@@ -219,6 +221,7 @@ export class AdminService {
 
     // Fetch all venues for the given status, using in-memory cache to reduce Firestore reads
     const cacheKey = params.status ? `admin:venues:status:${params.status}` : 'admin:venues:all';
+    const cacheVersion = cache.version();
     let venues = cache.get<Venue[]>(cacheKey);
 
     if (!venues) {
@@ -237,7 +240,7 @@ export class AdminService {
         return bMs - aMs;
       });
 
-      cache.set(cacheKey, venues, ADMIN_CACHE_TTL_MINUTES);
+      cache.set(cacheKey, venues, ADMIN_CACHE_TTL_MINUTES, cacheVersion);
     }
 
     // Apply search filter in memory (not cached, since search terms vary widely)

@@ -3,9 +3,20 @@ interface CacheItem<T> {
   expires: number;
 }
 
+// Far longer than any Firestore read-through fill (withTimeoutAndRetry gives up well before this).
+const INVALIDATION_LOG_MS = 5 * 60 * 1000;
+
 class MemoryCache {
   private cache = new Map<string, CacheItem<unknown>>();
   private pendingRequests = new Map<string, Promise<unknown>>();
+  // Bumped on every invalidation; read-through callers pass the value they saw to set().
+  private invalidationVersion = 0;
+  // Recent invalidations, so a fill is dropped only when its own key was invalidated mid-read.
+  private recentInvalidations: {
+    version: number;
+    at: number;
+    matches: (key: string) => boolean;
+  }[] = [];
 
   // 帶 Lock 的快取取得，防止快取過期時的雪崩效應
   async getWithLock<T>(key: string, fetchFn: () => Promise<T>, ttlMinutes: number): Promise<T> {
@@ -34,7 +45,14 @@ class MemoryCache {
     return promise;
   }
 
-  set<T>(key: string, data: T, ttlMinutes: number): void {
+  version(): number {
+    return this.invalidationVersion;
+  }
+
+  // Pass readVersion (from version(), taken before reading the source) on read-through fills:
+  // if anything was invalidated meanwhile, the data may predate that write, so it isn't stored.
+  set<T>(key: string, data: T, ttlMinutes: number, readVersion?: number): void {
+    if (readVersion !== undefined && this.invalidatedSince(key, readVersion)) return;
     const expires = Date.now() + ttlMinutes * 60 * 1000;
     this.cache.set(key, { data, expires });
   }
@@ -57,17 +75,20 @@ class MemoryCache {
 
   // Invalidation also drops in-flight getWithLock fetches so they can't store stale results.
   delete(key: string): void {
+    this.recordInvalidation(k => k === key);
     this.cache.delete(key);
     this.pendingRequests.delete(key);
   }
 
   clear(): void {
+    this.recordInvalidation(() => true);
     this.cache.clear();
     this.pendingRequests.clear();
   }
 
   // 清除特定 pattern 的 keys
   clearPattern(pattern: string): void {
+    this.recordInvalidation(k => k.includes(pattern));
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
         this.cache.delete(key);
@@ -78,6 +99,26 @@ class MemoryCache {
         this.pendingRequests.delete(key);
       }
     }
+  }
+
+  private recordInvalidation(matches: (key: string) => boolean): void {
+    const now = Date.now();
+    this.invalidationVersion++;
+    this.recentInvalidations.push({ version: this.invalidationVersion, at: now, matches });
+    while (
+      this.recentInvalidations.length > 0 &&
+      this.recentInvalidations[0].at < now - INVALIDATION_LOG_MS
+    ) {
+      this.recentInvalidations.shift();
+    }
+  }
+
+  private invalidatedSince(key: string, readVersion: number): boolean {
+    if (readVersion === this.invalidationVersion) return false;
+    const oldest = this.recentInvalidations[0];
+    // Part of the read window was already pruned from the log: can't tell, so don't store.
+    if (!oldest || oldest.version > readVersion + 1) return true;
+    return this.recentInvalidations.some(i => i.version > readVersion && i.matches(key));
   }
 
   // 取得快取統計

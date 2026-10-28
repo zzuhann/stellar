@@ -1,4 +1,5 @@
 import { UserService } from '../../src/services/userService';
+import { cache } from '../../src/utils/cache';
 
 const mockFavoritesGet = jest.fn();
 const mockEventDocGet = jest.fn();
@@ -41,6 +42,17 @@ describe('UserService.isFavorited', () => {
     });
 
     service = new UserService();
+  });
+
+  it('查詢途中活動被核准（清除收藏快取）：不把核准前的 false 存進快取', async () => {
+    mockFavoritesGet.mockResolvedValue({ empty: false });
+    mockEventDocGet.mockImplementationOnce(() => {
+      cache.clearPattern('favorite'); // updateEventStatus invalidates while this read is in flight
+      return Promise.resolve({ exists: true, data: () => ({ status: 'pending' }) });
+    });
+
+    await expect(service.isFavorited('user-1', 'event-1')).resolves.toBe(false);
+    expect(cache.get('favorite:user-1:event-1')).toBeNull();
   });
 
   it('userFavorites 文件不存在 → false', async () => {
