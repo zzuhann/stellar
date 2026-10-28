@@ -397,6 +397,18 @@ describe('EventService.updateEvent — 座標驗證', () => {
 });
 
 describe('EventService.getEventById — 讀取途中活動被改動', () => {
+  const approvedEventData = {
+    title: '活動',
+    description: '',
+    artists: [],
+    location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
+    datetime: {
+      start: makeTimestamp('2027-01-01T00:00:00.000Z'),
+      end: makeTimestamp('2027-01-02T00:00:00.000Z'),
+    },
+    createdBy: 'owner',
+  };
+
   afterEach(() => {
     const firebase = jest.requireMock('../../src/config/firebase');
     (firebase.db.collection as jest.Mock).mockReset();
@@ -419,24 +431,21 @@ describe('EventService.getEventById — 讀取途中活動被改動', () => {
       return Promise.resolve({
         id: 'event-1',
         exists: true,
-        data: () => ({
-          title: '待審活動',
-          description: '',
-          artists: [],
-          location: { address: '台北市', coordinates: { lat: 25, lng: 121 } },
-          datetime: {
-            start: makeTimestamp('2027-01-01T00:00:00.000Z'),
-            end: makeTimestamp('2027-01-02T00:00:00.000Z'),
-          },
-          status: 'pending',
-          createdBy: 'owner',
-        }),
+        data: () => ({ ...approvedEventData, status: 'pending' }),
       });
     });
 
-    await new EventService().getEventById('event-1', 'admin-uid', 'admin');
-
+    const service = new EventService();
+    await service.getEventById('event-1', 'admin-uid', 'admin');
     expect(cache.get('event:event-1')).toBeNull();
+
+    // the next anonymous read goes to Firestore and gets the approved event
+    mockGet.mockResolvedValueOnce({
+      id: 'event-1',
+      exists: true,
+      data: () => ({ ...approvedEventData, status: 'approved' }),
+    });
+    await expect(service.getEventById('event-1')).resolves.toMatchObject({ id: 'event-1' });
   });
 });
 

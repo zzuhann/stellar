@@ -12,8 +12,11 @@ description: Cache 實現規範，定義快取鍵命名規則、TTL 設定、使
 ```typescript
 import { cache } from '../utils/cache';
 
-// 設定快取
-cache.set<T>(key: string, data: T, ttlMinutes: number): void
+// 取得目前的清除版本（手動讀取前先記下，見「使用模式」）
+cache.version(): number
+
+// 設定快取；readVersion 是讀取前記下的版本，期間這個 key 被清除過就不寫入
+cache.set<T>(key: string, data: T, ttlMinutes: number, readVersion?: number): void
 
 // 取得快取
 cache.get<T>(key: string): T | null
@@ -60,16 +63,19 @@ cache.clear(): void
 
 ## 使用模式
 
+**手動「讀快取 → 查資料庫 → 寫快取」一律帶版本**：查資料庫前先 `const cacheVersion = cache.version()`，寫回時 `cache.set(key, data, ttl, cacheVersion)`。讀取途中這個 key 被清除（例如活動剛好被核准）時，寫回會被略過，避免把改動前的舊資料存滿整個 TTL。`getWithLock` 內建同樣的保護，不用另外帶。
+
 ### 1. 基本查詢快取
 
 ```typescript
 async getResource(): Promise<Resource[]> {
   const cacheKey = 'resources:active';
+  const cacheVersion = cache.version();
   const cached = cache.get<Resource[]>(cacheKey);
   if (cached) return cached;
 
   const result = await this.fetchFromDB();
-  cache.set(cacheKey, result, 1440);
+  cache.set(cacheKey, result, 1440, cacheVersion);
   return result;
 }
 ```
@@ -79,11 +85,12 @@ async getResource(): Promise<Resource[]> {
 ```typescript
 async getResourcesWithFilters(filters: FilterParams): Promise<Resource[]> {
   const cacheKey = `resources:filters:${JSON.stringify(filters)}`;
+  const cacheVersion = cache.version();
   const cached = cache.get<Resource[]>(cacheKey);
   if (cached) return cached;
 
   const result = await this.fetchWithFilters(filters);
-  cache.set(cacheKey, result, 1440);
+  cache.set(cacheKey, result, 1440, cacheVersion);
   return result;
 }
 ```
@@ -93,6 +100,7 @@ async getResourcesWithFilters(filters: FilterParams): Promise<Resource[]> {
 ```typescript
 async getResourcesWithUser(filters: FilterParams, userId?: string): Promise<Resource[]> {
   const cacheKey = `resources:filters:${JSON.stringify(filters)}`;
+  const cacheVersion = cache.version();
 
   // 有 userId 時不使用快取，因為需要檢查用戶特定狀態
   if (!userId) {
@@ -104,7 +112,7 @@ async getResourcesWithUser(filters: FilterParams, userId?: string): Promise<Reso
 
   // 只有無 userId 的情況才快取
   if (!userId) {
-    cache.set(cacheKey, result, 1440);
+    cache.set(cacheKey, result, 1440, cacheVersion);
   }
 
   return result;
@@ -113,16 +121,19 @@ async getResourcesWithUser(filters: FilterParams, userId?: string): Promise<Reso
 
 ### 4. 可能為 null 的資源快取
 
+> ⚠️ 目前這個寫法的 null 快取**不會生效**：`cache.get` 沒命中時也回傳 `null`，所以分不出「沒快取」和「快取了 null」，查不到的資源每次都會重查資料庫（只多花讀取，不影響正確性）。`artistService.getArtistById` 就是這樣，已記 backlog；修好前不要依賴它擋重複查詢。
+
 ```typescript
 async getResourceById(id: string): Promise<Resource | null> {
   const cacheKey = `resource:${id}`;
+  const cacheVersion = cache.version();
   const cached = cache.get<Resource | null>(cacheKey);
   if (cached !== null) return cached;
 
   const result = await this.fetchById(id);
 
   // null 結果也快取，但 TTL 較短
-  cache.set(cacheKey, result, result ? 360 : 15);
+  cache.set(cacheKey, result, result ? 360 : 15, cacheVersion);
   return result;
 }
 ```
@@ -279,6 +290,7 @@ async deleteEvent(id: string): Promise<void> {
 2. **用戶特定資料不適合用列表快取** - 需要檢查用戶狀態時跳過快取
 3. **批次操作後一次性清除快取** - 避免多次清除造成效能問題
 4. **使用 `clearPattern` 時注意模式** - 確保只清除相關快取，不要過度清除
-5. **快取 null 值** - 防止對不存在資源的重複查詢，但使用較短 TTL
+5. **快取 null 值** - 防止對不存在資源的重複查詢，但使用較短 TTL（⚠️ 目前寫法不會生效，見模式 4）
 6. **高頻存取資料使用 `getWithLock`** - 防止快取過期時的雪崩效應
 7. **優先使用分層快取** - 多個 API 共用基礎資料時，避免重複快取相似資料
+8. **手動讀寫快取一定帶 `cacheVersion`** - 沒帶的話，讀取途中資料被改動並清除快取時，舊資料會被寫回並存滿整個 TTL（見「使用模式」開頭）

@@ -133,6 +133,30 @@ describe('MemoryCache', () => {
       expect(cache.get('event:1')).toBeNull();
     });
 
+    it.each([
+      ['delete 別的 key', () => cache.delete('favorite:user-2:event-9')],
+      ['clearPattern 不相符', () => cache.clearPattern('favorites:user-2')],
+    ])('讀取期間只有無關的清除（%s）：照常寫入，不被別人的收藏操作拖累', (_label, invalidate) => {
+      const version = cache.version();
+      invalidate();
+      cache.set('event:1', 'fresh', 60, version);
+      expect(cache.get('event:1')).toBe('fresh');
+    });
+
+    it('讀取時間長到清除紀錄已被淘汰（超過 5 分鐘）：保守起見不寫入', () => {
+      jest.useFakeTimers();
+      try {
+        const version = cache.version();
+        cache.delete('unrelated:1');
+        jest.advanceTimersByTime(6 * 60 * 1000);
+        cache.delete('unrelated:2'); // prunes the first entry from the log
+        cache.set('event:1', 'maybe stale', 60, version);
+        expect(cache.get('event:1')).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('不帶 readVersion 的 set（例如瀏覽數去重）不受影響', () => {
       cache.clearPattern('anything');
       cache.set('view_dedup:ip:1', true, 60);
