@@ -1592,13 +1592,13 @@ components:
           description: 前後空白會 trim；只有整列空白時才可以是空的
         walkMinutes:
           oneOf:
-            - { type: integer, minimum: 0, maximum: 999 }
+            - { type: integer, minimum: 0, maximum: 999, nullable: true }
             - { type: string, enum: [''] }
-          nullable: true
           description: 0–999 的整數；沒帶、'' 或 null 存成 null
 
     TransitStopsInput:
       type: array
+      nullable: true
       maxItems: 5
       description: >-
         交通方式，存放順序＝送的順序。整列空白（沒有 type、station 空白、沒有 walkMinutes）先丟掉才算列數；
