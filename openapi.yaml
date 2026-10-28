@@ -138,13 +138,30 @@ paths:
     get:
       tags: [events]
       summary: 搜尋活動
+      description: >-
+        只回傳已審核且尚未結束的活動，依開始時間升冪排序。三個條件皆為選填、可同時使用；
+        同一個參數帶兩次時取第一個。結果不另外快取，每次以當下時間排除已結束的活動。
       parameters:
         - in: query
-          name: q
+          name: query
+          description: 比對活動標題與描述（不分大小寫、部分符合）
+          schema: { type: string }
+        - in: query
+          name: artistName
+          description: 比對活動藝人名稱（不分大小寫、部分符合）
+          schema: { type: string }
+        - in: query
+          name: location
+          description: 比對活動地址（不分大小寫、部分符合）
           schema: { type: string }
       responses:
         '200':
           description: 搜尋結果
+        '400':
+          description: 參數不是字串（例如 query[a]=1 這類巢狀參數）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
 
   /events/trending:
     get:

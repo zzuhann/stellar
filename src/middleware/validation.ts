@@ -545,7 +545,18 @@ const reservationSchema = z
     path: ['url'],
   });
 
+// Repeated query params (?query=a&query=b) arrive as arrays; keep the first one.
+const firstQueryString = z.preprocess(
+  value => (Array.isArray(value) ? value[0] : value),
+  z.string().optional()
+);
+
 export const eventSchemas = {
+  search: z.object({
+    query: firstQueryString,
+    artistName: firstQueryString,
+    location: firstQueryString,
+  }),
   create: z.object({
     title: z.string().min(1, '標題為必填欄位').max(200, '標題不能超過200個字').trim(),
     description: z.string().max(2000, '描述不能超過 2000 個字').trim().optional(),

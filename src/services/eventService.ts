@@ -1199,14 +1199,7 @@ export class EventService {
   }): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `events:search:${JSON.stringify(criteria)}`;
-    const cacheVersion = cache.version();
-    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
-    // Shared base: approved, not ended as of now, corrupted datetimes dropped, email stripped.
+    // No result cache: filtering the in-memory base is cheap and never serves ended events.
     let events = await this.getApprovedActiveEventsBase();
 
     // 客戶端過濾
@@ -1232,13 +1225,8 @@ export class EventService {
       );
     }
 
-    // The base returns a fresh array, so sorting leaves the shared cached array untouched.
-    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
-
-    // 設定 4 小時快取
-    cache.set(cacheKey, result, 240, cacheVersion);
-
-    return result;
+    // Copy before sorting so the shared cached array keeps its order.
+    return [...events].sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
   }
 
   /** 與前端「我的投稿」一致：rejected 置頂，其餘依建立時間新到舊 */
@@ -1334,16 +1322,17 @@ export class EventService {
     this.checkFirebaseConfig();
     const clampedLimit = Math.min(limit, 20);
 
-    return cache.getWithLock(
+    // Cache the full ranking and filter on read, so an event ending mid-TTL is replaced, not lost.
+    const ranked = await cache.getWithLock(
       `events:trending:${clampedLimit}`,
       async () => {
         const activeEvents = await this.getApprovedActiveEventsBase();
-        return [...activeEvents]
-          .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
-          .slice(0, clampedLimit);
+        return [...activeEvents].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
       },
       360 // 6 小時 TTL
     );
+    const now = Date.now();
+    return ranked.filter(event => event.datetime.end.toMillis() >= now).slice(0, clampedLimit);
   }
 
   // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
