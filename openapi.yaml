@@ -811,7 +811,28 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200': { description: Place detail }
+        '200':
+          description: Place detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  geometry:
+                    type: object
+                    properties:
+                      location:
+                        type: object
+                        properties:
+                          lat: { type: number }
+                          lng: { type: number }
+                  formatted_address: { type: string }
+                  name: { type: string }
+                  city: { type: string }
+                  types:
+                    type: array
+                    items: { type: string }
+                    description: Google place types；Google 沒回時為 []。含 establishment 代表選到店家而不是地址
         '429':
           description: 每 IP 每 15 分鐘最多 300 次
           content:
@@ -1427,6 +1448,12 @@ components:
             equipmentNote: { type: string, description: 店家提供的設備原文，空字串代表沒有 }
             infoUpdatedOn: { type: string, format: date, nullable: true }
             bookingFormUrl: { type: string, format: uri, nullable: true, description: 預約表單網址；沒有時為 null，key 一定存在 }
+            transitStops:
+              type: array
+              nullable: true
+              maxItems: 5
+              items: { $ref: '#/components/schemas/TransitStop' }
+              description: 交通方式，照存的順序。null＝舊場地從沒用過這個欄位（請退回讀 nearestMrt、mrtWalkMinutes）；[]＝管理員清空過。公開列表不回傳
             events:
               type: array
               items:
@@ -1446,12 +1473,112 @@ components:
                     description: 依台灣時間的今天計算；沒有開始或結束日時為 null
 
     AdminVenueDetail:
-      description: VenueDetail 加上 calendarUrl；tags 為原始資料，含過期與停用的標籤
+      description: VenueDetail 加上 calendarUrl 與 submission；tags 為原始資料，含過期與停用的標籤
       allOf:
         - $ref: '#/components/schemas/VenueDetail'
         - type: object
           properties:
             calendarUrl: { type: string, format: uri, nullable: true }
+            submission:
+              $ref: '#/components/schemas/VenueSubmissionRecord'
+
+    VenueSubmissionRecord:
+      type: object
+      description: 店家投稿時的問卷與建議（只有 admin 詳情回傳；舊場地、後台新增的場地沒有這個 key）。confirmedAt 為 null＝還沒確認
+      required: [submittedAt, answers, suggestedTags, confirmedAt]
+      properties:
+        submittedAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
+        answers: { $ref: '#/components/schemas/VenueConditionAnswers' }
+        suggestedTags:
+          type: array
+          description: 投稿當下算出的建議快照，之後改交通欄位不會跟著變
+          items:
+            allOf:
+              - $ref: '#/components/schemas/VenueTag'
+              - type: object
+                required: [source]
+                properties:
+                  source: { type: string, enum: [store, auto], description: store＝店家勾的；auto＝自動帶入（可佈置、近捷運、近火車站） }
+        confirmedAt:
+          allOf:
+            - $ref: '#/components/schemas/FirestoreTimestamp'
+          nullable: true
+
+    VenueConditionAnswers:
+      type: object
+      description: >-
+        店家問卷（A–E、補充、F、G）。A 沒勾 can_decorate 時 fees 會被丟掉、不回 400；
+        A、C 至少一個選項或 discussable: true；A 勾 can_decorate 時 B 至少答一題或 discussable: true；
+        D 至少一個選項（discussable 會被丟掉）。選項重複不報錯。舊的 other、otherEquipment 會被丟掉
+      required: [uses, services, spaceTypes]
+      properties:
+        uses:
+          type: object
+          properties:
+            options:
+              type: array
+              items: { type: string, enum: [goods_distribution, can_decorate, private_booking] }
+            discussable: { type: boolean }
+        fees:
+          type: object
+          description: B 佈置、辦生咖的費用；只在 uses.options 含 can_decorate 時有意義
+          properties:
+            venueFee: { type: string, enum: [free, paid, depends] }
+            freeVenueLimited: { type: boolean, description: venueFee 不是 free 時被丟掉 }
+            freeVenueUntil:
+              type: string
+              format: date
+              description: venueFee 不是 free 時被丟掉；有日期就視為限期（存成 freeVenueLimited true）；不能早於台灣時間的今天
+            guarantee: { type: string, enum: ['yes', 'no'] }
+            deposit: { type: string, enum: ['yes', 'no'] }
+            discussable: { type: boolean }
+        services:
+          type: object
+          properties:
+            options:
+              type: array
+              items: { type: string, enum: [parcel_receiving, early_setup, custom_menu, beginner_friendly] }
+            discussable: { type: boolean }
+        spaceTypes:
+          type: object
+          required: [options]
+          properties:
+            options:
+              type: array
+              minItems: 1
+              items: { type: string, enum: [cafe, exhibition_space, bar, multi_space, takeaway_shop] }
+        equipment:
+          type: array
+          items: { type: string, enum: [projector, sound_system, display_fixtures] }
+        note: { type: string, maxLength: 1000, description: 「還有什麼想讓主辦知道的？」；trim 後空白視為沒填（不存這個 key）；不變成標籤 }
+        sourceLinks:
+          type: array
+          description: F 原始說明連結，規則同 VenueTagFields.sourceLinks；只存在 submission，等管理員確認
+          items: { type: string, maxLength: 500 }
+        calendarUrl:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: G 檔期行事曆連結（http/https）；投稿時直接寫進正式欄位 calendarUrl（不公開、不需確認）
+
+    TransitStop:
+      type: object
+      required: [type, station, walkMinutes]
+      properties:
+        type: { type: string, enum: [mrt, light_rail, train, hsr, bus], description: 捷運／輕軌／火車站／高鐵／公車站 }
+        station: { type: string, minLength: 1, maxLength: 100, description: 前後空白會 trim }
+        walkMinutes: { type: integer, minimum: 0, maximum: 999, nullable: true, description: 寫入時沒帶存成 null }
+
+    TransitStopsInput:
+      type: array
+      maxItems: 5
+      description: >-
+        交通方式，存放順序＝送的順序。整列空白（沒有 type、station 空白、沒有 walkMinutes）先丟掉才算列數；
+        只有類型或只有站名回 400。有帶就整個覆蓋，並在同一次寫入回寫 nearestMrt、mrtWalkMinutes
+        （類型優先序 mrt → light_rail → train → hsr → bus，同類型取陣列最前面那筆；非捷運的站名前加
+        輕軌／火車／高鐵／公車，站名已含類型字就不加），body 裡的 nearestMrt、mrtWalkMinutes 會被忽略。
+        丟掉空白列後是 [] 時兩個舊欄位清成 '' 與 null
+      items: { $ref: '#/components/schemas/TransitStop' }
 
     VenueTag:
       type: object
@@ -1532,6 +1659,14 @@ components:
             preferredContact: { type: string, enum: [instagram, threads, line, form, other], description: 新前端只送 instagram／threads／line；form、other 為舊資料相容 }
             contactUrl: { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
             bookingFormUrl: { type: string, format: uri, maxLength: 500, nullable: true, description: 預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內。清空送 null（後端也把空字串當清空） }
+            transitStops:
+              allOf:
+                - $ref: '#/components/schemas/TransitStopsInput'
+              nullable: true
+              description: 沒帶不動；[] 或 null＝清空，兩種都存成 []
+            confirmSuggestions:
+              type: boolean
+              description: true＝這次存檔同時確認店家建議（場地有 submission 且 confirmedAt 為 null 時寫入 submission.confirmedAt，其他情況忽略、不回錯誤）。不會存成欄位
             coverPhoto: { type: string, format: uri }
             otherPhotos: { type: array, items: { type: string, format: uri } }
             socialMedia:
@@ -1543,7 +1678,7 @@ components:
         - $ref: '#/components/schemas/VenueTagFields'
 
     CreateVenueData:
-      description: admin 新增；可直接寫入正式標籤欄位
+      description: admin 新增；可直接寫入正式標籤欄位。venueConditions 只在 /venue-submissions 有效，admin 新增帶了會被丟掉
       allOf:
         - $ref: '#/components/schemas/CreateVenueSubmissionData'
         - $ref: '#/components/schemas/VenueTagFields'
@@ -1566,6 +1701,10 @@ components:
         preferredContact: { type: string, enum: [instagram, threads, line, form, other], description: 新前端只送 instagram／threads／line；form、other 為舊資料相容 }
         contactUrl: { type: string, format: uri, description: LINE 連結（舊資料可能是表單網址） }
         bookingFormUrl: { type: string, format: uri, maxLength: 500, nullable: true, description: 預約表單網址（私訊按鈕下的次要連結）；http/https、500 字內。清空送 null（後端也把空字串當清空） }
+        transitStops:
+          allOf:
+            - $ref: '#/components/schemas/TransitStopsInput'
+          description: 選填；直接寫正式欄位（不進 submission）。沒帶時不寫這個 key，nearestMrt、mrtWalkMinutes 照送的值存
         coverPhoto: { type: string, format: uri }
         otherPhotos: { type: array, maxItems: 9, items: { type: string, format: uri } }
         socialMedia:
@@ -1578,6 +1717,10 @@ components:
             threads: { type: string, minLength: 1 }
             instagram: { type: string, minLength: 1 }
             line: { type: string }
+        venueConditions:
+          allOf:
+            - $ref: '#/components/schemas/VenueConditionAnswers'
+          description: 選填（舊表單不送）。只在 /venue-submissions 有效：存成 submission（confirmedAt null）等管理員確認，正式 tags、sourceLinks、equipmentNote 一律留空；calendarUrl 直接寫正式欄位。回應不含 submission
 
     Artist:
       type: object
