@@ -13,7 +13,9 @@ router.get('/map-data', optionalAuthenticate, (req, res) => eventController.getM
 router.get('/search', validateRequest({ query: eventSchemas.search }), (req, res) =>
   eventController.searchEvents(req, res)
 );
-router.get('/trending', (req, res) => eventController.getTrendingEvents(req, res));
+router.get('/trending', validateRequest({ query: eventSchemas.trending }), (req, res) =>
+  eventController.getTrendingEvents(req, res)
+);
 
 // 需要登入的路由 (必須在 /:id 之前)
 // Deprecated: 改用 GET /users/me/submissions/events 與 /users/me/submissions/artists

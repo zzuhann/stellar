@@ -552,6 +552,14 @@ const firstQueryString = z.preprocess(
 );
 
 export const eventSchemas = {
+  // Non-numeric (e.g. "2abc") becomes undefined so the service falls back to 10; it clamps the range.
+  trending: z.object({
+    limit: z.preprocess(value => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    }, z.number().optional()),
+  }),
   search: z.object({
     query: firstQueryString,
     artistName: firstQueryString,

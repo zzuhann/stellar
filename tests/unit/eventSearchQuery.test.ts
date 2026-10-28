@@ -1,8 +1,9 @@
 import express from 'express';
 import request from 'supertest';
 import eventRoutes from '../../src/routes/eventRoutes';
+import { EventService } from '../../src/services/eventService';
 
-// GET /events/search must not 500 on malformed query strings.
+// /events/search and /events/trending must not 500 or misread malformed query strings.
 
 jest.mock('../../src/config/firebase', () => ({
   hasFirebaseConfig: true,
@@ -34,4 +35,22 @@ describe('GET /api/events/search 查詢參數', () => {
       expect(response.body).toEqual([]);
     }
   );
+});
+
+describe('GET /api/events/trending 的 limit 參數', () => {
+  it.each([
+    ['2abc（不是完整數字）', '?limit=2abc', 10],
+    ['沒帶', '', 10],
+    ['空字串', '?limit=', 10],
+    ['正常數字', '?limit=5', 5],
+    ['重複帶兩次', '?limit=3&limit=7', 3],
+  ])('limit %s（%s）→ service 收到 %i', async (_label, qs, expected) => {
+    const spy = jest.spyOn(EventService.prototype, 'getTrendingEvents');
+
+    const response = await request(buildApp()).get(`/api/events/trending${qs}`);
+
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledWith(expected);
+    spy.mockRestore();
+  });
 });

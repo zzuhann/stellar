@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { eventSchemas } from '../middleware/validation';
 
 type SearchEventsQuery = z.infer<typeof eventSchemas.search>;
+type TrendingEventsQuery = z.infer<typeof eventSchemas.trending>;
 
 export class EventController {
   private eventService: EventService;
@@ -217,10 +218,10 @@ export class EventController {
     }
   };
 
-  // 取得熱門活動排行
+  // 取得熱門活動排行；req.validatedQuery is set by validateRequest({ query: eventSchemas.trending })
   getTrendingEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 20) : 10;
-    const events = await this.eventService.getTrendingEvents(limit);
+    const { limit } = (req.validatedQuery as TrendingEventsQuery | undefined) ?? {};
+    const events = await this.eventService.getTrendingEvents(limit ?? 10);
     res.json({ events, total: events.length });
   };
 
