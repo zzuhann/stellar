@@ -641,3 +641,307 @@ describe('venue tag URL fields: trim and messages', () => {
     if (!result.success) expect(result.error.issues[0].message).toBe('行事曆連結格式不正確');
   });
 });
+
+describe('createSubmission 的 venueConditions（第 2 階段，design-backend §3.2）', () => {
+  const venueBase = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40',
+    coverPhoto: 'https://example.com/cover.jpg',
+    preferredContact: 'instagram',
+    socialMedia: { instagram: 'venue' },
+  } as const;
+
+  // 最小合法問卷：A 勾代發（不必答 B）、C 勾代收、D 勾咖啡廳
+  const minimal = {
+    uses: { options: ['goods_distribution'] },
+    services: { options: ['parcel_receiving'] },
+    spaceTypes: { options: ['cafe'] },
+  };
+  const decorate = (fees?: unknown) => ({
+    ...minimal,
+    uses: { options: ['can_decorate'] },
+    ...(fees !== undefined ? { fees } : {}),
+  });
+
+  const parse = (venueConditions: unknown) =>
+    venueSchemas.createSubmission.safeParse({ ...venueBase, venueConditions });
+  const parsedConditions = (venueConditions: unknown) => {
+    const result = parse(venueConditions);
+    expect(result.success).toBe(true);
+    return result.success ? (result.data.venueConditions as Record<string, unknown>) : {};
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-10-20T04:00:00Z')); // 台北 10/20
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('venueConditions 整個是選填（舊表單不送）', () => {
+    const result = venueSchemas.createSubmission.safeParse(venueBase);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty('venueConditions');
+  });
+
+  describe('TC-070 通過', () => {
+    it.each([
+      ['A 只有 discussable', { ...minimal, uses: { options: [], discussable: true } }],
+      ['C 只有 discussable', { ...minimal, services: { discussable: true } }],
+      ['E 帶 []', { ...minimal, equipment: [] }],
+      [
+        '選項重複不報錯',
+        {
+          ...minimal,
+          uses: { options: ['goods_distribution', 'goods_distribution'] },
+          equipment: ['projector', 'projector'],
+        },
+      ],
+      ['A 勾 can_decorate、B 只答一題', decorate({ deposit: 'no' })],
+      ['A 勾 can_decorate、B 只勾 discussable', decorate({ discussable: true })],
+    ])('%s', (_name, venueConditions) => {
+      expect(parse(venueConditions).success).toBe(true);
+    });
+  });
+
+  describe('TC-070 400', () => {
+    it.each([
+      ['A 沒有 options 也沒有 discussable', { ...minimal, uses: { options: [] } }],
+      ['A 只帶舊的 other', { ...minimal, uses: { other: '拍貼機' } }],
+      ['C 只帶舊的 other', { ...minimal, services: { other: '代訂花' } }],
+      ['A 勾 can_decorate 但沒帶 fees', decorate()],
+      ['A 勾 can_decorate 但 fees 什麼都沒答', decorate({})],
+      ['venueFee 不在 enum', decorate({ venueFee: 'maybe' })],
+      ['guarantee 不在 enum', decorate({ guarantee: 'sometimes' })],
+      ['deposit 不在 enum', decorate({ deposit: true })],
+      ['note trim 後超過 1000 字', { ...minimal, note: ` ${'a'.repeat(1001)} ` }],
+      ['沒帶 spaceTypes', { uses: minimal.uses, services: minimal.services }],
+      ['spaceTypes.options 空', { ...minimal, spaceTypes: { options: [] } }],
+      ['沒帶 services', { uses: minimal.uses, spaceTypes: minimal.spaceTypes }],
+      ['uses.options 不在 enum', { ...minimal, uses: { options: ['unknown'] } }],
+      ['services.options 不在 enum', { ...minimal, services: { options: ['unknown'] } }],
+      ['spaceTypes.options 不在 enum', { ...minimal, spaceTypes: { options: ['unknown'] } }],
+      ['equipment 不在 enum', { ...minimal, equipment: ['unknown'] }],
+    ])('%s', (_name, venueConditions) => {
+      expect(parse(venueConditions).success).toBe(false);
+    });
+  });
+
+  it('TC-070 note 只有空白 → 存下來的答案沒有 note 這個 key；有字時 trim 後保留', () => {
+    expect(parsedConditions({ ...minimal, note: '   ' })).not.toHaveProperty('note');
+    expect(parsedConditions({ ...minimal, note: '  可租扭蛋機  ' }).note).toBe('可租扭蛋機');
+  });
+
+  it('TC-070 舊的 other、otherEquipment 帶了也不存', () => {
+    const answers = parsedConditions({
+      ...minimal,
+      uses: { options: ['goods_distribution'], other: '拍貼機' },
+      services: { options: ['parcel_receiving'], other: '代訂花' },
+      otherEquipment: '扭蛋機',
+    });
+    expect(answers).not.toHaveProperty('otherEquipment');
+    expect(answers.uses).not.toHaveProperty('other');
+    expect(answers.services).not.toHaveProperty('other');
+  });
+
+  it.each([
+    ['合法值', { venueFee: 'free', deposit: 'yes' }],
+    ['enum 外的值', { venueFee: 'maybe', guarantee: 'x' }],
+    ['freeVenueUntil 是過去日期', { venueFee: 'free', freeVenueUntil: '2020-01-01' }],
+  ])('TC-070 A 沒勾 can_decorate 時帶 fees（%s）：不回 400，而且不存', (_name, fees) => {
+    expect(parsedConditions({ ...minimal, fees })).not.toHaveProperty('fees');
+  });
+
+  it('TC-070 D 帶 discussable 被丟掉', () => {
+    const answers = parsedConditions({
+      ...minimal,
+      spaceTypes: { options: ['cafe'], discussable: true },
+    });
+    expect(answers.spaceTypes).toEqual({ options: ['cafe'] });
+  });
+
+  it.each(['paid', 'depends'])(
+    'TC-070 venueFee: %s 時帶 freeVenueLimited、freeVenueUntil 被丟掉（不合法的日期也不擋）',
+    venueFee => {
+      for (const freeVenueUntil of ['2026-12-31', '2020-01-01', 'not-a-date']) {
+        const answers = parsedConditions(
+          decorate({ venueFee, freeVenueLimited: true, freeVenueUntil })
+        );
+        expect(answers.fees).toEqual({ venueFee });
+      }
+    }
+  );
+
+  it.each([
+    ['沒帶', {}],
+    ['是 false', { freeVenueLimited: false }],
+  ])(
+    'TC-070 venueFee: free、有 freeVenueUntil、freeVenueLimited %s → 存成限期並保留日期',
+    (_name, limited) => {
+      const answers = parsedConditions(
+        decorate({ venueFee: 'free', freeVenueUntil: '2026-12-31', ...limited })
+      );
+      expect(answers.fees).toEqual({
+        venueFee: 'free',
+        freeVenueLimited: true,
+        freeVenueUntil: '2026-12-31',
+      });
+    }
+  );
+
+  it.each(['2026-02-31', '2026/12/31'])('venueFee: free 的 freeVenueUntil 格式錯：%s → 400', d => {
+    expect(parse(decorate({ venueFee: 'free', freeVenueUntil: d })).success).toBe(false);
+  });
+
+  it('F、G 照 §2.2 規則：sourceLinks 過濾空字串、calendarUrl 必須 http/https', () => {
+    const answers = parsedConditions({
+      ...minimal,
+      sourceLinks: ['', 'https://a.com'],
+      calendarUrl: 'https://calendar.example.com',
+    });
+    expect(answers.sourceLinks).toEqual(['https://a.com']);
+    expect(answers.calendarUrl).toBe('https://calendar.example.com');
+    expect(parse({ ...minimal, calendarUrl: 'javascript:alert(1)' }).success).toBe(false);
+    expect(parse({ ...minimal, sourceLinks: Array(6).fill('https://a.com') }).success).toBe(false);
+  });
+
+  it('admin create 不收 venueConditions（後台沒有問卷）', () => {
+    const result = venueSchemas.create.safeParse({ ...venueBase, venueConditions: minimal });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty('venueConditions');
+  });
+
+  it.each([[''], ['   '], [null]])(
+    'venueFee: free 的 freeVenueUntil %p 視為沒填：通過、不存日期、不變成限期（review #3）',
+    freeVenueUntil => {
+      const answers = parsedConditions(decorate({ venueFee: 'free', freeVenueUntil }));
+      expect(answers.fees).toEqual({ venueFee: 'free' });
+    }
+  );
+
+  it('fees: null 視為沒答：勾了 can_decorate 時回必答訊息（review #7）', () => {
+    const result = parse(decorate(null));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('請回答佈置、辦生咖的費用');
+      expect(result.error.issues[0].path).toEqual(['venueConditions', 'fees']);
+    }
+    // 沒勾 can_decorate 時 null 一樣被丟掉
+    expect(parsedConditions({ ...minimal, fees: null })).not.toHaveProperty('fees');
+  });
+
+  it('equipment: null 視為沒選：通過、不存 equipment（review #7）', () => {
+    expect(parsedConditions({ ...minimal, equipment: null })).not.toHaveProperty('equipment');
+  });
+
+  describe('TC-071 freeVenueUntil 用台灣今天比較', () => {
+    it('台北 10/15 00:30：2026-10-15 通過、2026-10-14 → 400', () => {
+      jest.setSystemTime(new Date('2026-10-14T16:30:00Z'));
+      expect(parse(decorate({ venueFee: 'free', freeVenueUntil: '2026-10-15' })).success).toBe(
+        true
+      );
+      expect(parse(decorate({ venueFee: 'free', freeVenueUntil: '2026-10-14' })).success).toBe(
+        false
+      );
+    });
+  });
+});
+
+describe('update 的 confirmSuggestions', () => {
+  it('接受 boolean、非 boolean → 400', () => {
+    const ok = venueSchemas.update.safeParse({ confirmSuggestions: true });
+    expect(ok.success && ok.data.confirmSuggestions).toBe(true);
+    expect(venueSchemas.update.safeParse({ confirmSuggestions: 'yes' }).success).toBe(false);
+  });
+});
+
+describe('TC-134 transitStops schema（第 2 階段，design-backend §10.2）', () => {
+  const venueBase = {
+    name: '測試場地',
+    address: '台北市測試路 1 號',
+    region: '台北',
+    capacityRange: '20-40',
+    coverPhoto: 'https://example.com/cover.jpg',
+    preferredContact: 'instagram',
+    socialMedia: { instagram: 'venue' },
+  } as const;
+  const stop = (overrides = {}) => ({ type: 'mrt', station: '中山', walkMinutes: 5, ...overrides });
+  const parse = (schema: 'create' | 'createSubmission' | 'update', transitStops: unknown) =>
+    venueSchemas[schema].safeParse(
+      schema === 'update' ? { transitStops } : { ...venueBase, transitStops }
+    );
+
+  describe.each(['create', 'createSubmission', 'update'] as const)('%s', schema => {
+    const parsedStops = (transitStops: unknown) => {
+      const result = parse(schema, transitStops);
+      expect(result.success).toBe(true);
+      return result.success ? result.data.transitStops : undefined;
+    };
+
+    it('合法的 transitStops 保留這個 key、值相同、照送的順序', () => {
+      const stops = [stop({ type: 'bus', station: '復興新和街口', walkMinutes: 3 }), stop()];
+      expect(parsedStops(stops)).toEqual(stops);
+    });
+
+    it('整列空白被丟掉、不算列數；station 前後空白 trim；walkMinutes 沒帶存 null', () => {
+      const blank = [{}, { type: '', station: '   ' }, { station: '', walkMinutes: null }];
+      expect(parsedStops([...blank, stop({ station: ' 中山 ', walkMinutes: undefined })])).toEqual([
+        { type: 'mrt', station: '中山', walkMinutes: null },
+      ]);
+      expect(parsedStops([...blank, ...Array(5).fill(stop())])).toHaveLength(5);
+    });
+
+    it('丟掉空白列後超過 5 列 → 400', () => {
+      expect(parse(schema, Array(6).fill(stop())).success).toBe(false);
+    });
+
+    it('丟掉空白列後是 [] → 清空', () => {
+      expect(parsedStops([{ station: ' ' }])).toEqual([]);
+      expect(parsedStops([])).toEqual([]);
+    });
+
+    it.each([
+      ['只有類型', { type: 'mrt' }],
+      ['只有站名', { station: '中山' }],
+      ['只有步行分鐘', { walkMinutes: 3 }],
+      ['類型不在 enum', stop({ type: 'ferry' })],
+      ['站名超過 100 字', stop({ station: 'a'.repeat(101) })],
+      ['walkMinutes 1000', stop({ walkMinutes: 1000 })],
+      ['walkMinutes 1.5', stop({ walkMinutes: 1.5 })],
+      ['walkMinutes -1', stop({ walkMinutes: -1 })],
+      ['walkMinutes 字串', stop({ walkMinutes: '5' })],
+    ])('400：%s', (_name, row) => {
+      expect(parse(schema, [row]).success).toBe(false);
+    });
+
+    it("walkMinutes: '' 視為沒填 → null（review #2）", () => {
+      expect(parsedStops([stop({ walkMinutes: '' })])).toEqual([stop({ walkMinutes: null })]);
+    });
+
+    it('transitStops: null 通過（create／createSubmission 視為沒帶，update 視為清空）', () => {
+      expect(parsedStops(null)).toEqual(schema === 'update' ? [] : undefined);
+    });
+
+    it.each([0, 121, 999, null])('walkMinutes %p 通過', walkMinutes => {
+      expect(parsedStops([stop({ walkMinutes })])).toEqual([stop({ walkMinutes })]);
+    });
+  });
+
+  it('update 帶 null → 清空（[]）', () => {
+    const result = venueSchemas.update.safeParse({ transitStops: null });
+    expect(result.success && result.data.transitStops).toEqual([]);
+  });
+
+  it('沒帶 transitStops → 輸出沒有這個 key（不動舊欄位）', () => {
+    const update = venueSchemas.update.safeParse({ name: 'x' });
+    expect(update.success).toBe(true);
+    expect(update.data).not.toHaveProperty('transitStops');
+    const submission = venueSchemas.createSubmission.safeParse(venueBase);
+    expect(submission.success).toBe(true);
+    expect(submission.data).not.toHaveProperty('transitStops');
+  });
+});

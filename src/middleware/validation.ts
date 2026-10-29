@@ -3,6 +3,7 @@ import { z, ZodSchema, ZodError } from 'zod';
 import { isValidCalendarDate } from '../utils/calendarDate';
 import { normalizeSocialHandles } from '../utils/socialHandle';
 import { isActiveTagSlug } from '../services/venueTags';
+import { getTaipeiDateString } from '../utils/taipeiDate';
 
 // 錯誤碼定義
 export const ERROR_CODES = {
@@ -266,6 +267,180 @@ const venueTagFieldSchemas = {
   calendarUrl: clearableHttpUrlSchema('行事曆連結格式不正確'),
 };
 
+// Transit stops (design-backend.md §10.2); fully blank rows are dropped before counting
+const isBlankTransitRow = (row: unknown): boolean =>
+  typeof row === 'object' &&
+  row !== null &&
+  !Array.isArray(row) &&
+  ['type', 'station', 'walkMinutes'].every(key => {
+    const value = (row as Record<string, unknown>)[key];
+    return value === undefined || value === null || (typeof value === 'string' && !value.trim());
+  });
+
+const transitStopsSchema = z.preprocess(
+  val => (Array.isArray(val) ? val.filter(row => !isBlankTransitRow(row)) : val),
+  z
+    .array(
+      z.object(
+        {
+          type: z.enum(['mrt', 'light_rail', 'train', 'hsr', 'bus'], { error: '請選交通類型' }),
+          station: z
+            .string({ error: '請填站名' })
+            .trim()
+            .min(1, '請填站名')
+            .max(100, '站名不能超過 100 個字'),
+          // An emptied number input arrives as ''; same as not filled
+          walkMinutes: z
+            .preprocess(
+              v => (v === '' ? null : v),
+              z
+                .number({ error: '步行分鐘數必須是數字' })
+                .int('步行分鐘數必須是 0–999 的整數')
+                .min(0, '步行分鐘數必須是 0–999 的整數')
+                .max(999, '步行分鐘數必須是 0–999 的整數')
+                .nullable()
+                .optional()
+            )
+            .transform(v => v ?? null),
+        },
+        { error: '交通方式格式不正確' }
+      ),
+      { error: '交通方式格式不正確' }
+    )
+    .max(5, '最多只能新增 5 個交通方式')
+);
+
+// Store questionnaire (design-backend.md §3.2); option values are dictionary slugs
+const isPlainObject = (val: unknown): val is Record<string, unknown> =>
+  typeof val === 'object' && val !== null && !Array.isArray(val);
+
+const withoutUndefined = <T extends Record<string, unknown>>(obj: T): T =>
+  Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+
+const choiceQuestionSchema = <T extends readonly [string, ...string[]]>(
+  options: T,
+  requiredMessage: string
+) =>
+  z
+    .object(
+      {
+        options: z
+          .array(z.enum(options, { error: '選項不正確' }), { error: '選項不正確' })
+          .default([]),
+        discussable: z.boolean({ error: '「想先聊聊」格式不正確' }).optional(),
+      },
+      { error: requiredMessage }
+    )
+    .refine(q => q.options.length > 0 || q.discussable === true, { message: requiredMessage })
+    .transform(withoutUndefined);
+
+const venueFeesSchema = z
+  .preprocess(
+    // Limit fields only mean something for a free venue; drop them otherwise, even if invalid.
+    // An empty/null date is "no date", not an invalid one.
+    raw => {
+      if (!isPlainObject(raw)) return raw;
+      const blankUntil =
+        raw.freeVenueUntil === null ||
+        (typeof raw.freeVenueUntil === 'string' && !raw.freeVenueUntil.trim());
+      if (raw.venueFee !== 'free') {
+        return { ...raw, freeVenueLimited: undefined, freeVenueUntil: undefined };
+      }
+      return blankUntil ? { ...raw, freeVenueUntil: undefined } : raw;
+    },
+    z.object(
+      {
+        venueFee: z.enum(['free', 'paid', 'depends'], { error: '場地費選項不正確' }).optional(),
+        freeVenueLimited: z.boolean({ error: '限期格式不正確' }).optional(),
+        freeVenueUntil: z
+          .string({ error: '限期日期格式不正確' })
+          .refine(isValidCalendarDate, '限期日期格式不正確或日期不存在')
+          // Unlike admin writes, a store cannot submit an offer that already ended
+          .refine(d => d >= getTaipeiDateString(new Date()), '限期日期不能早於今天')
+          .optional(),
+        guarantee: z.enum(['yes', 'no'], { error: '保底選項不正確' }).optional(),
+        deposit: z.enum(['yes', 'no'], { error: '押金選項不正確' }).optional(),
+        discussable: z.boolean({ error: '「想先聊聊」格式不正確' }).optional(),
+      },
+      { error: '費用格式不正確' }
+    )
+  )
+  .transform(fees =>
+    withoutUndefined({
+      ...fees,
+      // A date implies a limited offer
+      freeVenueLimited: fees.freeVenueUntil ? true : fees.freeVenueLimited,
+    })
+  );
+
+const venueConditionsSchema = z
+  .preprocess(
+    // B only applies when A includes can_decorate; otherwise drop it without validating.
+    // null fees/equipment mean "not answered", so fees still hits the required rule below.
+    raw => {
+      if (!isPlainObject(raw)) return raw;
+      const decorates =
+        isPlainObject(raw.uses) &&
+        Array.isArray(raw.uses.options) &&
+        raw.uses.options.includes('can_decorate');
+      return {
+        ...raw,
+        fees: decorates && raw.fees !== null ? raw.fees : undefined,
+        equipment: raw.equipment === null ? undefined : raw.equipment,
+      };
+    },
+    z.object(
+      {
+        uses: choiceQuestionSchema(
+          ['goods_distribution', 'can_decorate', 'private_booking'],
+          '請選擇主辦可以在這裡做什麼'
+        ),
+        fees: venueFeesSchema.optional(),
+        services: choiceQuestionSchema(
+          ['parcel_receiving', 'early_setup', 'custom_menu', 'beginner_friendly'],
+          '請選擇可以提供的服務'
+        ),
+        spaceTypes: z.object(
+          {
+            options: z
+              .array(
+                z.enum(['cafe', 'exhibition_space', 'bar', 'multi_space', 'takeaway_shop'], {
+                  error: '空間類型選項不正確',
+                }),
+                { error: '請選擇空間類型' }
+              )
+              .min(1, '請選擇空間類型'),
+          },
+          { error: '請選擇空間類型' }
+        ),
+        equipment: z
+          .array(
+            z.enum(['projector', 'sound_system', 'display_fixtures'], { error: '設備選項不正確' }),
+            { error: '設備格式不正確' }
+          )
+          .optional(),
+        note: z.preprocess(
+          val => (typeof val === 'string' ? val.trim() || undefined : val),
+          z
+            .string({ error: '補充說明格式不正確' })
+            .max(1000, '補充說明不能超過 1000 個字')
+            .optional()
+        ),
+        sourceLinks: venueTagFieldSchemas.sourceLinks,
+        calendarUrl: venueTagFieldSchemas.calendarUrl,
+      },
+      { error: '場地條件格式不正確' }
+    )
+  )
+  .superRefine((answers, ctx) => {
+    if (!answers.uses.options.includes('can_decorate')) return;
+    const fees = answers.fees;
+    if (!fees || !(fees.venueFee || fees.guarantee || fees.deposit || fees.discussable === true)) {
+      ctx.addIssue({ code: 'custom', message: '請回答佈置、辦生咖的費用', path: ['fees'] });
+    }
+  })
+  .transform(withoutUndefined);
+
 const venueLimitQuerySchema = z
   .string()
   .regex(/^\d+$/, { error: 'limit must be a positive integer' })
@@ -354,6 +529,11 @@ const venueCreateSubmissionSchema = z.object({
   preferredContact: venuePreferredContactEnum,
   contactUrl: venueContactUrlSchema.optional(),
   bookingFormUrl: venueBookingFormUrlSchema,
+  // null = not sent (no key written), so all three schemas accept it
+  transitStops: transitStopsSchema
+    .nullable()
+    .optional()
+    .transform(v => v ?? undefined),
   coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確'),
   otherPhotos: z
     .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
@@ -369,6 +549,7 @@ const venueCreateSubmissionSchema = z.object({
     .refine(data => Boolean(data.instagram?.trim() || data.threads?.trim()), {
       message: '至少需要填寫 Instagram 或 Threads',
     }),
+  venueConditions: venueConditionsSchema.optional(),
 });
 
 export const venueSchemas = {
@@ -451,7 +632,8 @@ export const venueSchemas = {
       .max(50, '一次最多更新 50 筆'),
   }),
   createSubmission: venueCreateSubmissionSchema,
-  create: venueCreateSubmissionSchema.extend(venueTagFieldSchemas),
+  // Admin create has no questionnaire, so venueConditions is stripped like any unknown key
+  create: venueCreateSubmissionSchema.omit({ venueConditions: true }).extend(venueTagFieldSchemas),
   // Regex also keeps the id safe to embed in the Google Places URL path
   placeReselect: z.object({
     placeId: z.string().regex(/^[A-Za-z0-9_-]{10,300}$/, 'placeId 格式不正確'),
@@ -500,6 +682,11 @@ export const venueSchemas = {
     preferredContact: venuePreferredContactEnum.optional(),
     contactUrl: venueContactUrlSchema.optional(),
     bookingFormUrl: venueBookingFormUrlSchema,
+    // null clears like [] (null is reserved for legacy docs that never used the field)
+    transitStops: transitStopsSchema
+      .nullable()
+      .optional()
+      .transform(v => (v === null ? [] : v)),
     coverPhoto: z.string({ error: '請上傳封面照片' }).url('封面照片網址格式不正確').optional(),
     otherPhotos: z
       .array(z.string({ error: '照片網址格式不正確' }).url('照片網址格式不正確'), {
@@ -517,6 +704,8 @@ export const venueSchemas = {
       })
       .optional(),
     ...venueTagFieldSchemas,
+    // true = admin confirmed the store suggestions in this save (design-backend §7.4)
+    confirmSuggestions: z.boolean({ error: '確認標籤格式不正確' }).optional(),
   }),
 };
 

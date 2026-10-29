@@ -124,6 +124,52 @@ export interface VenueTagFields {
   calendarUrl: string | null; // admin only, never in public responses
 }
 
+export type TransitType = 'mrt' | 'light_rail' | 'train' | 'hsr' | 'bus';
+
+export interface TransitStop {
+  type: TransitType;
+  station: string;
+  walkMinutes: number | null; // integer 0–999
+}
+
+// Store questionnaire answers (design-backend.md §3.2); options are dictionary slugs
+export interface VenueConditionAnswers {
+  uses: {
+    options: Array<'goods_distribution' | 'can_decorate' | 'private_booking'>;
+    discussable?: boolean;
+  };
+  // Present only when uses.options includes can_decorate
+  fees?: {
+    venueFee?: 'free' | 'paid' | 'depends';
+    freeVenueLimited?: boolean;
+    freeVenueUntil?: string; // YYYY-MM-DD
+    guarantee?: 'yes' | 'no';
+    deposit?: 'yes' | 'no';
+    discussable?: boolean;
+  };
+  services: {
+    options: Array<'parcel_receiving' | 'early_setup' | 'custom_menu' | 'beginner_friendly'>;
+    discussable?: boolean;
+  };
+  spaceTypes: {
+    options: Array<'cafe' | 'exhibition_space' | 'bar' | 'multi_space' | 'takeaway_shop'>;
+  };
+  equipment?: Array<'projector' | 'sound_system' | 'display_fixtures'>;
+  note?: string;
+  sourceLinks?: string[];
+  calendarUrl?: string | null;
+}
+
+export type SuggestedVenueTag = VenueTag & { source: 'store' | 'auto' };
+
+// venues/{id}.submission — store suggestions, never read by public endpoints
+export interface VenueSubmissionRecord {
+  submittedAt: Timestamp;
+  answers: Omit<VenueConditionAnswers, 'calendarUrl'>; // calendarUrl is stored on the venue
+  suggestedTags: SuggestedVenueTag[];
+  confirmedAt: Timestamp | null;
+}
+
 // 場地卡片（列表頁回傳，不含 eventRefs）
 export interface Venue {
   id: string;
@@ -230,6 +276,7 @@ export interface VenueDetail {
   preferredContact?: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
   bookingFormUrl: string | null;
+  transitStops: TransitStop[] | null; // null = legacy doc that never used the field
   socialMedia?: {
     threads?: string;
     instagram?: string;
@@ -239,7 +286,10 @@ export interface VenueDetail {
   events: VenueEventCard[];
 }
 
-export type AdminVenueDetail = VenueDetail & { calendarUrl: string | null };
+export type AdminVenueDetail = VenueDetail & {
+  calendarUrl: string | null;
+  submission?: VenueSubmissionRecord;
+};
 
 export interface CreateVenueSubmissionData {
   name: string;
@@ -256,6 +306,7 @@ export interface CreateVenueSubmissionData {
   preferredContact: 'instagram' | 'threads' | 'line' | 'form' | 'other';
   contactUrl?: string;
   bookingFormUrl?: string | null;
+  transitStops?: TransitStop[];
   coverPhoto: string;
   otherPhotos?: string[];
   socialMedia: {
@@ -263,9 +314,11 @@ export interface CreateVenueSubmissionData {
     instagram?: string;
     line?: string;
   };
+  venueConditions?: VenueConditionAnswers;
 }
 
-export type CreateVenueData = CreateVenueSubmissionData & Partial<VenueTagFields>;
+export type CreateVenueData = Omit<CreateVenueSubmissionData, 'venueConditions'> &
+  Partial<VenueTagFields>;
 
 export interface UpdateVenueData {
   name?: string;
@@ -292,6 +345,8 @@ export interface UpdateVenueData {
   equipmentNote?: string;
   infoUpdatedOn?: string | null;
   calendarUrl?: string | null;
+  transitStops?: TransitStop[] | null; // null clears, stored as []
+  confirmSuggestions?: boolean;
 }
 
 // Batch review request item

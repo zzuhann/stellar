@@ -14,6 +14,7 @@ import {
   VenueEventCardBase,
   VenueFilterParams,
   VenueStatus,
+  VenueSubmissionRecord,
   VenueWithScore,
 } from '../models/types';
 import { cache } from '../utils/cache';
@@ -22,7 +23,8 @@ import { getIsoWeekString } from '../utils/isoWeek';
 import { filterOutCorruptedDatetime } from '../utils/eventSanitizer';
 import { haversineDistanceMeters, isMissingVenueCoords, toValidVenueCoords } from '../utils/geo';
 import { getTaipeiDateString } from '../utils/taipeiDate';
-import { computeEventTimeStatus, filterVisibleTags } from './venueTags';
+import { computeEventTimeStatus, filterVisibleTags, mapAnswersToSuggestedTags } from './venueTags';
+import { pickLegacyTransit } from './venueTransit';
 import {
   DocumentData,
   DocumentReference,
@@ -272,10 +274,50 @@ export class VenueService {
   }
 
   async createVenue(data: CreateVenueData): Promise<VenueDetail> {
+    return this.writeNewVenue(data);
+  }
+
+  // Public submission path: curated fields are never written, even if a caller passes them.
+  // Questionnaire answers become suggestions in `submission`, confirmed later by an admin.
+  async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
+    const { venueConditions, ...rest } = data;
+    // calendarUrl lives only in the formal field, so no stale copy can be prefilled later
+    const { calendarUrl, ...answers } = venueConditions ?? {};
+    const submission = venueConditions && {
+      submittedAt: FieldValue.serverTimestamp(),
+      answers,
+      suggestedTags: mapAnswersToSuggestedTags(venueConditions, {
+        transitStops: data.transitStops,
+      }),
+      confirmedAt: null,
+    };
+    return this.writeNewVenue(
+      {
+        ...rest,
+        tags: undefined,
+        sourceLinks: undefined,
+        equipmentNote: undefined,
+        infoUpdatedOn: undefined,
+        // Private and needs no confirmation, so it goes straight to the real field (§3.1)
+        calendarUrl: calendarUrl ?? undefined,
+      },
+      submission
+    );
+  }
+
+  private async writeNewVenue(
+    data: CreateVenueData,
+    submission?: Record<string, unknown>
+  ): Promise<VenueDetail> {
     this.checkFirebaseConfig();
 
     const docRef = this.collection.doc();
     const now = FieldValue.serverTimestamp();
+    // When transitStops is sent, it is the source of truth for the legacy fields (§10.3)
+    const legacyTransit =
+      data.transitStops !== undefined
+        ? pickLegacyTransit(data.transitStops)
+        : { nearestMrt: data.nearestMrt ?? '', mrtWalkMinutes: data.mrtWalkMinutes ?? null };
 
     await withTimeoutAndRetry(() =>
       docRef.set({
@@ -285,8 +327,8 @@ export class VenueService {
         lat: data.lat ?? 0,
         lng: data.lng ?? 0,
         placeId: data.placeId ?? '',
-        nearestMrt: data.nearestMrt ?? '',
-        mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+        ...legacyTransit,
+        ...(data.transitStops !== undefined ? { transitStops: data.transitStops } : {}),
         capacityRange: data.capacityRange,
         description: data.description ?? '',
         hostTags: data.hostTags ?? [],
@@ -301,6 +343,7 @@ export class VenueService {
         equipmentNote: data.equipmentNote ?? '',
         infoUpdatedOn: data.infoUpdatedOn ?? null,
         calendarUrl: data.calendarUrl ?? null,
+        ...(submission ? { submission } : {}),
         status: 'pending',
         eventCount: 0,
         eventRefs: [],
@@ -319,8 +362,8 @@ export class VenueService {
       lat: data.lat ?? 0,
       lng: data.lng ?? 0,
       placeId: data.placeId ?? '',
-      nearestMrt: data.nearestMrt ?? '',
-      mrtWalkMinutes: data.mrtWalkMinutes ?? null,
+      ...legacyTransit,
+      transitStops: data.transitStops ?? null,
       capacityRange: data.capacityRange,
       description: data.description ?? '',
       hostTags: data.hostTags ?? [],
@@ -338,18 +381,6 @@ export class VenueService {
       eventCount: 0,
       events: [],
     };
-  }
-
-  // Public submission path: curated fields are never written, even if a caller passes them
-  async createVenueSubmission(data: CreateVenueSubmissionData): Promise<VenueDetail> {
-    return this.createVenue({
-      ...data,
-      tags: undefined,
-      sourceLinks: undefined,
-      equipmentNote: undefined,
-      infoUpdatedOn: undefined,
-      calendarUrl: undefined,
-    });
   }
 
   async getVenueById(id: string): Promise<VenueDetail | null> {
@@ -427,6 +458,7 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       bookingFormUrl: d.bookingFormUrl ?? null,
+      transitStops: d.transitStops ?? null,
       socialMedia: d.socialMedia ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
       events,
@@ -499,6 +531,19 @@ export class VenueService {
         updateData[field] =
           field === 'region' ? normalizeRegion(data[field] as string) : data[field];
       }
+    }
+
+    if (data.transitStops !== undefined) {
+      const stops = data.transitStops ?? [];
+      updateData.transitStops = stops;
+      Object.assign(updateData, pickLegacyTransit(stops));
+    }
+
+    // Decided on the doc just read, not the admin cache, so a stale cache can't re-confirm.
+    // ponytail: read-then-update isn't atomic; fine with one admin, use runTransaction if several
+    const submission = existing.data()?.submission as { confirmedAt?: unknown } | undefined;
+    if (data.confirmSuggestions === true && submission && submission.confirmedAt === null) {
+      updateData['submission.confirmedAt'] = FieldValue.serverTimestamp();
     }
 
     await withTimeoutAndRetry(() => docRef.update(updateData));
@@ -584,8 +629,10 @@ export class VenueService {
       preferredContact: d.preferredContact ?? undefined,
       contactUrl: d.contactUrl ?? undefined,
       bookingFormUrl: d.bookingFormUrl ?? null,
+      transitStops: d.transitStops ?? null,
       socialMedia: d.socialMedia ?? undefined,
       updatedAt: d.updatedAt ?? undefined,
+      ...(d.submission ? { submission: d.submission as VenueSubmissionRecord } : {}),
       events,
     };
 

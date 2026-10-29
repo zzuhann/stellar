@@ -207,6 +207,57 @@ describe('admin 寫入場地的新欄位', () => {
   });
 });
 
+describe('TC-134 admin 真實 route 帶 transitStops', () => {
+  const transitStops = [
+    { type: 'bus', station: '復興新和街口', walkMinutes: 3 },
+    { type: 'light_rail', station: '凱旋武昌', walkMinutes: 6 },
+  ];
+
+  it('POST /api/venues：Firestore 寫入含 transitStops 與回寫的 nearestMrt、mrtWalkMinutes', async () => {
+    const res = await request(app)
+      .post('/api/venues')
+      .set('Authorization', 'Bearer admin-token')
+      .send({ ...venueBody, transitStops, nearestMrt: '中山' });
+
+    expect(res.status).toBe(201);
+    expect(mockVenueSet.mock.calls[0][0]).toMatchObject({
+      transitStops,
+      nearestMrt: '輕軌 凱旋武昌',
+      mrtWalkMinutes: 6,
+    });
+  });
+
+  it('PATCH /api/venues/:id：Firestore 寫入含 transitStops 與回寫的 nearestMrt、mrtWalkMinutes', async () => {
+    mockVenueGet.mockResolvedValue({ exists: true, data: () => ({ name: 'A' }) });
+    const res = await request(app)
+      .patch('/api/venues/v1')
+      .set('Authorization', 'Bearer admin-token')
+      .send({ transitStops });
+
+    expect(res.status).toBe(200);
+    expect(mockVenueUpdate.mock.calls[0][0]).toMatchObject({
+      transitStops,
+      nearestMrt: '輕軌 凱旋武昌',
+      mrtWalkMinutes: 6,
+    });
+  });
+
+  it('PATCH /api/venues/:id 帶 null → 清空', async () => {
+    mockVenueGet.mockResolvedValue({ exists: true, data: () => ({ name: 'A' }) });
+    const res = await request(app)
+      .patch('/api/venues/v1')
+      .set('Authorization', 'Bearer admin-token')
+      .send({ transitStops: null });
+
+    expect(res.status).toBe(200);
+    expect(mockVenueUpdate.mock.calls[0][0]).toMatchObject({
+      transitStops: [],
+      nearestMrt: '',
+      mrtWalkMinutes: null,
+    });
+  });
+});
+
 describe('TC-084 admin 寫入與詳情端點的身分檢查', () => {
   it.each([
     ['POST /api/venues', () => request(app).post('/api/venues')],
