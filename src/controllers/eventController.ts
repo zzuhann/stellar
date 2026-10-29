@@ -3,6 +3,11 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { EventService } from '../services/eventService';
 import { EventFilterParams, MapDataParams, UpdateEventData } from '../models/types';
 import { cache } from '../utils/cache';
+import { z } from 'zod';
+import { eventSchemas } from '../middleware/validation';
+
+type SearchEventsQuery = z.infer<typeof eventSchemas.search>;
+type TrendingEventsQuery = z.infer<typeof eventSchemas.trending>;
 
 export class EventController {
   private eventService: EventService;
@@ -183,13 +188,10 @@ export class EventController {
   };
 
   // 搜尋活動
+  // req.validatedQuery is set by validateRequest({ query: eventSchemas.search }) in eventRoutes
   searchEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { query, artistName, location } = req.query;
-    const events = await this.eventService.searchEvents({
-      query: query as string,
-      artistName: artistName as string,
-      location: location as string,
-    });
+    const criteria = (req.validatedQuery as SearchEventsQuery | undefined) ?? {};
+    const events = await this.eventService.searchEvents(criteria);
     res.json(events);
   };
 
@@ -216,10 +218,10 @@ export class EventController {
     }
   };
 
-  // 取得熱門活動排行
+  // 取得熱門活動排行；req.validatedQuery is set by validateRequest({ query: eventSchemas.trending })
   getTrendingEvents = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 20) : 10;
-    const events = await this.eventService.getTrendingEvents(limit);
+    const { limit } = (req.validatedQuery as TrendingEventsQuery | undefined) ?? {};
+    const events = await this.eventService.getTrendingEvents(limit ?? 10);
     res.json({ events, total: events.length });
   };
 

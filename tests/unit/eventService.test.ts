@@ -210,6 +210,60 @@ describe('EventService — 壞掉的 datetime 不應讓整批活動噴錯（GET 
     expect(await service.searchEvents({})).toEqual([]);
   });
 
+  const useOnlyDocs = (docs: unknown[]) => {
+    const firebase = jest.requireMock('../../src/config/firebase');
+    (firebase.db.collection as jest.Mock).mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs }),
+    });
+    service = new EventService();
+  };
+
+  it('GET /events/search：同一個搜尋第二次查詢時，期間已結束的活動也會被排除（不被搜尋自己的快取留住）', async () => {
+    useOnlyDocs([goodEventDoc]);
+    jest.setSystemTime(new Date('2027-01-01T22:00:00.000Z')); // the 24h base cache stays valid below
+    expect((await service.searchEvents({})).map(e => e.id)).toEqual(['event-good']);
+
+    jest.setSystemTime(new Date('2027-01-02T01:00:00.000Z')); // event-good ended at 2027-01-02T00:00
+
+    expect(await service.searchEvents({})).toEqual([]);
+  });
+
+  it('GET /events/trending：共用快取期間已結束的活動會被排除，並由下一名遞補', async () => {
+    const withViews = (id: string, viewCount: number, end: string) => ({
+      id,
+      data: () => ({
+        ...goodEventDoc.data(),
+        viewCount,
+        datetime: { start: makeTimestamp('2027-01-01T00:00:00.000Z'), end: makeTimestamp(end) },
+      }),
+    });
+    useOnlyDocs([
+      withViews('event-hot', 100, '2027-01-02T00:00:00.000Z'),
+      withViews('event-next', 50, '2027-02-01T00:00:00.000Z'),
+    ]);
+    jest.setSystemTime(new Date('2027-01-01T22:00:00.000Z')); // the 24h base cache stays valid below
+    expect((await service.getTrendingEvents(1)).map(e => e.id)).toEqual(['event-hot']);
+
+    jest.setSystemTime(new Date('2027-01-02T01:00:00.000Z')); // event-hot has ended
+
+    expect((await service.getTrendingEvents(1)).map(e => e.id)).toEqual(['event-next']);
+  });
+
+  it.each([
+    ['負數', -3, 1],
+    ['0', 0, 1],
+    ['非數字（NaN）', NaN, 2],
+    ['超過上限', 50, 2],
+  ])(
+    'GET /events/trending：limit 為%s時限制在 1～20（NaN 用預設 10）',
+    async (_label, limit, expected) => {
+      useOnlyDocs([goodEventDoc, { ...goodEventDoc, id: 'event-2' }]);
+
+      expect(await service.getTrendingEvents(limit)).toHaveLength(expected);
+    }
+  );
+
   it('GET /events/search：依開始時間排序時不會改動共用快取陣列的順序', async () => {
     const lateDoc = {
       id: 'event-late',

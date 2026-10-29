@@ -1199,19 +1199,8 @@ export class EventService {
   }): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
 
-    const cacheKey = `events:search:${JSON.stringify(criteria)}`;
-    const cacheVersion = cache.version();
-    const cachedResult = cache.get<CoffeeEvent[]>(cacheKey);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
-    // 共用基礎資料層：已審核、已排除壞掉的 datetime、已剝除投稿者 email
-    // 基礎層只在建立時（最長 24h 前）濾過期，這裡以當下時間再濾一次
-    const now = Date.now();
-    let events = (await this.getApprovedActiveEventsBase()).filter(
-      event => event.datetime.end.toMillis() >= now
-    );
+    // No result cache: filtering the in-memory base is cheap and never serves ended events.
+    let events = await this.getApprovedActiveEventsBase();
 
     // 客戶端過濾
     if (criteria.query) {
@@ -1236,13 +1225,8 @@ export class EventService {
       );
     }
 
-    // events is a filtered copy, so sorting leaves the shared cached array untouched.
-    const result = events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
-
-    // 設定 4 小時快取
-    cache.set(cacheKey, result, 240, cacheVersion);
-
-    return result;
+    // The base returns a fresh array, so sorting in place leaves the cache untouched.
+    return events.sort((a, b) => a.datetime.start.toMillis() - b.datetime.start.toMillis());
   }
 
   /** 與前端「我的投稿」一致：rejected 置頂，其餘依建立時間新到舊 */
@@ -1336,18 +1320,12 @@ export class EventService {
 
   async getTrendingEvents(limit: number = 10): Promise<CoffeeEvent[]> {
     this.checkFirebaseConfig();
-    const clampedLimit = Math.min(limit, 20);
+    // Untrusted query value: NaN falls back to 10, then clamp to 1..20.
+    const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit) : 10, 1), 20);
 
-    return cache.getWithLock(
-      `events:trending:${clampedLimit}`,
-      async () => {
-        const activeEvents = await this.getApprovedActiveEventsBase();
-        return [...activeEvents]
-          .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
-          .slice(0, clampedLimit);
-      },
-      360 // 6 小時 TTL
-    );
+    // No ranking cache: sorting the in-memory base is cheap and never serves ended events.
+    const activeEvents = await this.getApprovedActiveEventsBase();
+    return activeEvents.sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, safeLimit);
   }
 
   // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
