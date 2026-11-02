@@ -9,7 +9,10 @@ jest.mock('../../src/utils/ssrfGuard', () => ({
   fetchWithSsrfGuard: jest.fn(),
 }));
 
-jest.mock('@sentry/node', () => ({ captureException: jest.fn() }));
+jest.mock('@sentry/node', () => ({
+  ...jest.requireActual('@sentry/node'),
+  captureException: jest.fn(),
+}));
 
 import { ImageService } from '../../src/services/imageService';
 import { fetchWithSsrfGuard } from '../../src/utils/ssrfGuard';
@@ -263,7 +266,19 @@ describe('ImageService — R2 失敗時回報 Sentry', () => {
     const result = await service.uploadImage(fakeFile);
 
     expect(result.success).toBe(false);
-    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, {
+      tags: { r2_operation: 'upload' },
+    });
+  });
+
+  it('uploadImage：還沒呼叫 R2 就失敗（例如檔案資料不完整）時不當成 R2 故障回報', async () => {
+    const brokenFile = { ...fakeFile, originalname: undefined } as unknown as Express.Multer.File;
+
+    const result = await service.uploadImage(brokenFile);
+
+    expect(result.success).toBe(false);
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('uploadImageFromUrl：圖片抓到了但寫入 R2 失敗時回報 Sentry', async () => {
@@ -279,16 +294,9 @@ describe('ImageService — R2 失敗時回報 Sentry', () => {
     const result = await service.uploadImageFromUrl('https://example.com/cat.png');
 
     expect(result.success).toBe(false);
-    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
-  });
-
-  it('uploadImageFromUrl：R2 未設定時回報 Sentry', async () => {
-    r2ConfigMock.hasR2Config = false;
-
-    const result = await service.uploadImageFromUrl('https://example.com/cat.png');
-
-    expect(result.success).toBe(false);
-    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, {
+      tags: { r2_operation: 'upload_from_url' },
+    });
   });
 
   it('deleteImage：從 R2 刪除失敗時回報 Sentry，並照舊回傳刪除失敗', async () => {
@@ -297,7 +305,9 @@ describe('ImageService — R2 失敗時回報 Sentry', () => {
     const result = await service.deleteImage('https://cdn.example.com/images/test.jpg');
 
     expect(result.success).toBe(false);
-    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, {
+      tags: { r2_operation: 'delete' },
+    });
   });
 
   it('uploadImageFromUrl：外部來源圖片下載中斷（對方網站的問題）不回報 Sentry', async () => {

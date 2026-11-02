@@ -77,7 +77,9 @@ export interface DeleteResult {
 
 // These catches turn R2 failures into { success: false }, so the Express error handler never
 // sees them; report explicitly or an R2 outage only surfaces when users complain.
-function reportR2Failure(error: unknown, operation: string): void {
+type R2Operation = 'upload' | 'upload_from_url' | 'delete';
+
+function reportR2Failure(error: unknown, operation: R2Operation): void {
   Sentry.captureException(error, { tags: { r2_operation: operation } });
 }
 
@@ -161,7 +163,10 @@ export class ImageService {
 
   // 驗證 → 產生檔名 → 上傳到 R2，這段邏輯同時被「使用者上傳檔案」與「伺服器抓取外部網址」兩個
   // public method 共用，不重複寫兩次
-  private async persistValidatedFile(file: Express.Multer.File): Promise<UploadResult> {
+  private async persistValidatedFile(
+    file: Express.Multer.File,
+    operation: R2Operation
+  ): Promise<UploadResult> {
     // 驗證檔案
     const validation = this.validateFile(file);
     if (!validation.valid) {
@@ -185,7 +190,13 @@ export class ImageService {
 
     // 上傳到 R2
     const command = new PutObjectCommand(uploadParams);
-    await r2Client!.send(command);
+    try {
+      await r2Client!.send(command);
+    } catch (error) {
+      // Report only the R2 call itself, so failures before it don't look like an R2 outage.
+      reportR2Failure(error, operation);
+      throw error;
+    }
 
     // 建構公開 URL
     const imageUrl = `${R2_PUBLIC_URL}/${filename}`;
@@ -201,10 +212,9 @@ export class ImageService {
   async uploadImage(file: Express.Multer.File): Promise<UploadResult> {
     this.checkR2Config(); // AppError 直接往外拋，不包在 try 裡，避免被下方 catch 吞掉變成通用 400
     try {
-      return await this.persistValidatedFile(file);
+      return await this.persistValidatedFile(file, 'upload');
     } catch (error) {
       console.error('Error uploading image:', error);
-      reportR2Failure(error, 'upload');
       return {
         success: false,
         error: '上傳失敗',
@@ -220,7 +230,6 @@ export class ImageService {
       this.checkR2Config();
     } catch (error) {
       console.error('Error uploading image from URL:', error);
-      reportR2Failure(error, 'config');
       return { success: false, error: '圖片上傳服務未設定' };
     }
 
@@ -273,7 +282,7 @@ export class ImageService {
     } as Express.Multer.File;
 
     try {
-      const result = await this.persistValidatedFile(pseudoFile);
+      const result = await this.persistValidatedFile(pseudoFile, 'upload_from_url');
       if (!result.success) {
         // 到這一步 content-type／大小都已篩過，剩下的 validateFile 失敗
         // （magic bytes 不符、檔案過小）代表內容並非宣稱的圖片格式
@@ -282,7 +291,6 @@ export class ImageService {
       return result;
     } catch (error) {
       console.error('Error persisting fetched image:', error);
-      reportR2Failure(error, 'upload_from_url');
       return { success: false, error: '上傳失敗', reason: 'fetch_failed' };
     }
   }
