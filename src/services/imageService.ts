@@ -1,4 +1,5 @@
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import * as Sentry from '@sentry/node';
 import { r2Client, hasR2Config, R2_BUCKET_NAME, R2_PUBLIC_URL } from '../config/r2-client';
 import { fetchWithSsrfGuard } from '../utils/ssrfGuard';
 import { AppError } from '../utils/AppError';
@@ -197,6 +198,7 @@ export class ImageService {
       return await this.persistValidatedFile(file);
     } catch (error) {
       console.error('Error uploading image:', error);
+      Sentry.captureException(error, { tags: { context: 'image_upload' } });
       return {
         success: false,
         error: '上傳失敗',
@@ -212,6 +214,7 @@ export class ImageService {
       this.checkR2Config();
     } catch (error) {
       console.error('Error uploading image from URL:', error);
+      Sentry.captureException(error, { tags: { context: 'image_import_config' } });
       return { success: false, error: '圖片上傳服務未設定' };
     }
 
@@ -273,6 +276,7 @@ export class ImageService {
       return result;
     } catch (error) {
       console.error('Error persisting fetched image:', error);
+      Sentry.captureException(error, { tags: { context: 'image_import_upload' } });
       return { success: false, error: '上傳失敗', reason: 'fetch_failed' };
     }
   }
@@ -305,6 +309,7 @@ export class ImageService {
       };
     } catch (error) {
       console.error('Error deleting image:', error);
+      Sentry.captureException(error, { tags: { context: 'image_delete' } });
       return {
         success: false,
         error: '刪除失敗',
