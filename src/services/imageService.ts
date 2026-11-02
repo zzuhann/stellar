@@ -2,6 +2,7 @@ import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client, hasR2Config, R2_BUCKET_NAME, R2_PUBLIC_URL } from '../config/r2-client';
 import { fetchWithSsrfGuard } from '../utils/ssrfGuard';
 import { AppError } from '../utils/AppError';
+import * as Sentry from '@sentry/node';
 import crypto from 'crypto';
 import path from 'path';
 
@@ -72,6 +73,12 @@ async function readWithSizeCap(
 export interface DeleteResult {
   success: boolean;
   error?: string;
+}
+
+// These catches turn R2 failures into { success: false }, so the Express error handler never
+// sees them; report explicitly or an R2 outage only surfaces when users complain.
+function reportR2Failure(error: unknown, operation: string): void {
+  Sentry.captureException(error, { tags: { r2_operation: operation } });
 }
 
 export class ImageService {
@@ -197,6 +204,7 @@ export class ImageService {
       return await this.persistValidatedFile(file);
     } catch (error) {
       console.error('Error uploading image:', error);
+      reportR2Failure(error, 'upload');
       return {
         success: false,
         error: '上傳失敗',
@@ -212,6 +220,7 @@ export class ImageService {
       this.checkR2Config();
     } catch (error) {
       console.error('Error uploading image from URL:', error);
+      reportR2Failure(error, 'config');
       return { success: false, error: '圖片上傳服務未設定' };
     }
 
@@ -273,6 +282,7 @@ export class ImageService {
       return result;
     } catch (error) {
       console.error('Error persisting fetched image:', error);
+      reportR2Failure(error, 'upload_from_url');
       return { success: false, error: '上傳失敗', reason: 'fetch_failed' };
     }
   }
@@ -305,6 +315,7 @@ export class ImageService {
       };
     } catch (error) {
       console.error('Error deleting image:', error);
+      reportR2Failure(error, 'delete');
       return {
         success: false,
         error: '刪除失敗',

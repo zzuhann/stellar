@@ -9,9 +9,12 @@ jest.mock('../../src/utils/ssrfGuard', () => ({
   fetchWithSsrfGuard: jest.fn(),
 }));
 
+jest.mock('@sentry/node', () => ({ captureException: jest.fn() }));
+
 import { ImageService } from '../../src/services/imageService';
 import { fetchWithSsrfGuard } from '../../src/utils/ssrfGuard';
 import { r2Client } from '../../src/config/r2-client';
+import * as Sentry from '@sentry/node';
 
 const mockFetchWithSsrfGuard = fetchWithSsrfGuard as jest.Mock;
 const mockSend = (r2Client as unknown as { send: jest.Mock }).send;
@@ -228,5 +231,93 @@ describe('ImageService — R2 未設定時的錯誤處理', () => {
       statusCode: 503,
       code: 'SERVICE_UNAVAILABLE',
     });
+  });
+});
+
+// R2 failures are caught and turned into { success: false }, so they never reach the
+// Express error handler; they must be reported to Sentry explicitly or an outage goes unnoticed.
+describe('ImageService — R2 失敗時回報 Sentry', () => {
+  let service: ImageService;
+  const r2Error = new Error('R2 unreachable');
+  const r2ConfigMock = jest.requireMock('../../src/config/r2-client') as { hasR2Config: boolean };
+  const fakeFile = {
+    buffer: fakePngBuffer(),
+    mimetype: 'image/png',
+    size: 2048,
+    originalname: 'test.png',
+  } as Express.Multer.File;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSend.mockResolvedValue({});
+    service = new ImageService();
+  });
+
+  afterEach(() => {
+    r2ConfigMock.hasR2Config = true;
+  });
+
+  it('uploadImage：寫入 R2 失敗時回報 Sentry，並照舊回傳上傳失敗', async () => {
+    mockSend.mockRejectedValue(r2Error);
+
+    const result = await service.uploadImage(fakeFile);
+
+    expect(result.success).toBe(false);
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
+  });
+
+  it('uploadImageFromUrl：圖片抓到了但寫入 R2 失敗時回報 Sentry', async () => {
+    mockFetchWithSsrfGuard.mockResolvedValue({
+      ok: true,
+      response: new Response(fakePngBuffer(), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    });
+    mockSend.mockRejectedValue(r2Error);
+
+    const result = await service.uploadImageFromUrl('https://example.com/cat.png');
+
+    expect(result.success).toBe(false);
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
+  });
+
+  it('uploadImageFromUrl：R2 未設定時回報 Sentry', async () => {
+    r2ConfigMock.hasR2Config = false;
+
+    const result = await service.uploadImageFromUrl('https://example.com/cat.png');
+
+    expect(result.success).toBe(false);
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteImage：從 R2 刪除失敗時回報 Sentry，並照舊回傳刪除失敗', async () => {
+    mockSend.mockRejectedValue(r2Error);
+
+    const result = await service.deleteImage('https://cdn.example.com/images/test.jpg');
+
+    expect(result.success).toBe(false);
+    expect(Sentry.captureException).toHaveBeenCalledWith(r2Error, expect.anything());
+  });
+
+  it('uploadImageFromUrl：外部來源圖片下載中斷（對方網站的問題）不回報 Sentry', async () => {
+    const brokenBody = new ReadableStream({
+      start(controller) {
+        controller.error(new Error('source connection reset'));
+      },
+    });
+    mockFetchWithSsrfGuard.mockResolvedValue({
+      ok: true,
+      response: new Response(brokenBody, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    });
+
+    const result = await service.uploadImageFromUrl('https://example.com/cat.png');
+
+    expect(result.success).toBe(false);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });
