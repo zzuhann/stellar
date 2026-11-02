@@ -1,3 +1,5 @@
+jest.mock('@sentry/node', () => ({ captureException: jest.fn() }));
+
 jest.mock('../../src/config/r2-client', () => ({
   hasR2Config: true,
   r2Client: { send: jest.fn().mockResolvedValue({}) },
@@ -10,6 +12,7 @@ jest.mock('../../src/utils/ssrfGuard', () => ({
 }));
 
 import { ImageService } from '../../src/services/imageService';
+import * as Sentry from '@sentry/node';
 import { fetchWithSsrfGuard } from '../../src/utils/ssrfGuard';
 import { r2Client } from '../../src/config/r2-client';
 
@@ -107,6 +110,7 @@ describe('ImageService.uploadImageFromUrl', () => {
       reason: 'blocked_host',
     });
     expect(mockSend).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('來源網址無法連線時，回傳 fetch_failed', async () => {
@@ -183,6 +187,70 @@ describe('ImageService.uploadImageFromUrl', () => {
     expect(result.success).toBe(false);
     expect(result.reason).toBe('unsupported_format');
     expect(mockSend).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImageService — storage error reporting', () => {
+  const file = {
+    buffer: fakePngBuffer(),
+    mimetype: 'image/png',
+    size: 2048,
+    originalname: 'test.png',
+  } as Express.Multer.File;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSend.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it.each([
+    ['uploadImage', 'image_upload', { success: false, error: '上傳失敗' }],
+    [
+      'uploadImageFromUrl',
+      'image_import_upload',
+      { success: false, error: '上傳失敗', reason: 'fetch_failed' },
+    ],
+    ['deleteImage', 'image_delete', { success: false, error: '刪除失敗' }],
+  ] as const)(
+    '%s reports the original storage exception once and preserves the response',
+    async (method, context, expected) => {
+      const error = new Error('R2 connection reset');
+      mockSend.mockRejectedValueOnce(error);
+      mockFetchWithSsrfGuard.mockResolvedValue({
+        ok: true,
+        response: new Response(fakePngBuffer(), { headers: { 'content-type': 'image/png' } }),
+      });
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const service = new ImageService();
+
+      const result =
+        method === 'uploadImage'
+          ? await service.uploadImage(file)
+          : await service[method]('https://cdn.example.com/images/test.png');
+
+      expect(result).toEqual(expected);
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toHaveBeenCalledWith(error, { tags: { context } });
+    }
+  );
+
+  it('does not report invalid file input or invalid image URLs', async () => {
+    const service = new ImageService();
+    expect(await service.uploadImage({ ...file, size: 1 })).toEqual({
+      success: false,
+      error: '檔案過小或內容不完整',
+    });
+    expect(await service.deleteImage('https://other.example.com/test.png')).toEqual({
+      success: false,
+      error: '無效的圖片 URL',
+    });
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });
 
@@ -228,5 +296,23 @@ describe('ImageService — R2 未設定時的錯誤處理', () => {
       statusCode: 503,
       code: 'SERVICE_UNAVAILABLE',
     });
+  });
+
+  it('reports missing import storage configuration while preserving its failure response', async () => {
+    r2ConfigMock.hasR2Config = false;
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(service.uploadImageFromUrl('https://example.com/test.png')).resolves.toEqual({
+        success: false,
+        error: '圖片上傳服務未設定',
+      });
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 503, code: 'SERVICE_UNAVAILABLE' }),
+        { tags: { context: 'image_import_config' } }
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 });
