@@ -232,7 +232,12 @@ export class AdminService {
 
       const snapshot = await withTimeoutAndRetry(() => baseQuery.get());
       // Legacy docs have no tags field; keep the Venue contract (tags is always an array)
-      venues = snapshot.docs.map(doc => ({ id: doc.id, tags: [], ...doc.data() }) as Venue);
+      // submission is admin-detail only; keep it out of list responses and this cache
+      venues = snapshot.docs.map(doc => {
+        const data = { ...doc.data() };
+        delete data.submission;
+        return { id: doc.id, tags: [], ...data } as Venue;
+      });
 
       venues.sort((a, b) => {
         const aMs = a.createdAt?.toMillis?.() ?? 0;

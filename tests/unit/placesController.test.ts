@@ -93,6 +93,7 @@ describe('PlacesController.placeDetails', () => {
       formatted_address: '台北市A路1號',
       name: 'X',
       city: '',
+      types: [],
     });
   });
 });
