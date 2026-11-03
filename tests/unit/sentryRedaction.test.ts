@@ -600,3 +600,50 @@ describe('redactSentryEvent — 前端 code review 回饋（兩邊共用的邏�
     expect(result.exception?.values?.[0].value).toBe('No account for [email]');
   });
 });
+
+describe('redactSentryEvent — 前端 Codex 第 1 輪（兩邊共用）', () => {
+  it('x-forwarded-for、x-vercel-forwarded-for、Forwarded 帶的使用者 IP 換成 [Filtered]；x-forwarded-proto 保留', () => {
+    const event = baseEvent({
+      request: {
+        headers: {
+          'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+          'x-vercel-forwarded-for': '203.0.113.7',
+          Forwarded: 'for=203.0.113.7;proto=https',
+          'x-forwarded-proto': 'https',
+        },
+      },
+    });
+
+    expect(redactSentryEvent(event).request?.headers).toEqual({
+      'x-forwarded-for': '[Filtered]',
+      'x-vercel-forwarded-for': '[Filtered]',
+      Forwarded: '[Filtered]',
+      'x-forwarded-proto': 'https',
+    });
+  });
+
+  it('span 上 SDK 把 - 換成 _ 的 header 屬性（x_vercel_ip_city、cf_connecting_ip、x_forwarded_for）也換成 [Filtered]', () => {
+    const event = baseEvent({
+      spans: [
+        {
+          span_id: 's',
+          trace_id: 't',
+          start_timestamp: 0,
+          data: {
+            'http.request.header.x_vercel_ip_city': 'Taipei',
+            'http.request.header.cf_connecting_ip': '1.2.3.4',
+            'http.request.header.x_forwarded_for': '1.2.3.4',
+            'http.request.header.accept_language': 'zh-TW',
+          },
+        },
+      ],
+    } as Partial<Event>);
+
+    expect(redactSentryEvent(event).spans?.[0].data).toEqual({
+      'http.request.header.x_vercel_ip_city': '[Filtered]',
+      'http.request.header.cf_connecting_ip': '[Filtered]',
+      'http.request.header.x_forwarded_for': '[Filtered]',
+      'http.request.header.accept_language': 'zh-TW',
+    });
+  });
+});

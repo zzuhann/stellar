@@ -140,6 +140,7 @@ const SENSITIVE_HEADER_SNIPPETS = [
   'sid',
   // client IP and location (Vercel adds x-vercel-ip-latitude/longitude/city/postal-code)
   '-ip',
+  'forwarded-for',
   'geo',
   'latitude',
   'longitude',
@@ -147,9 +148,13 @@ const SENSITIVE_HEADER_SNIPPETS = [
   'postal',
 ];
 
+// Span attributes spell header names with '_' instead of '-', so normalize before matching.
 function isSensitiveHeaderName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return SENSITIVE_HEADER_SNIPPETS.some(snippet => lower.includes(snippet));
+  const normalized = name.toLowerCase().replace(/_/g, '-');
+  return (
+    normalized === 'forwarded' ||
+    SENSITIVE_HEADER_SNIPPETS.some(snippet => normalized.includes(snippet))
+  );
 }
 
 function redactCredentials(request: NonNullable<Event['request']>): void {
