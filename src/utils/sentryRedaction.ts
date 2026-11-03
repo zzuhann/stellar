@@ -121,6 +121,7 @@ function redactRequestBody(request: NonNullable<Event['request']>): void {
 
 // Same idea as the SDK's own span-header filter: any header named like a credential or session.
 const SENSITIVE_HEADER_SNIPPETS = [
+  // credentials and sessions (aligned with the SDK's sensitive-key list)
   'auth',
   'token',
   'session',
@@ -129,7 +130,21 @@ const SENSITIVE_HEADER_SNIPPETS = [
   'secret',
   'password',
   'csrf',
+  'xsrf',
   'jwt',
+  'bearer',
+  'signature',
+  'credential',
+  'identity',
+  'sso',
+  'sid',
+  // client IP and location (Vercel adds x-vercel-ip-latitude/longitude/city/postal-code)
+  '-ip',
+  'geo',
+  'latitude',
+  'longitude',
+  'latlong',
+  'postal',
 ];
 
 function isSensitiveHeaderName(name: string): boolean {
@@ -145,10 +160,20 @@ function redactCredentials(request: NonNullable<Event['request']>): void {
   }
 }
 
+const MAX_EMAIL_SCAN_DEPTH = 5;
+
+function isPlainObject(value: object): boolean {
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return proto === Object.prototype || proto === null;
+}
+
+// Rebuilds only arrays and plain objects; Error, Date and class instances pass through
+// untouched so the SDK can still serialize their message and stack.
 function redactEmailsDeep(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return redactEmails(value);
-  if (depth >= 3 || value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_EMAIL_SCAN_DEPTH || value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(item => redactEmailsDeep(item, depth + 1));
+  if (!isPlainObject(value)) return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([k, v]) => [
       k,
@@ -167,7 +192,12 @@ function redactBreadcrumbs(breadcrumbs: Event['breadcrumbs']): void {
 
 // The server span records the caller's IP even with sendDefaultPii off, and copies request
 // and response headers (including individual cookies) into http.*.header.* attributes.
-const CLIENT_IP_DATA_KEYS = ['http.client_ip', 'client.address'] as const;
+const CLIENT_IP_DATA_KEYS = [
+  'http.client_ip',
+  'client.address',
+  'net.peer.ip',
+  'net.sock.peer.addr',
+] as const;
 const HEADER_ATTRIBUTE_PREFIX = /^http\.(?:request|response)\.header\./;
 
 function redactSpanData(data: Record<string, unknown> | undefined): void {
@@ -183,7 +213,8 @@ function redactSpanData(data: Record<string, unknown> | undefined): void {
 
 /**
  * Shared by Sentry beforeSend/beforeSendTransaction: redacts coordinates, request bodies,
- * credential headers, emails in breadcrumbs, and client IPs and header copies on spans, in place.
+ * credential, IP and location headers, emails in breadcrumbs and error messages, and client
+ * IPs and header copies on spans, in place.
  * Always returns the event (never null) so errors and transactions are still reported.
  */
 export function redactSentryEvent<T extends Event>(event: T): T {
@@ -193,6 +224,10 @@ export function redactSentryEvent<T extends Event>(event: T): T {
     redactCredentials(event.request);
   }
   redactBreadcrumbs(event.breadcrumbs);
+  if (typeof event.message === 'string') event.message = redactEmails(event.message);
+  event.exception?.values?.forEach(exception => {
+    if (typeof exception.value === 'string') exception.value = redactEmails(exception.value);
+  });
   const traceData = event.contexts?.trace?.data as Record<string, unknown> | undefined;
   redactUrlLikeDataFields(traceData);
   redactSpanData(traceData);

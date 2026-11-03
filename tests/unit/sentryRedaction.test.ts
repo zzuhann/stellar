@@ -530,3 +530,73 @@ describe('redactSentryEvent — Codex 第 1 輪', () => {
     });
   });
 });
+
+describe('redactSentryEvent — 前端 code review 回饋（兩邊共用的邏輯）', () => {
+  it('breadcrumb 裡的 Error、Date 等非一般物件原樣保留，不被弄成空物件', () => {
+    const error = new Error('Network timeout');
+    const when = new Date(0);
+    const event = baseEvent({
+      breadcrumbs: [{ category: 'console', data: { arguments: [error, when] } }],
+    });
+
+    const args = redactSentryEvent(event).breadcrumbs?.[0].data?.arguments as unknown[];
+
+    expect(args[0]).toBe(error);
+    expect(args[1]).toBe(when);
+  });
+
+  it('巢狀到第 4 層的 email 也會遮（例如 console.log({ user: { email } })）', () => {
+    const event = baseEvent({
+      breadcrumbs: [
+        { data: { arguments: [{ user: { profile: { email: 'deep@example.com' } } }] } },
+      ],
+    });
+
+    expect(JSON.stringify(redactSentryEvent(event).breadcrumbs)).not.toContain('deep@example.com');
+  });
+
+  it('地理位置／IP 類 header 與平台簽章 header 換成 [Filtered]', () => {
+    const event = baseEvent({
+      request: {
+        headers: {
+          'x-vercel-ip-latitude': '25.03',
+          'x-vercel-ip-longitude': '121.56',
+          'x-vercel-ip-city': 'Taipei',
+          'x-vercel-ip-postal-code': '106',
+          'x-client-geo-location': 'TW',
+          'cf-connecting-ip': '1.2.3.4',
+          'x-vercel-proxy-signature': 'sig',
+          'x-amzn-oidc-identity': 'id',
+          accept: 'application/json',
+        },
+      },
+    });
+
+    const headers = redactSentryEvent(event).request?.headers ?? {};
+
+    expect(headers.accept).toBe('application/json');
+    for (const [key, value] of Object.entries(headers)) {
+      if (key !== 'accept') expect(value).toBe('[Filtered]');
+    }
+  });
+
+  it('span data 的 net.peer.ip 換成 [Filtered]', () => {
+    const event = baseEvent({
+      contexts: { trace: { trace_id: 't', span_id: 's', data: { 'net.peer.ip': '1.2.3.4' } } },
+    });
+
+    expect(redactSentryEvent(event).contexts?.trace?.data?.['net.peer.ip']).toBe('[Filtered]');
+  });
+
+  it('錯誤訊息（exception value、message）裡的 email 換成 [email]', () => {
+    const event = baseEvent({
+      message: 'lookup failed for a@example.com',
+      exception: { values: [{ type: 'Error', value: 'No account for user@example.com' }] },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.message).toBe('lookup failed for [email]');
+    expect(result.exception?.values?.[0].value).toBe('No account for [email]');
+  });
+});
