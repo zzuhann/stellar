@@ -324,3 +324,209 @@ describe('redactSentryEvent — 永遠回傳 event，不丟事件', () => {
     expect(result.request).toEqual({ url: '/api/health', method: 'GET' });
   });
 });
+
+// The SDK attaches incoming request bodies (up to 10KB), Authorization and cookies by
+// default; a probe on @sentry/node 10.63.0 confirmed all three reach beforeSend.
+describe('redactSentryEvent — request body／header 個資', () => {
+  it('JSON 字串 body 只留欄位形狀（型別與長度），不留任何值', () => {
+    const event = baseEvent({
+      request: {
+        data: JSON.stringify({
+          email: 'user@example.com',
+          message: 'hello world',
+          artists: [{ id: 'a1' }, { id: 'a2' }],
+          location: { address: '台北市大安區', coordinates: { lat: 25.03, lng: 121.56 } },
+          count: 3,
+          agreed: true,
+          note: null,
+        }),
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.data).toEqual({
+      email: 'string(16)',
+      message: 'string(11)',
+      artists: 'array(2)',
+      location: { address: 'string(6)', coordinates: 'object(2)' },
+      count: 'number',
+      agreed: 'boolean',
+      note: 'null',
+    });
+    expect(JSON.stringify(result.request)).not.toMatch(/user@example\.com|hello|台北|25\.03/);
+  });
+
+  it('已經是物件的 body 一樣只留形狀', () => {
+    const event = baseEvent({ request: { data: { displayName: 'Zoe' } } });
+
+    expect(redactSentryEvent(event).request?.data).toEqual({ displayName: 'string(3)' });
+  });
+
+  it('不是 JSON 的字串 body（例如 form 編碼）只留長度', () => {
+    const event = baseEvent({ request: { data: 'email=user%40example.com&message=hi' } });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.data).toBe('[Filtered] string(35)');
+  });
+
+  it('Authorization、Cookie 等憑證 header 換成 [Filtered]（不分大小寫），其他 header 保留', () => {
+    const event = baseEvent({
+      request: {
+        headers: {
+          Authorization: 'Bearer SECRET_TOKEN',
+          cookie: 'session=abc',
+          'proxy-authorization': 'Basic xyz',
+          'user-agent': 'Mozilla/5.0',
+        },
+        cookies: { session: 'abc' },
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.headers).toEqual({
+      Authorization: '[Filtered]',
+      cookie: '[Filtered]',
+      'proxy-authorization': '[Filtered]',
+      'user-agent': 'Mozilla/5.0',
+    });
+    expect(result.request?.cookies).toBeUndefined();
+    expect(JSON.stringify(result.request)).not.toMatch(/SECRET_TOKEN|session=abc|xyz/);
+  });
+
+  it('沒有 body／header 的 request 不受影響', () => {
+    const event = baseEvent({
+      request: { method: 'GET', url: 'https://api.stellar-zone.com/api/events' },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request).toEqual({
+      method: 'GET',
+      url: 'https://api.stellar-zone.com/api/events',
+    });
+  });
+});
+
+describe('redactSentryEvent — 其他個資管道', () => {
+  it('名稱含 session／token／key 等字樣的 header 也換成 [Filtered]（例如前端每個請求都帶的 x-session-id）', () => {
+    const event = baseEvent({
+      request: {
+        headers: {
+          'x-session-id': 'sess-123',
+          'x-api-key': 'k-456',
+          'X-CSRF-Token': 'c-789',
+          'content-type': 'application/json',
+        },
+      },
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.request?.headers).toEqual({
+      'x-session-id': '[Filtered]',
+      'x-api-key': '[Filtered]',
+      'X-CSRF-Token': '[Filtered]',
+      'content-type': 'application/json',
+    });
+  });
+
+  it('console breadcrumb 的 message 與 arguments 裡的 email 換成 [email]', () => {
+    const line = '[email] approval sent to someone@example.com for event abc';
+    const event = baseEvent({
+      breadcrumbs: [
+        {
+          category: 'console',
+          message: line,
+          data: { arguments: [line, { to: 'a.b+c@mail.co' }] },
+        },
+      ],
+    });
+
+    const result = redactSentryEvent(event);
+
+    expect(result.breadcrumbs?.[0].message).toBe('[email] approval sent to [email] for event abc');
+    expect(JSON.stringify(result.breadcrumbs)).not.toMatch(/someone@example\.com|a\.b\+c@mail\.co/);
+  });
+
+  it('trace／span data 的使用者 IP（http.client_ip、client.address）換成 [Filtered]', () => {
+    const event = baseEvent({
+      contexts: { trace: { trace_id: 't', span_id: 's', data: { 'http.client_ip': '1.2.3.4' } } },
+      spans: [
+        {
+          span_id: 's2',
+          trace_id: 't',
+          start_timestamp: 0,
+          data: { 'client.address': '5.6.7.8', 'http.method': 'GET' },
+        },
+      ],
+    } as Partial<Event>);
+
+    const result = redactSentryEvent(event);
+
+    expect(result.contexts?.trace?.data?.['http.client_ip']).toBe('[Filtered]');
+    expect(result.spans?.[0].data).toEqual({
+      'client.address': '[Filtered]',
+      'http.method': 'GET',
+    });
+  });
+
+  it('body 的欄位名稱如果本身是 email，也換成 [email]', () => {
+    const event = baseEvent({ request: { data: { 'user@example.com': { role: 'admin' } } } });
+
+    expect(redactSentryEvent(event).request?.data).toEqual({ '[email]': { role: 'string(5)' } });
+  });
+});
+
+describe('redactSentryEvent — Codex 第 1 輪', () => {
+  it('很長且沒有 email 的字串不會讓 email 比對變慢（避免 ReDoS 卡住 event loop）', () => {
+    const long = 'a'.repeat(40_000);
+    const event = baseEvent({
+      breadcrumbs: [{ message: long }, { message: `${'x.'.repeat(20_000)}@` }],
+    });
+
+    const started = Date.now();
+    redactSentryEvent(event);
+
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  it('email 在網址路徑中時只遮 email，保留前後路徑', () => {
+    const event = baseEvent({ breadcrumbs: [{ message: 'GET /users/user@example.com/events' }] });
+
+    expect(redactSentryEvent(event).breadcrumbs?.[0].message).toBe('GET /users/[email]/events');
+  });
+
+  it("email 前半段含單引號（例如 o'connor）時整個遮掉，不留姓名片段", () => {
+    const event = baseEvent({ breadcrumbs: [{ message: "sent to o'connor@example.com" }] });
+
+    expect(redactSentryEvent(event).breadcrumbs?.[0].message).toBe('sent to [email]');
+  });
+
+  it('span data 裡 SDK 複製的 cookie／set-cookie／敏感 header 屬性換成 [Filtered]', () => {
+    const event = baseEvent({
+      spans: [
+        {
+          span_id: 's',
+          trace_id: 't',
+          start_timestamp: 0,
+          data: {
+            'http.request.header.cookie.visitor': 'private-id',
+            'http.request.header.x_session_id': 'sess-1',
+            'http.response.header.set_cookie.sid': 'abc',
+            'http.request.header.user_agent': 'Mozilla/5.0',
+          },
+        },
+      ],
+    } as Partial<Event>);
+
+    expect(redactSentryEvent(event).spans?.[0].data).toEqual({
+      'http.request.header.cookie.visitor': '[Filtered]',
+      'http.request.header.x_session_id': '[Filtered]',
+      'http.response.header.set_cookie.sid': '[Filtered]',
+      'http.request.header.user_agent': 'Mozilla/5.0',
+    });
+  });
+});
