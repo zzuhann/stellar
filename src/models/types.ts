@@ -180,6 +180,7 @@ export interface Venue {
   lng: number;
   nearestMrt: string;
   mrtWalkMinutes: number | null;
+  transitStops: TransitStop[] | null; // null = doc never had the field; [] = admin cleared it
   capacityRange: CapacityRange | null;
   eventCount: number;
   viewCount?: number;

@@ -181,6 +181,7 @@ export class VenueService {
       lng,
       nearestMrt: d.nearestMrt ?? '',
       mrtWalkMinutes: d.mrtWalkMinutes ?? null,
+      transitStops: d.transitStops ?? null,
       capacityRange: d.capacityRange ?? null,
       eventCount: d.eventCount ?? 0,
       coverPhoto: d.coverPhoto ?? '',
