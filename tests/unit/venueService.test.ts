@@ -420,6 +420,7 @@ function makeBaseVenue(): VenueFixture {
     lng: 121,
     nearestMrt: '',
     mrtWalkMinutes: null,
+    transitStops: null,
     capacityRange: '20-40',
     eventCount: 0,
     coverPhoto: '',
@@ -1004,6 +1005,65 @@ describe('VenueService.getVenues — fetchAll 效能設計與 cold start（避�
       if (Array.isArray(result)) throw new Error('expected paginated result');
       expect(result.venues[0]).not.toHaveProperty('compositeScore');
       expect(result.venues[0]).not.toHaveProperty('viewCap');
+    });
+  });
+
+  describe('mapDocToVenue：列表帶出 transitStops（VL-001、VL-002）', () => {
+    const trainStops = [{ type: 'train', station: '基隆', walkMinutes: 5 }];
+    const docs = () => [
+      venueDoc('va', {
+        name: 'a',
+        status: 'active',
+        eventCount: 3,
+        eventRefs: [],
+        nearestMrt: '忠孝復興',
+        mrtWalkMinutes: 3,
+      }),
+      venueDoc('vb', {
+        name: 'b',
+        status: 'active',
+        eventCount: 2,
+        eventRefs: [],
+        nearestMrt: '忠孝復興',
+        mrtWalkMinutes: 3,
+        transitStops: [],
+      }),
+      venueDoc('vc', {
+        name: 'c',
+        status: 'active',
+        eventCount: 1,
+        eventRefs: [],
+        nearestMrt: '忠孝復興',
+        mrtWalkMinutes: 3,
+        transitStops: trainStops,
+      }),
+    ];
+
+    it('VL-001：沒有 key → null；[] → []；有資料原樣；nearestMrt、mrtWalkMinutes 照舊', async () => {
+      mockVenuesGet.mockResolvedValue({ docs: docs() });
+
+      const list = await service.getVenues({ status: 'active' });
+      const result = Array.isArray(list) ? list : list.venues;
+      const byId = new Map(result.map(v => [v.id, v]));
+
+      expect(byId.get('va')?.transitStops).toBeNull();
+      expect(byId.get('vb')?.transitStops).toEqual([]);
+      expect(byId.get('vc')?.transitStops).toEqual(trainStops);
+      for (const v of result) {
+        expect(v.nearestMrt).toBe('忠孝復興');
+        expect(v.mrtWalkMinutes).toBe(3);
+      }
+    });
+
+    it('VL-002：sort=random 也帶出 transitStops（走 fetchAll → mapDocToVenue，不 mock getWithLock）', async () => {
+      mockVenuesGet.mockResolvedValue({ docs: docs() });
+
+      const result = (await service.getVenues({ sort: 'random', limit: 10 })) as Venue[];
+      const byId = new Map(result.map(v => [v.id, v]));
+
+      expect(byId.get('va')?.transitStops).toBeNull();
+      expect(byId.get('vb')?.transitStops).toEqual([]);
+      expect(byId.get('vc')?.transitStops).toEqual(trainStops);
     });
   });
 
@@ -1905,7 +1965,7 @@ describe('VenueService — 交通 transitStops（第 2 階段，design-backend �
     });
   });
 
-  it('TC-137 詳情讀回交通：多筆照順序、沒有 key → null、[] → []、walkMinutes 0 與 null 原樣；列表沒有 transitStops', async () => {
+  it('TC-137 詳情讀回交通：多筆照順序、沒有 key → null、[] → []、walkMinutes 0 與 null 原樣；列表也帶 transitStops', async () => {
     const many = [
       { type: 'bus', station: '復興新和街口', walkMinutes: 0 },
       { type: 'mrt', station: '中山', walkMinutes: null },
@@ -1930,6 +1990,9 @@ describe('VenueService — 交通 transitStops（第 2 階段，design-backend �
     const list = await service.getVenues({ sort: 'name' });
     const venues = Array.isArray(list) ? list : list.venues;
     expect(venues).toHaveLength(3);
-    for (const v of venues) expect(v).not.toHaveProperty('transitStops');
+    const listed = new Map(venues.map(v => [v.id, v.transitStops]));
+    expect(listed.get('many')).toEqual(many);
+    expect(listed.get('legacy')).toBeNull();
+    expect(listed.get('cleared')).toEqual([]);
   });
 });

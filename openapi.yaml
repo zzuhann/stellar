@@ -1434,6 +1434,12 @@ components:
         lng: { type: number }
         nearestMrt: { type: string }
         mrtWalkMinutes: { type: integer, nullable: true }
+        transitStops:
+          type: array
+          nullable: true
+          maxItems: 5
+          items: { $ref: '#/components/schemas/TransitStop' }
+          description: 交通方式，照存的順序（列表與詳情都回傳）。null＝舊場地從沒用過這個欄位（請退回讀 nearestMrt、mrtWalkMinutes）；[]＝管理員清空過
         capacityRange: { type: string, nullable: true }
         eventCount: { type: integer }
         viewCount: { type: integer }
@@ -1466,12 +1472,6 @@ components:
             equipmentNote: { type: string, description: 店家提供的設備原文，空字串代表沒有 }
             infoUpdatedOn: { type: string, format: date, nullable: true }
             bookingFormUrl: { type: string, format: uri, nullable: true, description: 預約表單網址；沒有時為 null，key 一定存在 }
-            transitStops:
-              type: array
-              nullable: true
-              maxItems: 5
-              items: { $ref: '#/components/schemas/TransitStop' }
-              description: 交通方式，照存的順序。null＝舊場地從沒用過這個欄位（請退回讀 nearestMrt、mrtWalkMinutes）；[]＝管理員清空過。公開列表不回傳
             events:
               type: array
               items:

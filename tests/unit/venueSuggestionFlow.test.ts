@@ -145,7 +145,7 @@ describe('TC-092 投稿 → 上架 → 確認的完整流程', () => {
     const listed = list.body.venues.find((v: { id: string }) => v.id === id);
     expect(listed.tags).toEqual([]);
     expect(listed).not.toHaveProperty('bookingFormUrl');
-    expect(listed).not.toHaveProperty('transitStops');
+    expect(listed.transitStops).toEqual([{ type: 'mrt', station: '中山', walkMinutes: 5 }]);
     expect(listed).not.toHaveProperty('submission');
 
     // (4) 管理員確認：拿掉 free_venue、加 deposit
