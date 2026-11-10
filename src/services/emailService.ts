@@ -1,11 +1,17 @@
 import type { Resend } from 'resend';
 
-const hasResendKey = !!process.env.RESEND_API_KEY;
+const resendApiKey = process.env.RESEND_API_KEY;
+const hasResendKey = !!resendApiKey;
 
 // Lazy-load: resend pulls in ~235 svix modules, which slows Cloud Run cold starts
 let resendClient: Promise<Resend> | undefined;
 function sendEmail(payload: Parameters<Resend['emails']['send']>[0]) {
-  resendClient ??= import('resend').then(({ Resend }) => new Resend(process.env.RESEND_API_KEY));
+  resendClient ??= import('resend')
+    .then(({ Resend }) => new Resend(resendApiKey))
+    .catch(err => {
+      resendClient = undefined; // don't cache a failed load; retry on next send
+      throw err;
+    });
   return resendClient.then(resend => resend.emails.send(payload));
 }
 
