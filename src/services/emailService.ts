@@ -1,6 +1,19 @@
-import { Resend } from 'resend';
+import type { Resend } from 'resend';
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resendApiKey = process.env.RESEND_API_KEY;
+const hasResendKey = !!resendApiKey;
+
+// Lazy-load: resend pulls in ~235 svix modules, which slows Cloud Run cold starts
+let resendClient: Promise<Resend> | undefined;
+function sendEmail(payload: Parameters<Resend['emails']['send']>[0]) {
+  resendClient ??= import('resend')
+    .then(({ Resend }) => new Resend(resendApiKey))
+    .catch(err => {
+      resendClient = undefined; // don't cache a failed load; retry on next send
+      throw err;
+    });
+  return resendClient.then(resend => resend.emails.send(payload));
+}
 
 // 白名單：這些 email 不寄送通知信（用逗號分隔）
 const emailWhitelist = new Set(
@@ -46,7 +59,7 @@ interface EventApprovalEmailData {
  * 如果同一 email 有多個 artist 通過，會合併成一封信
  */
 export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Promise<void> {
-  if (!resend) {
+  if (!hasResendKey) {
     console.warn('RESEND_API_KEY not configured, skipping email');
     return;
   }
@@ -130,7 +143,7 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
   `.trim();
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: email,
       subject,
@@ -154,7 +167,7 @@ export async function sendArtistApprovalEmails(
   }>,
   getUserDisplayName: (userId: string) => Promise<string | undefined>
 ): Promise<void> {
-  if (!resend) {
+  if (!hasResendKey) {
     console.warn('RESEND_API_KEY not configured, skipping emails');
     return;
   }
@@ -192,7 +205,7 @@ export async function sendArtistApprovalEmails(
  * 如果同一 email 有多個 event 通過，會合併成一封信
  */
 export async function sendEventApprovalEmail(data: EventApprovalEmailData): Promise<void> {
-  if (!resend) {
+  if (!hasResendKey) {
     console.warn('RESEND_API_KEY not configured, skipping email');
     return;
   }
@@ -275,7 +288,7 @@ export async function sendEventApprovalEmail(data: EventApprovalEmailData): Prom
   `.trim();
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: email,
       subject,
@@ -300,7 +313,7 @@ export async function sendEventApprovalEmails(
   }>,
   getUserDisplayName: (userId: string) => Promise<string | undefined>
 ): Promise<void> {
-  if (!resend) {
+  if (!hasResendKey) {
     console.warn('RESEND_API_KEY not configured, skipping emails');
     return;
   }
@@ -344,7 +357,7 @@ export async function sendArtistSubmissionNotification(
   submitterEmail: string | undefined,
   artistName: string
 ): Promise<void> {
-  if (!resend || !adminNotifyEmail) {
+  if (!hasResendKey || !adminNotifyEmail) {
     return;
   }
 
@@ -369,7 +382,7 @@ export async function sendArtistSubmissionNotification(
   `.trim();
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: adminNotifyEmail,
       subject,
@@ -398,7 +411,7 @@ export async function sendContactNotification(data: {
   email: string;
   message: string;
 }): Promise<void> {
-  if (!resend) {
+  if (!hasResendKey) {
     console.warn('[email] contact notification skipped: RESEND_API_KEY not configured');
     return;
   }
@@ -469,13 +482,13 @@ export async function sendContactNotification(data: {
   `.trim();
 
   const results = await Promise.allSettled([
-    resend.emails.send({
+    sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: email,
       subject: '[STELLAR] 已收到你的訊息！',
       html: confirmationHtml,
     }),
-    resend.emails.send({
+    sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: CONTACT_RECEIVER,
       subject: `[STELLAR] 新的聯絡表單訊息 - ${name}`,
@@ -511,7 +524,7 @@ export async function sendEventSubmissionNotification(
   submitterEmail: string | undefined,
   eventTitle: string
 ): Promise<void> {
-  if (!resend || !adminNotifyEmail) {
+  if (!hasResendKey || !adminNotifyEmail) {
     return;
   }
 
@@ -538,7 +551,7 @@ export async function sendEventSubmissionNotification(
   `.trim();
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: adminNotifyEmail,
       subject,
@@ -556,7 +569,7 @@ export async function sendEventSubmissionNotification(
 }
 
 export async function sendVenueSubmissionNotification(venueName: string): Promise<void> {
-  if (!resend || !adminNotifyEmail) return;
+  if (!hasResendKey || !adminNotifyEmail) return;
 
   const escapedVenueName = escapeHtml(venueName);
   const loggedVenueName = JSON.stringify(venueName);
@@ -573,7 +586,7 @@ export async function sendVenueSubmissionNotification(venueName: string): Promis
   `.trim();
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: adminNotifyEmail,
       subject: '[STELLAR] 有人投稿場地～',
