@@ -69,7 +69,7 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
   // 白名單檢查
   if (isWhitelisted(email)) return;
 
-  const userName = displayName || '親愛的用戶';
+  const userName = escapeHtml(displayName || '親愛的用戶');
   const isSingle = artistNames.length === 1;
 
   // 主旨
@@ -78,8 +78,8 @@ export async function sendArtistApprovalEmail(data: ArtistApprovalEmailData): Pr
     : `[STELLAR] 你投稿的藝人已通過審核 ✨🧚🏻`;
 
   // 內文中的藝人名稱
-  const artistNamesText = artistNames.join('、');
-  const pronoun = isSingle ? ` ${artistNames[0]} ` : '他們';
+  const artistNamesText = artistNames.map(escapeHtml).join('、');
+  const pronoun = isSingle ? ` ${escapeHtml(artistNames[0])} ` : '他們';
 
   const html = `
 <!DOCTYPE html>
@@ -215,17 +215,20 @@ export async function sendEventApprovalEmail(data: EventApprovalEmailData): Prom
   // 白名單檢查
   if (isWhitelisted(email)) return;
 
-  const userName = displayName || '親愛的用戶';
+  const userName = escapeHtml(displayName || '親愛的用戶');
 
   // 主旨（統一不列活動名稱）
   const subject = `[STELLAR] 你投稿的活動已通過審核 ✨🧚🏻`;
 
   // 內文中的活動名稱
-  const eventTitlesText = events.map(e => e.title).join('、');
+  const eventTitlesText = events.map(e => escapeHtml(e.title)).join('、');
 
   // 活動連結列表
   const eventLinks = events
-    .map(e => `<a href="https://www.stellar-zone.com/event/${e.id}">${e.title}</a>`)
+    .map(
+      e =>
+        `<a href="https://www.stellar-zone.com/event/${encodeURIComponent(e.id)}">${escapeHtml(e.title)}</a>`
+    )
     .join('<br>');
 
   const html = `
@@ -373,8 +376,8 @@ export async function sendArtistSubmissionNotification(
   <meta charset="utf-8">
 </head>
 <body>
-  <p>有人投稿了新的藝人：<strong>${artistName}</strong></p>
-  <p>投稿者：${submitterInfo}</p>
+  <p>有人投稿了新的藝人：<strong>${escapeHtml(artistName)}</strong></p>
+  <p>投稿者：${escapeHtml(submitterInfo)}</p>
   <p>可以去審核囉！</p>
   <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
 </body>
@@ -450,7 +453,7 @@ export async function sendContactNotification(data: {
 </head>
 <body>
   <div class="content">
-    <p>${name} 你好～</p>
+    <p>你好～</p>
     <p>感謝你聯絡 STELLAR！</p>
     <p>我們已經收到你的訊息，將會盡快回覆你。</p>
   </div>
@@ -473,10 +476,10 @@ export async function sendContactNotification(data: {
   <meta charset="utf-8">
 </head>
 <body>
-  <p><strong>暱稱：</strong>${name}</p>
-  <p><strong>Email：</strong>${email}</p>
+  <p><strong>暱稱：</strong>${escapeHtml(name)}</p>
+  <p><strong>Email：</strong>${escapeHtml(email)}</p>
   <p><strong>訊息內容：</strong></p>
-  <p style="white-space: pre-wrap">${message}</p>
+  <p style="white-space: pre-wrap">${escapeHtml(message)}</p>
 </body>
 </html>
   `.trim();
@@ -542,8 +545,8 @@ export async function sendEventSubmissionNotification(
   <meta charset="utf-8">
 </head>
 <body>
-  <p>有人投稿了新的活動：<strong>${eventTitle}</strong></p>
-  <p>投稿者：${submitterInfo}</p>
+  <p>有人投稿了新的活動：<strong>${escapeHtml(eventTitle)}</strong></p>
+  <p>投稿者：${escapeHtml(submitterInfo)}</p>
   <p>可以去審核囉！</p>
   <p><a href="https://www.stellar-zone.com/admin">前往審核</a></p>
 </body>

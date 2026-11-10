@@ -105,3 +105,13 @@ export const venuePlaceReselectLimiter = rateLimit({
     code: 'RATE_LIMITED',
   },
 });
+
+// The contact form emails whatever address the caller types; cap sends so it can't be used as a mailer
+export const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skipFailedRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many contact submissions, please try again later', code: 'RATE_LIMITED' },
+});
