@@ -105,3 +105,13 @@ export const venuePlaceReselectLimiter = rateLimit({
     code: 'RATE_LIMITED',
   },
 });
+
+// 聯絡表單會寄確認信到使用者填的信箱，限制每 IP 寄信次數避免被當成寄信工具
+export const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  skipFailedRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many contact submissions, please try again later', code: 'RATE_LIMITED' },
+});

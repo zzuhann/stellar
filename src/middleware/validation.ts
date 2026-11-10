@@ -918,3 +918,12 @@ export const adminSchemas = {
       .max(100, '一次最多刪除 100 筆'),
   }),
 };
+
+// 聯絡表單：上限放寬到正常使用碰不到，只擋濫用
+export const contactSchemas = {
+  submit: z.object({
+    name: z.string().trim().min(1, '請輸入暱稱').max(100, '暱稱不能超過 100 個字'),
+    email: z.string().trim().email('信箱格式不正確').max(254, '信箱不能超過 254 個字'),
+    message: z.string().trim().min(1, '請輸入內容').max(5000, '內容不能超過 5000 個字'),
+  }),
+};
