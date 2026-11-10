@@ -919,11 +919,21 @@ export const adminSchemas = {
   }),
 };
 
-// 聯絡表單：上限放寬到正常使用碰不到，只擋濫用
+// Limits are loose enough for real users; they only stop abuse.
+// Email uses the same rule as the frontend form so valid-looking input never fails only on the server.
 export const contactSchemas = {
   submit: z.object({
-    name: z.string().trim().min(1, '請輸入暱稱').max(100, '暱稱不能超過 100 個字'),
-    email: z.string().trim().email('信箱格式不正確').max(254, '信箱不能超過 254 個字'),
+    name: z
+      .string()
+      .trim()
+      .min(1, '請輸入暱稱')
+      .max(100, '暱稱不能超過 100 個字')
+      .refine(v => !/[\r\n]/.test(v), '暱稱不能換行'),
+    email: z
+      .string()
+      .trim()
+      .max(254, '信箱不能超過 254 個字')
+      .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, '信箱格式不正確'),
     message: z.string().trim().min(1, '請輸入內容').max(5000, '內容不能超過 5000 個字'),
   }),
 };

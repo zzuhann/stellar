@@ -106,7 +106,7 @@ export const venuePlaceReselectLimiter = rateLimit({
   },
 });
 
-// 聯絡表單會寄確認信到使用者填的信箱，限制每 IP 寄信次數避免被當成寄信工具
+// The contact form emails whatever address the caller types; cap sends so it can't be used as a mailer
 export const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,

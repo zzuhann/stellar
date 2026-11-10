@@ -43,7 +43,10 @@ describe('POST /api/contact validation', () => {
     ['missing name', { ...validBody, name: '' }, 'name'],
     ['blank name', { ...validBody, name: '   ' }, 'name'],
     ['name over 100 chars', { ...validBody, name: 'a'.repeat(101) }, 'name'],
+    ['name with a line break', { ...validBody, name: '小明\r\nBcc: x@example.com' }, 'name'],
     ['invalid email', { ...validBody, email: 'not-an-email' }, 'email'],
+    ['email with spaces', { ...validBody, email: 'a b@example.com' }, 'email'],
+    ['email over 254 chars', { ...validBody, email: `${'a'.repeat(250)}@b.tw` }, 'email'],
     ['missing email', { name: '小明', message: 'hi' }, 'email'],
     ['missing message', { ...validBody, message: '' }, 'message'],
     ['message over 5000 chars', { ...validBody, message: 'a'.repeat(5001) }, 'message'],
@@ -54,6 +57,17 @@ describe('POST /api/contact validation', () => {
     expect(res.body).toMatchObject({ code: 'VALIDATION_ERROR', field });
     expect(mockSendContactNotification).not.toHaveBeenCalled();
   });
+
+  it.each(['a@b.c', '名字@例子.tw'])(
+    'accepts %s, which the frontend form also accepts',
+    async emailAddress => {
+      const res = await request(app)
+        .post('/api/contact')
+        .send({ ...validBody, email: emailAddress });
+
+      expect(res.status).toBe(200);
+    }
+  );
 
   it('accepts values exactly at the limits', async () => {
     const res = await request(app)
