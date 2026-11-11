@@ -67,6 +67,20 @@ const firestoreDocIdSchema = (label: string) =>
     .min(1, `${label} 不能為空`)
     .regex(/^[A-Za-z0-9_-]+$/, `${label} 格式錯誤`);
 
+// Rejection reason: required for `reject` endpoints, conditionally required for `review`/batch.
+// Order is max -> trim -> min so a 500-char reason plus trailing spaces fails the same way everywhere.
+const REASON_REQUIRED_MESSAGE = '拒絕原因為必填';
+const REASON_TOO_LONG_MESSAGE = '拒絕原因不能超過 500 個字元';
+const requiredReasonSchema = z
+  .string({ error: REASON_REQUIRED_MESSAGE })
+  .max(500, REASON_TOO_LONG_MESSAGE)
+  .trim()
+  .min(1, REASON_REQUIRED_MESSAGE);
+const optionalReasonSchema = z.string().max(500, REASON_TOO_LONG_MESSAGE).trim().optional();
+
+const addReasonRequiredIssue = (ctx: z.RefinementCtx, path: Array<string | number>) =>
+  ctx.addIssue({ code: 'custom', message: REASON_REQUIRED_MESSAGE, path });
+
 // 匿名投稿者的選填通知信箱；空字串視為未填
 const submitterEmailSchema = z.preprocess(
   val => (typeof val === 'string' ? val.trim() || undefined : val),
@@ -113,6 +127,26 @@ export const artistSchemas = {
     profileImage: z.string().url('藝人圖片網址格式錯誤').optional(),
   }),
 
+  review: z
+    .object({
+      status: z.enum(['approved', 'rejected', 'exists']),
+      reason: optionalReasonSchema,
+      // Must be declared: z.object strips unknown keys and the controller reads adminUpdate
+      adminUpdate: z
+        .object({
+          groupNames: z
+            .array(z.string().trim().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元'))
+            .max(5, '最多只能選擇5個團體')
+            .optional(),
+        })
+        .optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.status === 'rejected' && !data.reason) addReasonRequiredIssue(ctx, ['reason']);
+    }),
+
+  reject: z.object({ reason: requiredReasonSchema }),
+
   batchReview: z
     .object({
       updates: z
@@ -120,7 +154,7 @@ export const artistSchemas = {
           z.object({
             artistId: firestoreDocIdSchema('artistId'),
             status: z.enum(['approved', 'rejected', 'exists']),
-            reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+            reason: optionalReasonSchema,
             groupNames: z
               .array(z.string().trim().min(1, '團名不能為空').max(50, '團名長度不能超過50個字元'))
               .max(5, '最多只能選擇5個團體')
@@ -142,6 +176,9 @@ export const artistSchemas = {
           });
         }
         seen.add(update.artistId);
+        if (update.status === 'rejected' && !update.reason) {
+          addReasonRequiredIssue(ctx, ['updates', index, 'reason']);
+        }
       });
     }),
 };
@@ -856,6 +893,17 @@ export const eventSchemas = {
     reservation: reservationSchema.optional().nullable(),
   }),
 
+  review: z
+    .object({
+      status: z.enum(['approved', 'rejected']),
+      reason: optionalReasonSchema,
+    })
+    .superRefine((data, ctx) => {
+      if (data.status === 'rejected' && !data.reason) addReasonRequiredIssue(ctx, ['reason']);
+    }),
+
+  reject: z.object({ reason: requiredReasonSchema }),
+
   batchReview: z
     .object({
       updates: z
@@ -863,7 +911,7 @@ export const eventSchemas = {
           z.object({
             eventId: firestoreDocIdSchema('eventId'),
             status: z.enum(['approved', 'rejected']),
-            reason: z.string().max(500, '拒絕原因不能超過 500 個字元').trim().optional(),
+            reason: optionalReasonSchema,
           })
         )
         .min(1, 'updates 不能為空')
@@ -881,6 +929,9 @@ export const eventSchemas = {
           });
         }
         seen.add(update.eventId);
+        if (update.status === 'rejected' && !update.reason) {
+          addReasonRequiredIssue(ctx, ['updates', index, 'reason']);
+        }
       });
     }),
 };

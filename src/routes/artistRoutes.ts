@@ -29,9 +29,21 @@ router.put(
   artistController.updateArtist
 );
 router.patch('/:id/resubmit', authenticateToken, artistController.resubmitArtist);
-router.patch('/:id/review', authenticateToken, requireAdmin, artistController.reviewArtist);
+router.patch(
+  '/:id/review',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: artistSchemas.review }),
+  artistController.reviewArtist
+);
 router.put('/:id/approve', authenticateToken, requireAdmin, artistController.approveArtist);
-router.put('/:id/reject', authenticateToken, requireAdmin, artistController.rejectArtist);
+router.put(
+  '/:id/reject',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: artistSchemas.reject }),
+  artistController.rejectArtist
+);
 router.post(
   '/batch-review',
   authenticateToken,
