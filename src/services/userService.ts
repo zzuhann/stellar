@@ -52,7 +52,7 @@ export class UserService {
       const user = await auth.getUser(userId);
       return user.providerData.length === 0;
     } catch (err) {
-      console.error(`[user] failed to look up auth user ${userId}, treating as anonymous:`, err);
+      console.error(`[user] failed to look up auth user, treating as anonymous:`, err);
       return true;
     }
   }

@@ -306,6 +306,22 @@ describe('TC-S01 Resend error is logged as failure', () => {
   });
 });
 
+describe('logs carry no recipient email', () => {
+  it.each(singleCalls('fan@example.com'))('%s', async (_name, run) => {
+    const email = await loadEmailService();
+
+    await run(email);
+    send.mockResolvedValue(resendError);
+    await run(email);
+
+    const logged = JSON.stringify([
+      (console.log as jest.Mock).mock.calls,
+      (console.error as jest.Mock).mock.calls.map(([msg]) => msg),
+    ]);
+    expect(logged).not.toContain('fan@example.com');
+  });
+});
+
 describe('TC-S02 whitelist', () => {
   it.each(singleCalls('me@example.com'))(
     '%s skips a whitelisted email case-insensitively',

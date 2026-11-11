@@ -712,9 +712,9 @@ async function sendRejectionEmail(subject: ReviewSubject, data: RejectionEmailDa
       subject: mailSubject,
       html,
     });
-    console.log(`[email] ${subject} rejection sent to ${email} (${items.length} item(s))`);
+    console.log(`[email] ${subject} rejection sent (${items.length} item(s))`);
   } catch (err) {
-    console.error(`[email] failed to send ${subject} rejection to ${email}:`, err);
+    console.error(`[email] failed to send ${subject} rejection:`, err);
   }
 }
 
@@ -808,9 +808,9 @@ export async function sendArtistExistsEmail(data: {
 
   try {
     await sendEmail({ from: 'STELLAR <noreply@stellar-zone.com>', to: email, subject, html });
-    console.log(`[email] artist exists sent to ${email} (${names.length} item(s))`);
+    console.log(`[email] artist exists sent (${names.length} item(s))`);
   } catch (err) {
-    console.error(`[email] failed to send artist exists to ${email}:`, err);
+    console.error(`[email] failed to send artist exists:`, err);
   }
 }
 
