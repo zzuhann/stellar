@@ -212,6 +212,26 @@ describe('TC-M01 batch merging', () => {
       expect(single.subject).toBe(`[STELLAR] 你投稿的${label}「丙」沒有通過審核`);
     }
   );
+
+  it.each(rejectionBatches)(
+    '%s: a reason shared by every merged item is written once, without names',
+    async (_kind, _label, pick) => {
+      const email = await loadEmailService();
+
+      await pick(email)(
+        [
+          ['a@x.com', 'u1', '甲', '照片不清楚\n請換一張'],
+          ['a@x.com', 'u1', '乙', '照片不清楚\n請換一張'],
+        ],
+        notAnon
+      );
+
+      const { html } = sent(0);
+      expect(html.split('照片不清楚').length - 1).toBe(1);
+      expect(html).not.toContain('甲：');
+      expect(html).toContain('甲、乙');
+    }
+  );
 });
 
 describe('TC-A02 anonymous recipients get no my-submissions line', () => {
