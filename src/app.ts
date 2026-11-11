@@ -195,8 +195,4 @@ app.use('/{*splat}', (_req, res) => {
   res.status(404).json({ error: 'Route not found', code: 'ROUTE_NOT_FOUND' });
 });
 
-// 傳統模式導出（開發用）
 export default app;
-
-// Serverless 模式導出（Zeabur 部署用）
-export const handler = app;
