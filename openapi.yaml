@@ -301,10 +301,92 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: '只能重新送審已拒絕的活動', code: EVENT_RESUBMIT_INVALID_STATE }
 
+  /events/{id}/review:
+    patch:
+      tags: [events]
+      summary: 審核活動（僅 admin）
+      description: 審核為 rejected 時會寄通知信給投稿者。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: >-
+                    status 為 rejected 時必填，trim 後不可為空，最長 500 字；
+                    其他狀態時不會使用，但仍不可超過 500 字
+      responses:
+        '200':
+          description: 審核完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoffeeEvent' }
+        '400':
+          description: status 不是合法值，或 status 為 rejected 但 reason 缺漏或空白
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: reason }
+        '404':
+          description: 找不到活動
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '活動不存在', code: EVENT_NOT_FOUND }
+
+  /events/{id}/reject:
+    put:
+      tags: [events]
+      summary: 拒絕活動（僅 admin）
+      description: 等同 review 的 status=rejected；會寄拒絕通知信給投稿者。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: 拒絕原因，必填，trim 後不可為空，最長 500 字
+      responses:
+        '200':
+          description: 已拒絕
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoffeeEvent' }
+        '400':
+          description: reason 缺漏、空白或超過 500 字
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: reason }
+        '404':
+          description: 找不到活動
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '活動不存在', code: EVENT_NOT_FOUND }
+
   /events/batch-review:
     post:
       tags: [events]
       summary: 批次審核活動（僅 admin）
+      description: 審核為 rejected 時會寄通知信給投稿者（同一投稿者合併成一封）。
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -326,7 +408,10 @@ paths:
                       status: { type: string, enum: [approved, rejected] }
                       reason:
                         type: string
-                        description: 拒絕原因；status 為 rejected 時使用
+                        maxLength: 500
+                        description: >-
+                          status 為 rejected 時必填，trim 後不可為空，最長 500 字；
+                          approved／exists 時不會使用，但仍不可超過 500 字
       responses:
         '200':
           description: 審核完成
@@ -336,12 +421,14 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/CoffeeEvent' }
         '400':
-          description: updates 為空、超過 50 筆，或元素缺少 eventId／status、status 不是合法值
+          description: >-
+            updates 為空、超過 50 筆，元素缺少 eventId／status、status 不是合法值，
+            或 status 為 rejected 但 reason 缺漏或空白
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
               example:
-                { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
+                { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: updates.0.reason }
         '404':
           description: 其中一筆活動不存在
           content:
@@ -1021,10 +1108,100 @@ paths:
               example:
                 { error: '只能重新送審已拒絕的藝人', code: ARTIST_RESUBMIT_INVALID_STATE }
 
+  /artists/{id}/review:
+    patch:
+      tags: [artists]
+      summary: 審核藝人（僅 admin）
+      description: 審核為 rejected／exists 時會寄通知信給投稿者。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected, exists] }
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: >-
+                    status 為 rejected 時必填，trim 後不可為空，最長 500 字；
+                    其他狀態時不會使用，但仍不可超過 500 字
+                adminUpdate:
+                  type: object
+                  description: 審核通過時管理員可一併更新團名
+                  properties:
+                    groupNames:
+                      type: array
+                      maxItems: 5
+                      items: { type: string }
+      responses:
+        '200':
+          description: 審核完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '400':
+          description: status 不是合法值，或 status 為 rejected 但 reason 缺漏或空白
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: reason }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在: abc123', code: ARTIST_NOT_FOUND }
+
+  /artists/{id}/reject:
+    put:
+      tags: [artists]
+      summary: 拒絕藝人（僅 admin）
+      description: 等同 review 的 status=rejected；會寄拒絕通知信給投稿者。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: 拒絕原因，必填，trim 後不可為空，最長 500 字
+      responses:
+        '200':
+          description: 已拒絕
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '400':
+          description: reason 缺漏、空白或超過 500 字
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+              example: { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: reason }
+        '404':
+          description: 找不到藝人
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '藝人不存在: abc123', code: ARTIST_NOT_FOUND }
+
   /artists/batch-review:
     post:
       tags: [artists]
       summary: 批次審核藝人（僅 admin）
+      description: 審核為 rejected／exists 時會寄通知信給投稿者（同一投稿者同一種結果合併成一封）。
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1046,7 +1223,10 @@ paths:
                       status: { type: string, enum: [approved, rejected, exists] }
                       reason:
                         type: string
-                        description: 拒絕原因；status 為 rejected 時使用
+                        maxLength: 500
+                        description: >-
+                          status 為 rejected 時必填，trim 後不可為空，最長 500 字；
+                          approved／exists 時不會使用，但仍不可超過 500 字
                       groupNames:
                         type: array
                         items: { type: string }
@@ -1060,12 +1240,14 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Artist' }
         '400':
-          description: updates 為空、超過 50 筆，或元素缺少 artistId／status、status 不是合法值
+          description: >-
+            updates 為空、超過 50 筆，元素缺少 artistId／status、status 不是合法值，
+            或 status 為 rejected 但 reason 缺漏或空白
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
               example:
-                { error: 'updates 不能為空', code: VALIDATION_ERROR, field: updates }
+                { error: '拒絕原因為必填', code: VALIDATION_ERROR, field: updates.0.reason }
         '404':
           description: 其中一筆藝人不存在
           content:

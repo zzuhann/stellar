@@ -48,14 +48,22 @@ router.delete('/:id', authenticateToken, (req, res) => eventController.deleteEve
 router.get('/admin/pending', authenticateToken, requireAdmin, (req, res) =>
   eventController.getPendingEvents(req, res)
 );
-router.patch('/:id/review', authenticateToken, requireAdmin, (req, res) =>
-  eventController.reviewEvent(req, res)
+router.patch(
+  '/:id/review',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: eventSchemas.review }),
+  (req, res) => eventController.reviewEvent(req, res)
 );
 router.put('/:id/approve', authenticateToken, requireAdmin, (req, res) =>
   eventController.approveEvent(req, res)
 );
-router.put('/:id/reject', authenticateToken, requireAdmin, (req, res) =>
-  eventController.rejectEvent(req, res)
+router.put(
+  '/:id/reject',
+  authenticateToken,
+  requireAdmin,
+  validateRequest({ body: eventSchemas.reject }),
+  (req, res) => eventController.rejectEvent(req, res)
 );
 router.post(
   '/batch-review',
