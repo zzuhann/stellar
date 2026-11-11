@@ -89,35 +89,7 @@ docker-compose down
 
 ## 🚀 雲端部署
 
-### Zeabur
-```bash
-# 1. 推送到 Git repository
-git push origin main
-
-# 2. 在 Zeabur 控制台部署
-# 3. 設置環境變數
-# 4. 自動部署完成
-```
-
-### Railway
-```bash
-# 1. 安裝 Railway CLI
-npm install -g @railway/cli
-
-# 2. 登入並部署
-railway login
-railway new
-railway add
-railway deploy
-```
-
-### Render
-```bash
-# 1. 連接 GitHub repository
-# 2. 選擇 Docker 部署
-# 3. 設置環境變數
-# 4. 自動部署
-```
+正式環境是 GCP Cloud Run（`stellar-backend`，asia-east1）：push 到 `main` 後由 Cloud Build Trigger 依 `cloudbuild.yaml` 建 image 並部署。環境變數設在 Cloud Run service 上，不在 repo。細節見 monorepo 的 `specs/_decisions/backend-deployment.md`。
 
 ## 🔍 故障排除
 

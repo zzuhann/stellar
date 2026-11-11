@@ -29,7 +29,7 @@ Stellar is a backend service that powers a platform where fans can create, manag
 
 **Deployment & Infrastructure:**
 - Docker containerization with multi-stage builds
-- Vercel/Railway/Zeabur cloud platform support
+- GCP Cloud Run (deployed via Cloud Build, see `cloudbuild.yaml`)
 - Built-in health checks and monitoring
 
 **Development Tools:**
