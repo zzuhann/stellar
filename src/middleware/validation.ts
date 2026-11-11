@@ -145,7 +145,8 @@ export const artistSchemas = {
       if (data.status === 'rejected' && !data.reason) addReasonRequiredIssue(ctx, ['reason']);
     }),
 
-  reject: z.object({ reason: requiredReasonSchema }),
+  // A body-less request must still get the Chinese "required" error on `reason`
+  reject: z.preprocess(body => body ?? {}, z.object({ reason: requiredReasonSchema })),
 
   batchReview: z
     .object({
@@ -902,7 +903,8 @@ export const eventSchemas = {
       if (data.status === 'rejected' && !data.reason) addReasonRequiredIssue(ctx, ['reason']);
     }),
 
-  reject: z.object({ reason: requiredReasonSchema }),
+  // A body-less request must still get the Chinese "required" error on `reason`
+  reject: z.preprocess(body => body ?? {}, z.object({ reason: requiredReasonSchema })),
 
   batchReview: z
     .object({

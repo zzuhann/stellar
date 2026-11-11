@@ -219,7 +219,7 @@ describe('EventService review result emails', () => {
       '%s: does not wait for the anonymity lookup; the mail goes out once it settles',
       async (_n, run) => {
         const actual = jest.requireActual('../../src/services/emailService');
-        email.sendEventRejectionEmails.mockImplementation(actual.sendEventRejectionEmails);
+        email.sendEventRejectionEmails.mockImplementationOnce(actual.sendEventRejectionEmails);
         addDoc('e1', fanEvent('生咖甲'));
         let release!: (isAnonymous: boolean) => void;
         mockIsAnonymousUser.mockReturnValue(

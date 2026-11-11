@@ -254,7 +254,7 @@ export class ArtistService {
     cache.clearPattern('artists:status:');
     cache.clearPattern('admin:artists:');
 
-    // 狀態已寫入就立即寄信（非同步），不依賴後續步驟成功與否
+    // Status is persisted; send now so later steps failing cannot drop the mail
     if (artistData.createdByEmail) {
       if (status === 'rejected') {
         this.sendRejectionEmailAsync([{ ...artistData, reason: reason ?? '' }]);
@@ -292,7 +292,7 @@ export class ArtistService {
     });
   }
 
-  // 非同步寄送拒絕通知信（不阻塞主流程）
+  // Fire-and-forget so mail never blocks the review response
   private sendRejectionEmailAsync(artists: Array<Artist & { reason: string }>): void {
     sendArtistRejectionEmails(artists, userId => this.userService.isAnonymousUser(userId)).catch(
       err => {
@@ -301,7 +301,7 @@ export class ArtistService {
     );
   }
 
-  // 非同步寄送已存在通知信（不阻塞主流程）
+  // Fire-and-forget so mail never blocks the review response
   private sendExistsEmailAsync(artists: Artist[]): void {
     sendArtistExistsEmails(artists).catch(err => {
       console.error('Failed to send artist exists emails:', err);
@@ -446,7 +446,7 @@ export class ArtistService {
       if (artist.slug) cache.delete(`artist:slug:${artist.slug}`);
     }
 
-    // 狀態已 commit 就立即寄拒絕／已存在信（依 updates 順序配對 reason）
+    // Batch committed; send now, pairing reasons by id in updates order
     const artistsById = new Map(allArtistsData.map(a => [a.id, a]));
     const rejectedForEmail: Array<Artist & { reason: string }> = [];
     const existsForEmail: Artist[] = [];

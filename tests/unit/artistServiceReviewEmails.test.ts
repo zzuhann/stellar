@@ -272,7 +272,7 @@ describe('ArtistService review result emails', () => {
 
     it('does not wait for the anonymity lookup; the mail goes out once it settles', async () => {
       const actual = jest.requireActual('../../src/services/emailService');
-      email.sendArtistRejectionEmails.mockImplementation(actual.sendArtistRejectionEmails);
+      email.sendArtistRejectionEmails.mockImplementationOnce(actual.sendArtistRejectionEmails);
       addDoc('a1', fan('Karina'));
       let release!: (isAnonymous: boolean) => void;
       mockIsAnonymousUser.mockReturnValue(

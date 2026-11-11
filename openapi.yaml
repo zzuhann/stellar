@@ -323,7 +323,7 @@ paths:
                   maxLength: 500
                   description: >-
                     status 為 rejected 時必填，trim 後不可為空，最長 500 字；
-                    其他狀態時忽略
+                    其他狀態時不會使用，但仍不可超過 500 字
       responses:
         '200':
           description: 審核完成
@@ -411,7 +411,7 @@ paths:
                         maxLength: 500
                         description: >-
                           status 為 rejected 時必填，trim 後不可為空，最長 500 字；
-                          approved／exists 時忽略
+                          approved／exists 時不會使用，但仍不可超過 500 字
       responses:
         '200':
           description: 審核完成
@@ -1130,7 +1130,7 @@ paths:
                   maxLength: 500
                   description: >-
                     status 為 rejected 時必填，trim 後不可為空，最長 500 字；
-                    其他狀態時忽略
+                    其他狀態時不會使用，但仍不可超過 500 字
                 adminUpdate:
                   type: object
                   description: 審核通過時管理員可一併更新團名
@@ -1226,7 +1226,7 @@ paths:
                         maxLength: 500
                         description: >-
                           status 為 rejected 時必填，trim 後不可為空，最長 500 字；
-                          approved／exists 時忽略
+                          approved／exists 時不會使用，但仍不可超過 500 字
                       groupNames:
                         type: array
                         items: { type: string }

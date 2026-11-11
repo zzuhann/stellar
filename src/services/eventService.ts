@@ -789,7 +789,7 @@ export class EventService {
     // Clear favorite cache since isFavorited caches the event's approval status
     cache.clearPattern('favorite');
 
-    // 狀態已寫入就立即寄拒絕信（非同步），不依賴後續 artists/venue 同步與重讀
+    // Status is persisted; send before artist/venue sync or re-read can throw
     if (status === 'rejected' && existingData.createdByEmail) {
       this.sendRejectionEmailAsync([{ ...existingData, id: eventId, reason: reason ?? '' }]);
     }
@@ -884,7 +884,7 @@ export class EventService {
         updatedAt: Timestamp.now(),
       };
 
-      // 收集用於寄拒絕信的 event 資料
+      // Collected for rejection mail after commit
       if (update.status === 'rejected' && existingData.createdByEmail) {
         rejectedEventsForEmail.push({
           ...existingData,
@@ -931,7 +931,7 @@ export class EventService {
     // Clear favorite cache since isFavorited caches the event's approval status
     cache.clearPattern('favorite');
 
-    // 狀態已 commit 就立即寄拒絕信（非同步），不依賴後續 artists/venue 同步
+    // Batch committed; send before artist/venue sync can throw
     if (rejectedEventsForEmail.length > 0) {
       this.sendRejectionEmailAsync(rejectedEventsForEmail);
     }
@@ -1059,7 +1059,7 @@ export class EventService {
     });
   }
 
-  // 非同步寄送拒絕通知信（不阻塞主流程）
+  // Fire-and-forget so mail never blocks the review response
   private sendRejectionEmailAsync(events: Array<CoffeeEvent & { reason: string }>): void {
     sendEventRejectionEmails(events, userId => this.userService.isAnonymousUser(userId)).catch(
       err => {

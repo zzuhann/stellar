@@ -73,6 +73,16 @@ describe('review endpoints reject a missing rejection reason before reaching the
     expect(mockBatchEvents).not.toHaveBeenCalled();
   });
 
+  it.each(['/api/artists/a1/reject', '/api/events/e1/reject'])(
+    'PUT %s without any body -> same Chinese 400 on reason',
+    async path => {
+      const res = await request(app).put(path).set('Authorization', 'Bearer t');
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ ...REQUIRED, field: 'reason' });
+    }
+  );
+
   it('PUT /artists/:id/reject with a reason reaches the service with the trimmed reason', async () => {
     const res = await request(app)
       .put('/api/artists/a1/reject')
