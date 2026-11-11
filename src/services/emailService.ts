@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import type { Resend } from 'resend';
 
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -12,7 +13,16 @@ function sendEmail(payload: Parameters<Resend['emails']['send']>[0]) {
       resendClient = undefined; // don't cache a failed load; retry on next send
       throw err;
     });
-  return resendClient.then(resend => resend.emails.send(payload));
+  return resendClient
+    .then(resend => resend.emails.send(payload))
+    .then(({ error }) => {
+      // Resend reports API failures in the result instead of throwing
+      if (error) throw new Error(`Resend ${error.name}: ${error.message}`);
+    })
+    .catch(err => {
+      Sentry.captureException(err, { tags: { context: 'email_send' } });
+      throw err;
+    });
 }
 
 // 白名單：這些 email 不寄送通知信（用逗號分隔）
@@ -406,8 +416,8 @@ const CONTACT_RECEIVER = 'stellar.taiwan.2025@gmail.com';
 
 /**
  * 聯絡表單送出後：
- * 1. 寄確認信給使用者
- * 2. 寄表單內容給 STELLAR 信箱
+ * 1. 寄表單內容給 STELLAR 信箱（失敗則丟錯）
+ * 2. 寄確認信給使用者（失敗只記錄並回報 Sentry）
  */
 export async function sendContactNotification(data: {
   name: string;
@@ -484,38 +494,26 @@ export async function sendContactNotification(data: {
 </html>
   `.trim();
 
-  const results = await Promise.allSettled([
-    sendEmail({
+  // Notify first so a failure lets the user retry before any "we got it" email goes out
+  await sendEmail({
+    from: 'STELLAR <noreply@stellar-zone.com>',
+    to: CONTACT_RECEIVER,
+    subject: `[STELLAR] 新的聯絡表單訊息 - ${name}`,
+    html: notificationHtml,
+  });
+  console.log(`[email] contact notification sent to ${CONTACT_RECEIVER} (from: ${email})`);
+
+  try {
+    await sendEmail({
       from: 'STELLAR <noreply@stellar-zone.com>',
       to: email,
       subject: '[STELLAR] 已收到你的訊息！',
       html: confirmationHtml,
-    }),
-    sendEmail({
-      from: 'STELLAR <noreply@stellar-zone.com>',
-      to: CONTACT_RECEIVER,
-      subject: `[STELLAR] 新的聯絡表單訊息 - ${name}`,
-      html: notificationHtml,
-    }),
-  ]);
-
-  const [confirmResult, notifyResult] = results;
-  if (confirmResult.status === 'rejected') {
-    console.error(`[email] failed to send contact confirmation to ${email}:`, confirmResult.reason);
-  } else {
+    });
     console.log(`[email] contact confirmation sent to ${email}`);
-  }
-  if (notifyResult.status === 'rejected') {
-    console.error(
-      `[email] failed to send contact notification to ${CONTACT_RECEIVER}:`,
-      notifyResult.reason
-    );
-  } else {
-    console.log(`[email] contact notification sent to ${CONTACT_RECEIVER} (from: ${email})`);
-  }
-
-  if (confirmResult.status === 'rejected' && notifyResult.status === 'rejected') {
-    throw new Error('Failed to send both contact emails');
+  } catch (err) {
+    // We already have the message; a missing confirmation is not worth failing the request
+    console.error(`[email] failed to send contact confirmation to ${email}:`, err);
   }
 }
 
