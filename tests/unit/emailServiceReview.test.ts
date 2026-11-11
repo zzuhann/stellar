@@ -311,13 +311,17 @@ describe('logs carry no recipient email', () => {
     const email = await loadEmailService();
 
     await run(email);
-    send.mockResolvedValue(resendError);
+    send.mockResolvedValue({
+      data: null,
+      error: { name: 'validation_error', message: 'Invalid recipient fan@example.com' },
+    });
     await run(email);
 
     const logged = JSON.stringify([
       (console.log as jest.Mock).mock.calls,
-      (console.error as jest.Mock).mock.calls.map(([msg]) => msg),
+      (console.error as jest.Mock).mock.calls.map(args => args.map(String)),
     ]);
+    expect(console.error).toHaveBeenCalled();
     expect(logged).not.toContain('fan@example.com');
   });
 });

@@ -1,5 +1,6 @@
 import { auth, db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
+import { redactEmails } from '../utils/sentryRedaction';
 import {
   User,
   UpdateUserData,
@@ -52,7 +53,10 @@ export class UserService {
       const user = await auth.getUser(userId);
       return user.providerData.length === 0;
     } catch (err) {
-      console.error(`[user] failed to look up auth user, treating as anonymous:`, err);
+      console.error(
+        `[user] failed to look up auth user, treating as anonymous:`,
+        redactEmails(String(err))
+      );
       return true;
     }
   }

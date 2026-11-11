@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import type { Resend } from 'resend';
+import { redactEmails } from '../utils/sentryRedaction';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const hasResendKey = !!resendApiKey;
@@ -714,7 +715,7 @@ async function sendRejectionEmail(subject: ReviewSubject, data: RejectionEmailDa
     });
     console.log(`[email] ${subject} rejection sent (${items.length} item(s))`);
   } catch (err) {
-    console.error(`[email] failed to send ${subject} rejection:`, err);
+    console.error(`[email] failed to send ${subject} rejection:`, redactEmails(String(err)));
   }
 }
 
@@ -810,7 +811,7 @@ export async function sendArtistExistsEmail(data: {
     await sendEmail({ from: 'STELLAR <noreply@stellar-zone.com>', to: email, subject, html });
     console.log(`[email] artist exists sent (${names.length} item(s))`);
   } catch (err) {
-    console.error(`[email] failed to send artist exists:`, err);
+    console.error(`[email] failed to send artist exists:`, redactEmails(String(err)));
   }
 }
 

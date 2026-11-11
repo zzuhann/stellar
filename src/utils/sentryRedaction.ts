@@ -83,7 +83,7 @@ function redactUrlLikeDataFields(data: Record<string, unknown> | undefined): voi
 // '@'-free strings), and excluding '/' keeps URL paths around an email intact.
 const EMAIL_PATTERN = /[A-Za-z0-9._%+'-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,8}/g;
 
-function redactEmails(text: string): string {
+export function redactEmails(text: string): string {
   return text.includes('@') ? text.replace(EMAIL_PATTERN, '[email]') : text;
 }
 
