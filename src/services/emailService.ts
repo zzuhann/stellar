@@ -601,3 +601,237 @@ export async function sendVenueSubmissionNotification(venueName: string): Promis
     );
   }
 }
+
+// ---- Review result mails (rejection / exists) ----
+
+const MY_SUBMISSIONS_URL = 'https://www.stellar-zone.com/my-submissions';
+
+// Shared shell for the review result mails; the older mails still carry their own copies.
+function renderLayout(contentHtml: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .content {
+      background: #f9f9f9;
+      padding: 24px;
+      border-radius: 8px;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+      color: #666;
+    }
+    a {
+      color: #7c3aed;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+${contentHtml}
+  </div>
+
+  <div class="footer">
+    <p>如果有任何問題，也歡迎和我們聯繫</p>
+    <p>
+      Threads: <a href="https://www.threads.com/@_stellar.tw">@_stellar.tw</a><br>
+      Instagram: <a href="https://www.instagram.com/_stellar.tw">@_stellar.tw</a><br>
+      Email: <a href="mailto:stellar.taiwan.2025@gmail.com">stellar.taiwan.2025@gmail.com</a>
+    </p>
+    <p>STELLAR 生咖地圖平台團隊</p>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+const preWrap = (text: string) => `<span style="white-space: pre-wrap">${escapeHtml(text)}</span>`;
+
+interface RejectionItem {
+  name: string;
+  reason: string;
+}
+
+interface RejectionEmailData {
+  email: string;
+  items: RejectionItem[];
+  showMySubmissions: boolean;
+}
+
+type ReviewSubject = '藝人' | '活動';
+
+async function sendRejectionEmail(subject: ReviewSubject, data: RejectionEmailData): Promise<void> {
+  if (!hasResendKey) {
+    console.warn('RESEND_API_KEY not configured, skipping email');
+    return;
+  }
+
+  const { email, items, showMySubmissions } = data;
+  if (isWhitelisted(email)) return;
+
+  const isSingle = items.length === 1;
+  const mailSubject = isSingle
+    ? `[STELLAR] 你投稿的${subject}「${items[0].name}」沒有通過審核`
+    : `[STELLAR] 你投稿的${subject}沒有通過審核`;
+
+  const namesText = items.map(i => escapeHtml(i.name)).join('、');
+  const reasonHtml = isSingle
+    ? preWrap(items[0].reason)
+    : items.map(i => preWrap(`${i.name}：${i.reason}`)).join('<br>');
+  const resubmitLine = showMySubmissions
+    ? `\n\n    <p>修改後可以到「我的投稿」編輯並重新送審：<a href="${MY_SUBMISSIONS_URL}">${MY_SUBMISSIONS_URL}</a></p>`
+    : '';
+
+  const html = renderLayout(`    <p>你好～</p>
+
+    <p>非常感謝你在 STELLAR 上投稿 <strong>${namesText}</strong>！這次的投稿暫時沒有通過審核，原因是：</p>
+
+    <p>${reasonHtml}</p>${resubmitLine}`);
+
+  try {
+    await sendEmail({
+      from: 'STELLAR <noreply@stellar-zone.com>',
+      to: email,
+      subject: mailSubject,
+      html,
+    });
+    console.log(`[email] ${subject} rejection sent to ${email} (${items.length} item(s))`);
+  } catch (err) {
+    console.error(`[email] failed to send ${subject} rejection to ${email}:`, err);
+  }
+}
+
+async function sendRejectionEmails(
+  subject: ReviewSubject,
+  rows: Array<{ createdByEmail?: string; createdBy: string; name: string; reason: string }>,
+  isAnonymousUser: (userId: string) => Promise<boolean>
+): Promise<void> {
+  if (!hasResendKey) {
+    console.warn('RESEND_API_KEY not configured, skipping emails');
+    return;
+  }
+
+  const groups = new Map<string, { items: RejectionItem[]; userIds: Set<string> }>();
+  for (const row of rows) {
+    if (!row.createdByEmail) continue;
+    const group = groups.get(row.createdByEmail) ?? { items: [], userIds: new Set<string>() };
+    group.items.push({ name: row.name, reason: row.reason });
+    group.userIds.add(row.createdBy);
+    groups.set(row.createdByEmail, group);
+  }
+
+  // One lookup per uid per call
+  const lookups = new Map<string, Promise<boolean>>();
+  const isAnonymous = (uid: string) => {
+    if (!lookups.has(uid)) lookups.set(uid, isAnonymousUser(uid));
+    return lookups.get(uid)!;
+  };
+
+  for (const [email, { items, userIds }] of groups) {
+    const anonymity = await Promise.all([...userIds].map(isAnonymous));
+    await sendRejectionEmail(subject, {
+      email,
+      items,
+      showMySubmissions: !anonymity.some(Boolean),
+    });
+  }
+}
+
+export const sendArtistRejectionEmail = (data: RejectionEmailData) =>
+  sendRejectionEmail('藝人', data);
+
+export const sendEventRejectionEmail = (data: RejectionEmailData) =>
+  sendRejectionEmail('活動', data);
+
+export function sendArtistRejectionEmails(
+  artists: Array<{ createdByEmail?: string; createdBy: string; stageName: string; reason: string }>,
+  isAnonymousUser: (userId: string) => Promise<boolean>
+): Promise<void> {
+  return sendRejectionEmails(
+    '藝人',
+    artists.map(a => ({ ...a, name: a.stageName })),
+    isAnonymousUser
+  );
+}
+
+export function sendEventRejectionEmails(
+  events: Array<{ createdByEmail?: string; createdBy: string; title: string; reason: string }>,
+  isAnonymousUser: (userId: string) => Promise<boolean>
+): Promise<void> {
+  return sendRejectionEmails(
+    '活動',
+    events.map(e => ({ ...e, name: e.title })),
+    isAnonymousUser
+  );
+}
+
+// Deliberately no reason: the frontend's "藝人已存在" text is not a rejection reason
+export async function sendArtistExistsEmail(data: {
+  email: string;
+  names: string[];
+}): Promise<void> {
+  if (!hasResendKey) {
+    console.warn('RESEND_API_KEY not configured, skipping email');
+    return;
+  }
+
+  const { email, names } = data;
+  if (isWhitelisted(email)) return;
+
+  const subject =
+    names.length === 1
+      ? `[STELLAR] 你投稿的藝人「${names[0]}」已經在平台上囉`
+      : `[STELLAR] 你投稿的藝人已經在平台上囉`;
+
+  const html = renderLayout(`    <p>你好～</p>
+
+    <p>謝謝你投稿 <strong>${names.map(escapeHtml).join('、')}</strong>！我們發現平台上已經有這位藝人/團體了，這筆投稿就不會重複上架囉！</p>
+
+    <p>直接到首頁搜尋，就可以為他新增生咖囉：<a href="https://www.stellar-zone.com">https://www.stellar-zone.com</a></p>`);
+
+  try {
+    await sendEmail({ from: 'STELLAR <noreply@stellar-zone.com>', to: email, subject, html });
+    console.log(`[email] artist exists sent to ${email} (${names.length} item(s))`);
+  } catch (err) {
+    console.error(`[email] failed to send artist exists to ${email}:`, err);
+  }
+}
+
+export async function sendArtistExistsEmails(
+  artists: Array<{ createdByEmail?: string; stageName: string }>
+): Promise<void> {
+  if (!hasResendKey) {
+    console.warn('RESEND_API_KEY not configured, skipping emails');
+    return;
+  }
+
+  const groups = new Map<string, string[]>();
+  for (const artist of artists) {
+    if (!artist.createdByEmail) continue;
+    groups.set(artist.createdByEmail, [
+      ...(groups.get(artist.createdByEmail) ?? []),
+      artist.stageName,
+    ]);
+  }
+
+  for (const [email, names] of groups) {
+    await sendArtistExistsEmail({ email, names });
+  }
+}

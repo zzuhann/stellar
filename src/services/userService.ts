@@ -1,4 +1,4 @@
-import { db, hasFirebaseConfig } from '../config/firebase';
+import { auth, db, hasFirebaseConfig } from '../config/firebase';
 import { withTimeoutAndRetry } from '../utils/firestoreTimeout';
 import {
   User,
@@ -43,6 +43,18 @@ export class UserService {
       uid: doc.id,
       ...doc.data(),
     } as User;
+  }
+
+  // Fail closed: when anonymity can't be confirmed, callers omit account-bound links
+  async isAnonymousUser(userId: string): Promise<boolean> {
+    if (!userId || !auth) return true;
+    try {
+      const user = await auth.getUser(userId);
+      return user.providerData.length === 0;
+    } catch (err) {
+      console.error(`[user] failed to look up auth user ${userId}, treating as anonymous:`, err);
+      return true;
+    }
   }
 
   async updateUser(userId: string, userData: UpdateUserData): Promise<User> {
