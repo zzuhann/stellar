@@ -18,6 +18,10 @@ function sendEmail(payload: Parameters<Resend['emails']['send']>[0]) {
     .then(({ error }) => {
       // Resend reports API failures in the result instead of throwing
       if (error) throw new Error(`Resend ${error.name}: ${error.message}`);
+    })
+    .catch(err => {
+      Sentry.captureException(err, { tags: { context: 'email_send' } });
+      throw err;
     });
 }
 
@@ -490,8 +494,7 @@ export async function sendContactNotification(data: {
 </html>
   `.trim();
 
-  // Notify STELLAR first and let failures throw: the message is otherwise lost, so the user must
-  // retry. Confirming only afterwards means a retry never follows a "we got it" email.
+  // Notify first so a failure lets the user retry before any "we got it" email goes out
   await sendEmail({
     from: 'STELLAR <noreply@stellar-zone.com>',
     to: CONTACT_RECEIVER,
@@ -511,7 +514,6 @@ export async function sendContactNotification(data: {
   } catch (err) {
     // We already have the message; a missing confirmation is not worth failing the request
     console.error(`[email] failed to send contact confirmation to ${email}:`, err);
-    Sentry.captureException(err, { tags: { context: 'contact_confirmation' } });
   }
 }
 

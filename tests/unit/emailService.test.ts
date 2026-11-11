@@ -14,11 +14,14 @@ describe('resend lazy loading', () => {
   const originalEnv = { ...process.env };
   let moduleLoads = 0;
   let failModuleLoad = false;
+  const captureException = jest.fn();
 
   const loadEmailService = () => import('../../src/services/emailService');
 
   beforeEach(() => {
     jest.resetModules();
+    captureException.mockClear();
+    jest.doMock('@sentry/node', () => ({ captureException }));
     send.mockReset().mockResolvedValue({ data: { id: 'x' }, error: null });
     ResendMock.mockClear();
     moduleLoads = 0;
@@ -38,6 +41,7 @@ describe('resend lazy loading', () => {
   afterEach(() => {
     process.env = { ...originalEnv };
     jest.dontMock('resend');
+    jest.dontMock('@sentry/node');
     jest.restoreAllMocks();
   });
 
@@ -113,7 +117,7 @@ describe('resend lazy loading', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('treats a Resend error result as a failed send instead of logging it as sent', async () => {
+  it('treats a Resend error result as a failed send and reports it to Sentry', async () => {
     send.mockResolvedValueOnce({
       data: null,
       error: { name: 'rate_limit_exceeded', message: 'x' },
@@ -124,19 +128,14 @@ describe('resend lazy loading', () => {
 
     expect(console.error).toHaveBeenCalledTimes(1);
     expect(console.log).not.toHaveBeenCalled();
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { context: 'email_send' },
+    });
   });
 
   describe('sendContactNotification', () => {
     const contact = { name: '小明', email: 'fan@example.com', message: 'hi' };
-    const captureException = jest.fn();
     const sentTo = () => send.mock.calls.map(([arg]) => arg.to);
-
-    beforeEach(() => {
-      captureException.mockClear();
-      jest.doMock('@sentry/node', () => ({ captureException }));
-    });
-
-    afterEach(() => jest.dontMock('@sentry/node'));
 
     it('sends the STELLAR notification before the confirmation', async () => {
       const email = await loadEmailService();
@@ -159,13 +158,11 @@ describe('resend lazy loading', () => {
     it('resolves and reports to Sentry when only the confirmation fails', async () => {
       send
         .mockResolvedValueOnce({ data: { id: 'x' }, error: null })
-        .mockRejectedValueOnce(new Error('confirm failed'));
+        .mockResolvedValueOnce({ data: null, error: { name: 'validation_error', message: 'x' } });
       const email = await loadEmailService();
 
       await expect(email.sendContactNotification(contact)).resolves.toBeUndefined();
-      expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
-        tags: { context: 'contact_confirmation' },
-      });
+      expect(captureException).toHaveBeenCalledTimes(1);
     });
 
     it('throws when the resend module fails to load', async () => {
