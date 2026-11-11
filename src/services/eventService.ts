@@ -24,7 +24,11 @@ import {
   serializeEventsDatetime,
   filterOutCorruptedDatetime,
 } from '../utils/eventSanitizer';
-import { sendEventApprovalEmails, sendEventSubmissionNotification } from './emailService';
+import {
+  sendEventApprovalEmails,
+  sendEventSubmissionNotification,
+  sendEventRejectionEmails,
+} from './emailService';
 import { AppError } from '../utils/AppError';
 
 export class EventService {
@@ -785,6 +789,11 @@ export class EventService {
     // Clear favorite cache since isFavorited caches the event's approval status
     cache.clearPattern('favorite');
 
+    // 狀態已寫入就立即寄拒絕信（非同步），不依賴後續 artists/venue 同步與重讀
+    if (status === 'rejected' && existingData.createdByEmail) {
+      this.sendRejectionEmailAsync([{ ...existingData, id: eventId, reason: reason ?? '' }]);
+    }
+
     // 更新相關 artists 的 activeEventIds（只有 approved 時才加入）
     if (status === 'approved' && existingData.artists && Array.isArray(existingData.artists)) {
       await this.updateArtistsActiveEventIds(
@@ -861,6 +870,7 @@ export class EventService {
     const approvedEvents: Array<{ eventId: string; artistIds: string[] }> = [];
     const approvedVenueLinks: Array<{ eventId: string; placeId: string }> = [];
     const approvedEventsForEmail: CoffeeEvent[] = [];
+    const rejectedEventsForEmail: Array<CoffeeEvent & { reason: string }> = [];
 
     // 為每個活動建立個別的更新資料
     for (let i = 0; i < updates.length; i++) {
@@ -873,6 +883,15 @@ export class EventService {
         status: update.status,
         updatedAt: Timestamp.now(),
       };
+
+      // 收集用於寄拒絕信的 event 資料
+      if (update.status === 'rejected' && existingData.createdByEmail) {
+        rejectedEventsForEmail.push({
+          ...existingData,
+          id: update.eventId,
+          reason: update.reason ?? '',
+        });
+      }
 
       // 如果是 rejected 且有提供 reason，則加入 rejectedReason
       if (update.status === 'rejected' && update.reason) {
@@ -911,6 +930,11 @@ export class EventService {
     // 狀態一旦成功寫入，立即清除收藏快取，不受後續 artists/venue 同步流程成功與否影響
     // Clear favorite cache since isFavorited caches the event's approval status
     cache.clearPattern('favorite');
+
+    // 狀態已 commit 就立即寄拒絕信（非同步），不依賴後續 artists/venue 同步
+    if (rejectedEventsForEmail.length > 0) {
+      this.sendRejectionEmailAsync(rejectedEventsForEmail);
+    }
 
     // 批次更新所有相關 artists 的 activeEventIds
     if (approvedEvents.length > 0) {
@@ -1033,6 +1057,15 @@ export class EventService {
     sendEventApprovalEmails(events, getUserDisplayName).catch(err => {
       console.error('Failed to send event approval emails:', err);
     });
+  }
+
+  // 非同步寄送拒絕通知信（不阻塞主流程）
+  private sendRejectionEmailAsync(events: Array<CoffeeEvent & { reason: string }>): void {
+    sendEventRejectionEmails(events, userId => this.userService.isAnonymousUser(userId)).catch(
+      err => {
+        console.error('Failed to send event rejection emails:', err);
+      }
+    );
   }
 
   // 重新送審功能

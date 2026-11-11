@@ -12,7 +12,12 @@ import { Timestamp, Query } from 'firebase-admin/firestore';
 
 type ArtistWithEventCount = Artist & { coffeeEventCount: number };
 import { cache } from '../utils/cache';
-import { sendArtistApprovalEmails, sendArtistSubmissionNotification } from './emailService';
+import {
+  sendArtistApprovalEmails,
+  sendArtistSubmissionNotification,
+  sendArtistRejectionEmails,
+  sendArtistExistsEmails,
+} from './emailService';
 import { UserService } from './userService';
 import { EventService } from './eventService';
 import { AppError } from '../utils/AppError';
@@ -248,6 +253,16 @@ export class ArtistService {
     // 清除狀態快取（因為藝人狀態改變會影響狀態查詢結果）
     cache.clearPattern('artists:status:');
     cache.clearPattern('admin:artists:');
+
+    // 狀態已寫入就立即寄信（非同步），不依賴後續步驟成功與否
+    if (artistData.createdByEmail) {
+      if (status === 'rejected') {
+        this.sendRejectionEmailAsync([{ ...artistData, reason: reason ?? '' }]);
+      } else if (status === 'exists') {
+        this.sendExistsEmailAsync([artistData]);
+      }
+    }
+
     // 審核通過時清除熱門藝人快取，因為 getTopArtistsByUpcomingEvents 會過濾 approved 狀態的藝人
     if (status === 'approved') {
       cache.clearPattern('artists:top:');
@@ -274,6 +289,22 @@ export class ArtistService {
 
     sendArtistApprovalEmails(artists, getUserDisplayName).catch(err => {
       console.error('Failed to send approval emails:', err);
+    });
+  }
+
+  // 非同步寄送拒絕通知信（不阻塞主流程）
+  private sendRejectionEmailAsync(artists: Array<Artist & { reason: string }>): void {
+    sendArtistRejectionEmails(artists, userId => this.userService.isAnonymousUser(userId)).catch(
+      err => {
+        console.error('Failed to send artist rejection emails:', err);
+      }
+    );
+  }
+
+  // 非同步寄送已存在通知信（不阻塞主流程）
+  private sendExistsEmailAsync(artists: Artist[]): void {
+    sendArtistExistsEmails(artists).catch(err => {
+      console.error('Failed to send artist exists emails:', err);
     });
   }
 
@@ -414,6 +445,22 @@ export class ArtistService {
       cache.delete(`artist:${artist.id}`);
       if (artist.slug) cache.delete(`artist:slug:${artist.slug}`);
     }
+
+    // 狀態已 commit 就立即寄拒絕／已存在信（依 updates 順序配對 reason）
+    const artistsById = new Map(allArtistsData.map(a => [a.id, a]));
+    const rejectedForEmail: Array<Artist & { reason: string }> = [];
+    const existsForEmail: Artist[] = [];
+    for (const update of updates) {
+      const artist = artistsById.get(update.artistId);
+      if (!artist?.createdByEmail) continue;
+      if (update.status === 'rejected') {
+        rejectedForEmail.push({ ...artist, reason: update.reason ?? '' });
+      } else if (update.status === 'exists') {
+        existsForEmail.push(artist);
+      }
+    }
+    if (rejectedForEmail.length > 0) this.sendRejectionEmailAsync(rejectedForEmail);
+    if (existsForEmail.length > 0) this.sendExistsEmailAsync(existsForEmail);
 
     // 審核通過時寄送通知信（非同步，不阻塞回應）
     if (approvedArtistsData.length > 0) {
