@@ -693,7 +693,9 @@ async function sendRejectionEmail(subject: ReviewSubject, data: RejectionEmailDa
     : `[STELLAR] 你投稿的${subject}沒有通過審核`;
 
   const namesText = items.map(i => escapeHtml(i.name)).join('、');
-  const reasonHtml = isSingle
+  // Admin batch rejects share one reason, so it's normally written once
+  const sharedReason = items.every(i => i.reason === items[0].reason);
+  const reasonHtml = sharedReason
     ? preWrap(items[0].reason)
     : items.map(i => preWrap(`${i.name}：${i.reason}`)).join('<br>');
   const resubmitLine = showMySubmissions
