@@ -56,6 +56,7 @@ export interface CoffeeEvent {
     url?: string;
     startAt?: Timestamp;
   };
+  untilGone?: boolean; // No announced end date; datetime.end is only the takedown time
   status: 'pending' | 'approved' | 'rejected';
   rejectedReason?: string; // 拒絕原因（status 為 rejected 時使用）
   viewCount?: number;
@@ -247,6 +248,7 @@ export interface VenueEventCardBase {
   endDate: string;
   coverImage: string;
   slug: string | null;
+  untilGone?: boolean;
 }
 
 export interface VenueEventCard extends VenueEventCardBase {
@@ -404,6 +406,7 @@ export interface CreateEventData {
     url?: string;
     startAt?: Date | string | { _seconds: number; _nanoseconds: number };
   };
+  untilGone?: boolean;
 }
 
 // 編輯活動資料（不包含 artistIds）
@@ -435,6 +438,7 @@ export interface UpdateEventData {
     url?: string;
     startAt?: Date | string | { _seconds: number; _nanoseconds: number };
   } | null; // null = 明確清除整個 reservation
+  untilGone?: boolean; // false clears it
 }
 
 // 新增篩選參數介面

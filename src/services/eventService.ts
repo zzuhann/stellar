@@ -418,6 +418,7 @@ export class EventService {
           mainImage: event.mainImage,
           location: event.location, // 完整的 location 物件
           datetime: event.datetime,
+          ...(event.untilGone && { untilGone: true }),
         }),
         isFavorited: favoritedEventIds.has(event.id),
       };
@@ -630,6 +631,7 @@ export class EventService {
             }),
           },
         }),
+      ...(eventData.untilGone && { untilGone: true }),
       status: 'pending' as const,
       createdBy: userId,
       createdByEmail: userEmail || undefined,
@@ -719,6 +721,10 @@ export class EventService {
         : FieldValue.delete();
     }
 
+    if (updateData.untilGone !== undefined) {
+      updates.untilGone = updateData.untilGone ? true : FieldValue.delete();
+    }
+
     // 處理時間資料
     if (updateData.datetime) {
       updates.datetime = {
@@ -735,6 +741,8 @@ export class EventService {
     cache.delete(`event:${eventId}`);
     if (eventData.slug) cache.delete(`event:${eventData.slug}`);
     cache.clearPattern('admin:events:');
+    // Favorites responses embed full event docs (dates, untilGone)
+    cache.clearPattern('favorites:');
     // Top artists counts approved, not-ended events, so only a date change on one can shift it.
     if (updateData.datetime && eventData.status === 'approved') cache.clearPattern('artists:top:');
 

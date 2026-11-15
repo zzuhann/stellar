@@ -1,6 +1,7 @@
 import { EventService } from '../../src/services/eventService';
 import { CreateEventData, UpdateEventData } from '../../src/models/types';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { cache } from '../../src/utils/cache';
 
 // req.body 在 controller 是 any，這裡的 _seconds/_nanoseconds 寫法比照實際 request payload（非 Date/string）
 function asCreateEventData(data: unknown): CreateEventData {
@@ -223,5 +224,76 @@ describe('EventService.updateEvent reservation handling', () => {
     expect(updates.reservation.url).toBe('https://example.com/reserve');
     expect(updates.reservation.startAt).toBeInstanceOf(Timestamp);
     expect(updates.reservation.startAt.seconds).toBe(1699999999);
+  });
+});
+
+describe('EventService untilGone handling', () => {
+  let service: EventService;
+
+  const baseCreateData = {
+    artistIds: ['artist-1'],
+    title: '應援物發放',
+    description: '',
+    location: { name: '測試地點', address: '', coordinates: { lat: 25.03, lng: 121.56 } },
+    datetime: {
+      start: { _seconds: 1700000000, _nanoseconds: 0 },
+      end: { _seconds: 1700604800, _nanoseconds: 0 },
+    },
+    socialMedia: { instagram: 'foo' },
+  };
+  const existingEventData = { createdBy: 'user-1', slug: 'existing-slug', artists: [] };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupCollections();
+    mockArtistGet.mockResolvedValue(approvedArtistDoc);
+    mockEventSet.mockResolvedValue(undefined);
+    mockEventGet
+      .mockResolvedValueOnce({ exists: true, data: () => existingEventData })
+      .mockResolvedValueOnce({ id: 'event-1', data: () => existingEventData });
+    mockEventUpdate.mockResolvedValue(undefined);
+    service = new EventService();
+  });
+
+  it('create with untilGone: true → 寫入 untilGone', async () => {
+    await service.createEvent(
+      asCreateEventData({ ...baseCreateData, untilGone: true }),
+      'user-1',
+      'user@test.com'
+    );
+    expect(mockEventSet.mock.calls[0][0].untilGone).toBe(true);
+  });
+
+  it('create without untilGone / with false → 不寫入欄位', async () => {
+    await service.createEvent(asCreateEventData(baseCreateData), 'user-1', 'user@test.com');
+    await service.createEvent(
+      asCreateEventData({ ...baseCreateData, untilGone: false }),
+      'user-1',
+      'user@test.com'
+    );
+    expect(mockEventSet.mock.calls[0][0]).not.toHaveProperty('untilGone');
+    expect(mockEventSet.mock.calls[1][0]).not.toHaveProperty('untilGone');
+  });
+
+  it('update untilGone: true → 設為 true', async () => {
+    await service.updateEvent('event-1', asUpdateEventData({ untilGone: true }), 'user-1', 'user');
+    expect(mockEventUpdate.mock.calls[0][0].untilGone).toBe(true);
+  });
+
+  it('update untilGone: false → FieldValue.delete()', async () => {
+    await service.updateEvent('event-1', asUpdateEventData({ untilGone: false }), 'user-1', 'user');
+    expect(mockEventUpdate.mock.calls[0][0].untilGone).toEqual(FieldValue.delete());
+  });
+
+  it('update 會清收藏快取（收藏回應內含完整活動）', async () => {
+    const spy = jest.spyOn(cache, 'clearPattern');
+    await service.updateEvent('event-1', asUpdateEventData({ untilGone: true }), 'user-1', 'user');
+    expect(spy).toHaveBeenCalledWith('favorites:');
+    spy.mockRestore();
+  });
+
+  it('update 省略 untilGone → 不動既有值', async () => {
+    await service.updateEvent('event-1', asUpdateEventData({ title: '新標題' }), 'user-1', 'user');
+    expect(mockEventUpdate.mock.calls[0][0]).not.toHaveProperty('untilGone');
   });
 });

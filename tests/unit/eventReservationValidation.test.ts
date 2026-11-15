@@ -149,3 +149,21 @@ describe('eventSchemas.update reservation validation', () => {
     }
   });
 });
+
+describe('eventSchemas untilGone', () => {
+  it('create keeps untilGone: true (not stripped)', () => {
+    const result = eventSchemas.create.safeParse({ ...baseCreatePayload, untilGone: true });
+    expect(result.success && result.data.untilGone).toBe(true);
+  });
+
+  it('update keeps untilGone: false', () => {
+    const result = eventSchemas.update.safeParse({ untilGone: false });
+    expect(result.success && result.data.untilGone).toBe(false);
+  });
+
+  it('rejects non-boolean untilGone', () => {
+    expect(eventSchemas.create.safeParse({ ...baseCreatePayload, untilGone: 'yes' }).success).toBe(
+      false
+    );
+  });
+});
