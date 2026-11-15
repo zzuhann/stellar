@@ -418,6 +418,7 @@ export class EventService {
           mainImage: event.mainImage,
           location: event.location, // 完整的 location 物件
           datetime: event.datetime,
+          ...(event.untilGone && { untilGone: true }),
         }),
         isFavorited: favoritedEventIds.has(event.id),
       };
@@ -630,6 +631,7 @@ export class EventService {
             }),
           },
         }),
+      ...(eventData.untilGone && { untilGone: true }),
       status: 'pending' as const,
       createdBy: userId,
       createdByEmail: userEmail || undefined,
@@ -717,6 +719,10 @@ export class EventService {
             ...(reservation!.startAt && { startAt: this.parseDateTime(reservation!.startAt) }),
           }
         : FieldValue.delete();
+    }
+
+    if (updateData.untilGone !== undefined) {
+      updates.untilGone = updateData.untilGone ? true : FieldValue.delete();
     }
 
     // 處理時間資料

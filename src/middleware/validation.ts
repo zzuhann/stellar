@@ -835,6 +835,7 @@ export const eventSchemas = {
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
     reservation: reservationSchema.optional(),
+    untilGone: z.boolean().optional(),
     submitterEmail: submitterEmailSchema,
   }),
 
@@ -892,6 +893,7 @@ export const eventSchemas = {
       .max(10, '最多只能上傳10張詳細圖片')
       .optional(),
     reservation: reservationSchema.optional().nullable(),
+    untilGone: z.boolean().optional(),
   }),
 
   review: z

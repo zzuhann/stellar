@@ -430,6 +430,7 @@ export class VenueService {
             endDate: end.toDate().toISOString(),
             coverImage: e.mainImage ?? '',
             slug: (e.slug as string | null | undefined) ?? null,
+            ...(e.untilGone === true && { untilGone: true }),
           };
         })
         .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
@@ -600,6 +601,7 @@ export class VenueService {
             endDate: end.toDate().toISOString(),
             coverImage: e.mainImage ?? '',
             slug: (e.slug as string | null | undefined) ?? null,
+            ...(e.untilGone === true && { untilGone: true }),
           };
         })
         .sort((a, b) => (b.startDate > a.startDate ? 1 : b.startDate < a.startDate ? -1 : 0));
