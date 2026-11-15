@@ -741,6 +741,8 @@ export class EventService {
     cache.delete(`event:${eventId}`);
     if (eventData.slug) cache.delete(`event:${eventData.slug}`);
     cache.clearPattern('admin:events:');
+    // Favorites responses embed full event docs (dates, untilGone)
+    cache.clearPattern('favorites:');
     // Top artists counts approved, not-ended events, so only a date change on one can shift it.
     if (updateData.datetime && eventData.status === 'approved') cache.clearPattern('artists:top:');
 

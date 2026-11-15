@@ -131,6 +131,9 @@ paths:
                                 lat: { type: number }
                                 lng: { type: number }
                         datetime: { $ref: '#/components/schemas/EventDatetimeIso' }
+                        untilGone:
+                          type: boolean
+                          description: 領完為止；為 true 時不顯示 datetime.end（只是下架時間）
                         isFavorited: { type: boolean }
                   total: { type: integer }
 

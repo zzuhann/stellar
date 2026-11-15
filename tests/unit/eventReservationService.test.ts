@@ -1,6 +1,7 @@
 import { EventService } from '../../src/services/eventService';
 import { CreateEventData, UpdateEventData } from '../../src/models/types';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { cache } from '../../src/utils/cache';
 
 // req.body 在 controller 是 any，這裡的 _seconds/_nanoseconds 寫法比照實際 request payload（非 Date/string）
 function asCreateEventData(data: unknown): CreateEventData {
@@ -282,6 +283,13 @@ describe('EventService untilGone handling', () => {
   it('update untilGone: false → FieldValue.delete()', async () => {
     await service.updateEvent('event-1', asUpdateEventData({ untilGone: false }), 'user-1', 'user');
     expect(mockEventUpdate.mock.calls[0][0].untilGone).toEqual(FieldValue.delete());
+  });
+
+  it('update 會清收藏快取（收藏回應內含完整活動）', async () => {
+    const spy = jest.spyOn(cache, 'clearPattern');
+    await service.updateEvent('event-1', asUpdateEventData({ untilGone: true }), 'user-1', 'user');
+    expect(spy).toHaveBeenCalledWith('favorites:');
+    spy.mockRestore();
   });
 
   it('update 省略 untilGone → 不動既有值', async () => {
