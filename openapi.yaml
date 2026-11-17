@@ -175,6 +175,25 @@ paths:
         '200':
           description: 熱門活動列表
 
+  /events/reservations:
+    get:
+      tags: [events]
+      summary: 預約中・即將開放的活動
+      description: >-
+        已審核、尚未結束且有預約網址的活動。預約開放時間（startAt）在未來者排最前（依 startAt 升冪），
+        其餘依活動開始時間升冪；最多 20 筆。結果不另外快取，每次以當下時間計算。
+      responses:
+        '200':
+          description: 預約活動列表（無符合時為空陣列）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationEventsResponse' }
+        '503':
+          description: Firebase 未設定
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /events/{id}:
     get:
       tags: [events]
@@ -1378,6 +1397,44 @@ components:
       properties:
         _seconds: { type: integer }
         _nanoseconds: { type: integer }
+
+    ReservationEventItem:
+      type: object
+      required: [id, title, datetime, artists, reservation]
+      properties:
+        id: { type: string }
+        slug: { type: string, nullable: true }
+        title: { type: string }
+        mainImage: { type: string }
+        datetime:
+          type: object
+          required: [start, end]
+          properties:
+            start: { $ref: '#/components/schemas/FirestoreTimestamp' }
+            end: { $ref: '#/components/schemas/FirestoreTimestamp' }
+        artists:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string }
+              name: { type: string }
+        reservation:
+          type: object
+          required: [url]
+          properties:
+            url: { type: string }
+            startAt: { $ref: '#/components/schemas/FirestoreTimestamp' }
+
+    ReservationEventsResponse:
+      type: object
+      required: [events, total]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/ReservationEventItem' }
+        total: { type: integer, description: 本次回傳筆數（最多 20） }
 
     EventDatetimeIso:
       type: object
