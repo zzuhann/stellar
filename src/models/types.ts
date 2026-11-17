@@ -577,13 +577,13 @@ export interface FavoritesResponse {
   };
 }
 
-// 帶有收藏狀態的活動
 // Whitelisted public shape for GET /events/reservations.
 export interface ReservationEventItem {
   id: string;
   slug: string | null;
   title: string;
   mainImage?: string;
+  untilGone?: boolean;
   datetime: { start: Timestamp; end: Timestamp };
   artists: Array<{ id: string; name: string }>;
   reservation: { url: string; startAt?: Timestamp };
@@ -594,6 +594,7 @@ export interface ReservationEventsResponse {
   total: number;
 }
 
+// 帶有收藏狀態的活動
 export interface CoffeeEventWithFavorite extends CoffeeEvent {
   isFavorited?: boolean;
 }

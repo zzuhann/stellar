@@ -1373,43 +1373,57 @@ export class EventService {
   // Reservation list: upcoming-open events first, then the rest; computed per request from the in-memory base.
   async getReservationEvents(): Promise<ReservationEventItem[]> {
     this.checkFirebaseConfig();
-    const now = Date.now();
     const base = await this.getApprovedActiveEventsBase();
+    const now = Date.now();
 
-    // A hand-written startAt may not be a Timestamp; treat it as unset.
-    const startAtMs = (e: (typeof base)[number]): number | undefined => {
-      const ms = e.reservation?.startAt?.toMillis?.();
-      return typeof ms === 'number' && Number.isFinite(ms) ? ms : undefined;
+    type Candidate = {
+      event: (typeof base)[number];
+      url: string;
+      startAtMs?: number;
+      startMs: number;
     };
-    const startMs = (e: (typeof base)[number]) => this.timestampToMillis(e.datetime.start);
-    const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const candidates: Candidate[] = [];
+    for (const event of base) {
+      // Same rule as the write-side reservationUrlSchema: http(s) only, so free text never surfaces.
+      const url = typeof event.reservation?.url === 'string' ? event.reservation.url.trim() : '';
+      if (event.status !== 'approved' || event.datetime.end.toMillis() <= now) continue;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) continue;
+      // A hand-written startAt may not be a Timestamp; treat it as unset.
+      const rawStartAt = event.reservation?.startAt?.toMillis?.();
+      candidates.push({
+        event,
+        url,
+        startAtMs:
+          typeof rawStartAt === 'number' && Number.isFinite(rawStartAt) ? rawStartAt : undefined,
+        startMs: this.timestampToMillis(event.datetime.start),
+      });
+    }
 
-    const eligible = base.filter(
-      e =>
-        e.status === 'approved' &&
-        e.datetime.end.toMillis() > now &&
-        typeof e.reservation?.url === 'string' &&
-        e.reservation.url.trim() !== ''
-    );
-    const isUpcoming = (e: (typeof base)[number]) => (startAtMs(e) ?? -Infinity) > now;
+    const byId = (a: Candidate, b: Candidate) =>
+      a.event.id < b.event.id ? -1 : a.event.id > b.event.id ? 1 : 0;
+    const isUpcoming = (c: Candidate) => c.startAtMs !== undefined && c.startAtMs > now;
 
-    const upcoming = eligible
+    const upcoming = candidates
       .filter(isUpcoming)
-      .sort((a, b) => startAtMs(a)! - startAtMs(b)! || startMs(a) - startMs(b) || byId(a, b));
-    const others = eligible
-      .filter(e => !isUpcoming(e))
-      .sort((a, b) => startMs(a) - startMs(b) || byId(a, b));
+      .sort((a, b) => a.startAtMs! - b.startAtMs! || a.startMs - b.startMs || byId(a, b));
+    const others = candidates
+      .filter(c => !isUpcoming(c))
+      .sort((a, b) => a.startMs - b.startMs || byId(a, b));
 
-    return [...upcoming, ...others].slice(0, 20).map(e => ({
+    return [...upcoming, ...others].slice(0, 20).map(({ event: e, url, startAtMs }) => ({
       id: e.id,
       slug: e.slug ?? null,
       title: e.title,
       ...(e.mainImage ? { mainImage: e.mainImage } : {}),
+      ...(e.untilGone ? { untilGone: true } : {}),
       datetime: { start: e.datetime.start, end: e.datetime.end },
-      artists: e.artists.map(a => ({ id: a.id, name: a.name })),
+      // Corrupted docs may hold a non-array or nameless artists; keep the response contract intact.
+      artists: (Array.isArray(e.artists) ? e.artists : [])
+        .filter(a => typeof a?.id === 'string' && typeof a?.name === 'string')
+        .map(a => ({ id: a.id, name: a.name })),
       reservation: {
-        url: e.reservation!.url,
-        ...(startAtMs(e) !== undefined ? { startAt: e.reservation!.startAt } : {}),
+        url,
+        ...(startAtMs !== undefined ? { startAt: e.reservation?.startAt } : {}),
       },
     }));
   }

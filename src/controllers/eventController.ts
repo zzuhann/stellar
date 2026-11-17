@@ -1,7 +1,12 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { EventService } from '../services/eventService';
-import { EventFilterParams, MapDataParams, UpdateEventData } from '../models/types';
+import {
+  EventFilterParams,
+  MapDataParams,
+  ReservationEventsResponse,
+  UpdateEventData,
+} from '../models/types';
 import { cache } from '../utils/cache';
 import { z } from 'zod';
 import { eventSchemas } from '../middleware/validation';
@@ -225,10 +230,11 @@ export class EventController {
     res.json({ events, total: events.length });
   };
 
-  // 取得預約中・即將開放活動（公開、無參數）
+  // Public, no params: events whose reservation is upcoming or open
   getReservationEvents = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     const events = await this.eventService.getReservationEvents();
-    res.json({ events, total: events.length });
+    const body: ReservationEventsResponse = { events, total: events.length };
+    res.json(body);
   };
 
   // 新增：地圖資料 API
