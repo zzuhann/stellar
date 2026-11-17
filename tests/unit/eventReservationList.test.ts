@@ -44,6 +44,10 @@ describe('EventService.getReservationEvents', () => {
     ['approved, end in future, url set', {}, true],
     ['url is empty string', { reservation: { url: '' } }, false],
     ['url is whitespace only', { reservation: { url: '   ' } }, false],
+    ['url without scheme (free text)', { reservation: { url: '請私訊IG' } }, false],
+    ['url without scheme (www)', { reservation: { url: 'www.foo.com' } }, false],
+    ['url with dangerous scheme', { reservation: { url: 'javascript:alert(1)' } }, false],
+    ['http url', { reservation: { url: 'http://x.com' } }, true],
     ['url has surrounding spaces but content', { reservation: { url: ' https://x ' } }, true],
     ['only startAt, no url', { reservation: { startAt: ts(NOW + HOUR) } }, false],
     ['no reservation field', { reservation: undefined }, false],
@@ -70,14 +74,14 @@ describe('EventService.getReservationEvents', () => {
     test('upcoming first by startAt asc, then unset', async () => {
       setBase([
         makeEvent('C', { datetime: start(-10) }),
-        makeEvent('B', { reservation: { url: 'u', startAt: ts(NOW + 2 * HOUR) } }),
-        makeEvent('A', { reservation: { url: 'u', startAt: ts(NOW + HOUR) } }),
+        makeEvent('B', { reservation: { url: 'https://u', startAt: ts(NOW + 2 * HOUR) } }),
+        makeEvent('A', { reservation: { url: 'https://u', startAt: ts(NOW + HOUR) } }),
       ]);
       expect(await idsOf()).toEqual(['A', 'B', 'C']);
     });
 
     test('same startAt: earlier datetime.start first', async () => {
-      const r = { url: 'u', startAt: ts(NOW + HOUR) };
+      const r = { url: 'https://u', startAt: ts(NOW + HOUR) };
       setBase([
         makeEvent('late', { reservation: r, datetime: start(30) }),
         makeEvent('early', { reservation: r, datetime: start(10) }),
@@ -86,7 +90,7 @@ describe('EventService.getReservationEvents', () => {
     });
 
     test('same startAt and start: id asc', async () => {
-      const r = { url: 'u', startAt: ts(NOW + HOUR) };
+      const r = { url: 'https://u', startAt: ts(NOW + HOUR) };
       setBase([
         makeEvent('b', { reservation: r }),
         makeEvent('a', { reservation: r }),
@@ -97,9 +101,18 @@ describe('EventService.getReservationEvents', () => {
 
     test('startAt == now is not upcoming; both go to opened group by start asc', async () => {
       setBase([
-        makeEvent('E', { reservation: { url: 'u', startAt: ts(NOW - HOUR) }, datetime: start(20) }),
-        makeEvent('D', { reservation: { url: 'u', startAt: ts(NOW) }, datetime: start(10) }),
-        makeEvent('U', { reservation: { url: 'u', startAt: ts(NOW + HOUR) }, datetime: start(50) }),
+        makeEvent('E', {
+          reservation: { url: 'https://u', startAt: ts(NOW - HOUR) },
+          datetime: start(20),
+        }),
+        makeEvent('D', {
+          reservation: { url: 'https://u', startAt: ts(NOW) },
+          datetime: start(10),
+        }),
+        makeEvent('U', {
+          reservation: { url: 'https://u', startAt: ts(NOW + HOUR) },
+          datetime: start(50),
+        }),
       ]);
       expect(await idsOf()).toEqual(['U', 'D', 'E']);
     });
@@ -116,7 +129,7 @@ describe('EventService.getReservationEvents', () => {
   // TC-006
   describe('20 item cap', () => {
     const upcoming = (id: string, i: number) =>
-      makeEvent(id, { reservation: { url: 'u', startAt: ts(NOW + (i + 1) * HOUR) } });
+      makeEvent(id, { reservation: { url: 'https://u', startAt: ts(NOW + (i + 1) * HOUR) } });
     const opened = (id: string, i: number) =>
       makeEvent(id, { datetime: { start: ts(NOW + (i + 1) * HOUR), end: ts(NOW + 100 * HOUR) } });
 
@@ -147,9 +160,39 @@ describe('EventService.getReservationEvents', () => {
     ['object without toMillis', { _seconds: 1 }],
   ])('malformed startAt (%s) is included in the opened group without throwing', async (_n, bad) => {
     setBase([
-      makeEvent('bad', { reservation: { url: 'u', startAt: bad } }),
-      makeEvent('up', { reservation: { url: 'u', startAt: ts(NOW + HOUR) } }),
+      makeEvent('bad', { reservation: { url: 'https://u', startAt: bad } }),
+      makeEvent('up', { reservation: { url: 'https://u', startAt: ts(NOW + HOUR) } }),
     ]);
     expect(await idsOf()).toEqual(['up', 'bad']);
+  });
+
+  // TC-027
+  test('returns the trimmed url', async () => {
+    setBase([makeEvent('t', { reservation: { url: ' https://x ' } })]);
+    const [item] = await service.getReservationEvents();
+    expect(item.reservation.url).toBe('https://x');
+  });
+
+  // TC-026
+  test('includes untilGone only when set', async () => {
+    setBase([makeEvent('g', { untilGone: true }), makeEvent('n')]);
+    const items = await service.getReservationEvents();
+    expect(items.find(e => e.id === 'g')?.untilGone).toBe(true);
+    expect(items.find(e => e.id === 'n')).not.toHaveProperty('untilGone');
+  });
+
+  // malformed artists must not 500 the endpoint
+  test.each<[string, unknown, unknown[]]>([
+    ['not an array', 'oops', []],
+    ['undefined', undefined, []],
+    [
+      'entries without name or id dropped',
+      [{ id: 'a1', name: 'Ok' }, { id: 'a2' }, null, { name: 'x' }],
+      [{ id: 'a1', name: 'Ok' }],
+    ],
+  ])('artists %s', async (_n, artists, expected) => {
+    setBase([makeEvent('m', { artists })]);
+    const [item] = await service.getReservationEvents();
+    expect(item.artists).toEqual(expected);
   });
 });
