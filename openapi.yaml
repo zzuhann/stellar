@@ -180,7 +180,7 @@ paths:
       tags: [events]
       summary: 預約中・即將開放的活動
       description: >-
-        已審核、尚未結束且有預約網址的活動。預約開放時間（startAt）在未來者排最前（依 startAt 升冪），
+        已審核、尚未結束且預約網址為 http(s) 開頭的活動。預約開放時間（startAt）在未來者排最前（依 startAt 升冪），
         其餘依活動開始時間升冪；最多 20 筆。結果不另外快取，每次以當下時間計算。
       responses:
         '200':
@@ -1406,6 +1406,7 @@ components:
         slug: { type: string, nullable: true }
         title: { type: string }
         mainImage: { type: string }
+        untilGone: { type: boolean, description: 領完為止；有值才帶，datetime.end 僅為下架時間 }
         datetime:
           type: object
           required: [start, end]
