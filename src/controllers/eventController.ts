@@ -225,6 +225,12 @@ export class EventController {
     res.json({ events, total: events.length });
   };
 
+  // 取得預約中・即將開放活動（公開、無參數）
+  getReservationEvents = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const events = await this.eventService.getReservationEvents();
+    res.json({ events, total: events.length });
+  };
+
   // 新增：地圖資料 API
   getMapData = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const params: MapDataParams = {

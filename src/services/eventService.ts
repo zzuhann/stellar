@@ -10,6 +10,7 @@ import {
   EventsResponseWithFavorite,
   MapDataParams,
   MapDataResponse,
+  ReservationEventItem,
   UserSubmissionsEventsListResponse,
 } from '../models/types';
 import { UserService } from './userService';
@@ -1367,6 +1368,50 @@ export class EventService {
     // No ranking cache: sorting the in-memory base is cheap and never serves ended events.
     const activeEvents = await this.getApprovedActiveEventsBase();
     return activeEvents.sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, safeLimit);
+  }
+
+  // Reservation list: upcoming-open events first, then the rest; computed per request from the in-memory base.
+  async getReservationEvents(): Promise<ReservationEventItem[]> {
+    this.checkFirebaseConfig();
+    const now = Date.now();
+    const base = await this.getApprovedActiveEventsBase();
+
+    // A hand-written startAt may not be a Timestamp; treat it as unset.
+    const startAtMs = (e: (typeof base)[number]): number | undefined => {
+      const ms = e.reservation?.startAt?.toMillis?.();
+      return typeof ms === 'number' && Number.isFinite(ms) ? ms : undefined;
+    };
+    const startMs = (e: (typeof base)[number]) => this.timestampToMillis(e.datetime.start);
+    const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+    const eligible = base.filter(
+      e =>
+        e.status === 'approved' &&
+        e.datetime.end.toMillis() > now &&
+        typeof e.reservation?.url === 'string' &&
+        e.reservation.url.trim() !== ''
+    );
+    const isUpcoming = (e: (typeof base)[number]) => (startAtMs(e) ?? -Infinity) > now;
+
+    const upcoming = eligible
+      .filter(isUpcoming)
+      .sort((a, b) => startAtMs(a)! - startAtMs(b)! || startMs(a) - startMs(b) || byId(a, b));
+    const others = eligible
+      .filter(e => !isUpcoming(e))
+      .sort((a, b) => startMs(a) - startMs(b) || byId(a, b));
+
+    return [...upcoming, ...others].slice(0, 20).map(e => ({
+      id: e.id,
+      slug: e.slug ?? null,
+      title: e.title,
+      ...(e.mainImage ? { mainImage: e.mainImage } : {}),
+      datetime: { start: e.datetime.start, end: e.datetime.end },
+      artists: e.artists.map(a => ({ id: a.id, name: a.name })),
+      reservation: {
+        url: e.reservation!.url,
+        ...(startAtMs(e) !== undefined ? { startAt: e.reservation!.startAt } : {}),
+      },
+    }));
   }
 
   // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
