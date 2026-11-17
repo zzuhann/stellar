@@ -10,6 +10,7 @@ import {
   EventsResponseWithFavorite,
   MapDataParams,
   MapDataResponse,
+  ReservationEventItem,
   UserSubmissionsEventsListResponse,
 } from '../models/types';
 import { UserService } from './userService';
@@ -1367,6 +1368,64 @@ export class EventService {
     // No ranking cache: sorting the in-memory base is cheap and never serves ended events.
     const activeEvents = await this.getApprovedActiveEventsBase();
     return activeEvents.sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, safeLimit);
+  }
+
+  // Reservation list: upcoming-open events first, then the rest; computed per request from the in-memory base.
+  async getReservationEvents(): Promise<ReservationEventItem[]> {
+    this.checkFirebaseConfig();
+    const base = await this.getApprovedActiveEventsBase();
+    const now = Date.now();
+
+    type Candidate = {
+      event: (typeof base)[number];
+      url: string;
+      startAtMs?: number;
+      startMs: number;
+    };
+    const candidates: Candidate[] = [];
+    for (const event of base) {
+      // Same rule as the write-side reservationUrlSchema: http(s) only, so free text never surfaces.
+      const url = typeof event.reservation?.url === 'string' ? event.reservation.url.trim() : '';
+      if (event.status !== 'approved' || event.datetime.end.toMillis() <= now) continue;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) continue;
+      // A hand-written startAt may not be a Timestamp; treat it as unset.
+      const rawStartAt = event.reservation?.startAt?.toMillis?.();
+      candidates.push({
+        event,
+        url,
+        startAtMs:
+          typeof rawStartAt === 'number' && Number.isFinite(rawStartAt) ? rawStartAt : undefined,
+        startMs: this.timestampToMillis(event.datetime.start),
+      });
+    }
+
+    const byId = (a: Candidate, b: Candidate) =>
+      a.event.id < b.event.id ? -1 : a.event.id > b.event.id ? 1 : 0;
+    const isUpcoming = (c: Candidate) => c.startAtMs !== undefined && c.startAtMs > now;
+
+    const upcoming = candidates
+      .filter(isUpcoming)
+      .sort((a, b) => a.startAtMs! - b.startAtMs! || a.startMs - b.startMs || byId(a, b));
+    const others = candidates
+      .filter(c => !isUpcoming(c))
+      .sort((a, b) => a.startMs - b.startMs || byId(a, b));
+
+    return [...upcoming, ...others].slice(0, 20).map(({ event: e, url, startAtMs }) => ({
+      id: e.id,
+      slug: e.slug ?? null,
+      title: e.title,
+      ...(e.mainImage ? { mainImage: e.mainImage } : {}),
+      ...(e.untilGone ? { untilGone: true } : {}),
+      datetime: { start: e.datetime.start, end: e.datetime.end },
+      // Corrupted docs may hold a non-array or nameless artists; keep the response contract intact.
+      artists: (Array.isArray(e.artists) ? e.artists : [])
+        .filter(a => typeof a?.id === 'string' && typeof a?.name === 'string')
+        .map(a => ({ id: a.id, name: a.name })),
+      reservation: {
+        url,
+        ...(startAtMs !== undefined ? { startAt: e.reservation?.startAt } : {}),
+      },
+    }));
   }
 
   // A hand-written doc may hold a non-Timestamp createdAt; treat it as oldest instead of throwing.
