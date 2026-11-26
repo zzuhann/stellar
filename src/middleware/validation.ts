@@ -89,6 +89,10 @@ const submitterEmailSchema = z.preprocess(
 
 // Artist 相關的 schema
 export const artistSchemas = {
+  // Repeated ?search= arrives as an array and crashed the service's toLowerCase()
+  listQuery: z.object({
+    search: z.string().optional(),
+  }),
   create: z.object({
     stageName: z.string().min(1, '藝名為必填欄位').max(100, '藝名長度不能超過100個字元').trim(),
     stageNameZh: z.string().max(100, '中文藝名長度不能超過100個字元').trim().optional(),

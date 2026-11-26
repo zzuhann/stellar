@@ -54,3 +54,16 @@ describe('artistSchemas birthday calendar validity', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('artistSchemas.listQuery', () => {
+  it('重複的 search 參數（陣列）驗證失敗，不會進到 service', () => {
+    expect(artistSchemas.listQuery.safeParse({ search: ['a', 'b'] }).success).toBe(false);
+  });
+
+  it('單一字串或不帶 search 都通過，其他 query 參數不受影響', () => {
+    expect(artistSchemas.listQuery.safeParse({ search: '우지', status: 'approved' }).success).toBe(
+      true
+    );
+    expect(artistSchemas.listQuery.safeParse({}).success).toBe(true);
+  });
+});
