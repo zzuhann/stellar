@@ -750,9 +750,11 @@ export class ArtistService {
 
     // 搜尋篩選（模糊搜尋：忽略特殊字符如連字符、括號等）
     if (filters.search) {
-      const normalizeString = (str: string) =>
-        str.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
+      // Keep any script's letters (Hangul, kana...) so non-Latin/CJK queries don't normalize to ''
+      const normalizeString = (str: string) => str.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
       const searchTerm = normalizeString(filters.search);
+      // '' would match every artist via includes('')
+      if (!searchTerm) return [];
       result = result.filter(
         artist =>
           normalizeString(artist.stageName).includes(searchTerm) ||

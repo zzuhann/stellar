@@ -164,3 +164,34 @@ describe('ArtistService.batchUpdateArtistStatus', () => {
     ).rejects.toMatchObject({ statusCode: 404, code: 'ARTIST_NOT_FOUND' });
   });
 });
+
+describe('ArtistService search filter', () => {
+  const artists = [
+    { id: 'a', stageName: 'WOOZI', stageNameZh: '知勳', groupNames: ['SEVENTEEN'] },
+    { id: 'b', stageName: 'Winter', stageNameZh: '冬天', groupNames: ['aespa'] },
+    { id: 'c', stageName: '우지', groupNames: [] },
+  ];
+  const search = (term: string) =>
+    (
+      new ArtistService() as unknown as {
+        filterArtistsInMemory: (a: unknown[], f: { search: string }) => { id: string }[];
+      }
+    )
+      .filterArtistsInMemory(artists, { search: term })
+      .map(a => a.id);
+
+  it('韓文搜尋只回傳符合的藝人，不會回傳全部', () => {
+    expect(search('우지')).toEqual(['c']);
+    expect(search('없는이름')).toEqual([]);
+  });
+
+  it('只有符號的搜尋字回傳空結果', () => {
+    expect(search('!!! --')).toEqual([]);
+  });
+
+  it('英文、中文、忽略符號的既有行為不變', () => {
+    expect(search('woo-zi')).toEqual(['a']);
+    expect(search('冬天')).toEqual(['b']);
+    expect(search('Seventeen')).toEqual(['a']);
+  });
+});
