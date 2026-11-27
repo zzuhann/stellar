@@ -7,7 +7,12 @@ const router = Router();
 const artistController = new ArtistController();
 
 // 公開路由
-router.get('/', optionalAuthenticate, artistController.getAllArtists);
+router.get(
+  '/',
+  optionalAuthenticate,
+  validateRequest({ query: artistSchemas.listQuery }),
+  artistController.getAllArtists
+);
 router.get('/top', artistController.getTopArtists);
 
 // 管理員專用路由（須在 /:id 之前定義，避免被 dynamic segment 攔截）
